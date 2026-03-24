@@ -1,0 +1,4204 @@
+
+
+
+Rezumat executiv
+1.1 Conceptul TRUST HUB & ESCRO
+Viziune
+TRUST HUB este o infrastructură digitală B2B bazată pe încredere. Scopul ei e să redefinească modul în care companiile colaborează între ele sau cu experți independenți, printr-un sistem de escrow automatizat, verificare riguroasă și mediere digitală.
+ Totul funcționează în jurul ideii că “încrederea se poate construi și digital” – iar ESCRO este primul produs care o demonstrează practic.
+Structura generală
+TRUST HUB = platforma-mamă, ecosistemul.
+
+
+ESCRO = produsul principal, primul serviciu lansat în ecosistem, specializat pe plăți securizate între companii și experți.
+
+
+ESCRO este construit pe 3 piloni:
+Escrow B2B complet automatizat, cu Stripe Connect (Standard sau Express, în funcție de cerințe legale locale).
+
+
+Sistem de validare și reputație pentru companii și experți.
+
+
+Asistență umană selectivă, care intervine doar acolo unde e nevoie — mediere, verificare, selecție expert.
+
+
+
+Serviciile ESCRO
+1. Serviciul „Direct Trust” (cel mai mic comision):
+ Clientul și expertul se cunosc deja, dar nu există încredere totală sau vor să evite riscul.
+ Clientul creează un task, adaugă ID-ul expertului (existent în sistem), iar plata intră în escrow.
+ Banii se eliberează automat când ambele părți confirmă livrarea.
+Totul fără contact uman.
+ Ideal pentru colaborări recurente între părți care deja se știu, dar au nevoie de siguranță.
+
+2. Serviciul „Guided Trust” (intermediat de TRUST HUB):
+ Clientul are nevoie de un expert, dar nu știe pe cine să aleagă.
+ TRUST HUB organizează o discuție video 1:1 de 15 minute, doar pentru clienții cu abonament activ.
+ În urma discuției, echipa TRUST HUB selectează expertul potrivit și lansează taskul.
+Include comision escrow + fee de platformă (abonament).
+ Implicare umană parțială – doar în selecție și validare.
+
+3. Serviciul „Delegated Trust” (cel mai premium):
+ Clientul își externalizează complet un proiect.
+ TRUST HUB formează echipa ideală de experți, preia sarcinile și livrează rezultatul final.
+ Clientul semnează un contract de exclusivitate și încredere deplină, iar echipa TRUST HUB gestionează proiectul end-to-end.
+Fee mai mare, contract personalizat, control total prin dashboard.
+ Accent pe „încredere deplină”, nu doar pe plăți sigure.
+
+Filosofia TRUST HUB
+Totul se construiește în jurul ideii că „inovația e ușoară doar acolo unde există încredere”.
+ De aceea, brandul TRUST HUB nu vinde servicii. El oferă siguranță digitală între entități economice, indiferent de industrie.
+
+ 1.2. Problema & oportunitatea de piață
+Problema
+În mediul B2B actual, există mai multe dificultăți pentru companii și experți independenți atunci când colaborează:
+Lipsa de încredere în tranzacțiile digitale
+
+
+Companiile nu știu dacă expertul va livra conform așteptărilor.
+
+
+Experții nu au garanția plății dacă livrarea depinde de acceptul clientului.
+
+
+Riscurile financiare cresc pentru ambele părți în lipsa unui mecanism sigur.
+
+
+Proces de selecție a expertului ineficient
+
+
+Găsirea expertului potrivit pentru un proiect specific poate dura săptămâni.
+
+
+Recomandările tradiționale nu sunt standardizate și depind de relații personale.
+
+
+Lipsa unui sistem de validare profesională și reputație transparentă.
+
+
+Gestionarea plăților și a dispute-urilor este greoaie
+
+
+Plata directă fără garanții poate duce la litigii sau neînțelegeri.
+
+
+Platformele existente nu combină escrow cu validare profesională și reputație.
+
+
+Mecanismele de arbitraj sunt manuale și consumatoare de timp.
+
+
+Lipsa unui ecosistem integrat pentru proiecte complexe
+
+
+În general, companiile externalizează individual task-uri, fără soluții end-to-end.
+
+
+Proiectele complexe care necesită echipe mixte de experți rămân dificil de coordonat.
+
+
+
+Oportunitatea de piață
+Creșterea digitalizării B2B
+
+
+Companiile mici și medii caută soluții rapide, sigure și digitale pentru colaborare.
+
+
+Externalizarea serviciilor specializate crește constant.
+
+
+Nevoia de încredere verificabilă
+
+
+Escrow + reputație + verificare KYC oferă un avantaj competitiv major.
+
+
+Companiile sunt dispuse să plătească pentru siguranță și predictibilitate.
+
+
+Segmentare clară: SRL-uri și PFA-uri
+
+
+Target clar, cu procese și nevoi comune.
+
+
+Piața B2B românească și europeană prezintă un potențial mare pentru un MVP valid.
+
+
+Lipsa competiției directe integrate
+
+
+Platformele existente fie oferă escrow fără selecție de expert, fie selecție de expert fără mecanism de plată sigur.
+
+
+TRUST HUB + ESCRO combină ambele, creând un produs unic.
+
+
+Potential de monetizare
+
+
+Comisioane din escrow, abonamente pentru selecție expert, contracte end-to-end.
+
+
+Upsell prin servicii de validare, badge-uri, comunități private.
+
+
+ 1.3. Soluția (TRUST HUB + ESCRO) 
+ESCRO oferă plăți sigure și transparente între companii și experți, printr-un mecanism escrow automatizat, eliminând riscul financiar și disputele în tranzacțiile B2B.
+
+
+TRUST HUB selectează și recomandă expertul potrivit, fie prin match personalizat pe baza profilului și istoricului, fie prin formarea unei echipe de experți pentru proiecte complete, garantând calitatea și livrarea la standarde ridicate.
+
+
+Ecosistemul combină verificare KYC, badge-uri de reputație și comunități private, astfel încât fiecare tranzacție să fie bazată pe încredere verificabilă și colaborări scalabile între entități economice.
+
+1.4. Model de business sumar
+1.4.1. Surse principale de venit
+Comisioane din escrow (Direct Trust / Guided Trust / Delegated Trust)
+
+
+ESCRO DIRECT: comision minim, doar pentru tranzacții între companii și experți care se cunosc deja și folosesc escrow.
+
+
+ESCRO MATCH (Guided Trust): comision mai mare pentru tranzacțiile unde TRUST HUB intervine în selecția expertului + fee de platformă / abonament.
+
+
+ESCRO MANAGED (Delegated Trust): fee premium pentru externalizarea completă a proiectului, inclusiv formarea echipei și management end-to-end.
+
+
+Abonamente (Subscription)
+
+
+Acces la servicii intermediare (Guided Trust / Matchmaking) sau la comunități private.
+
+
+Include consultanță inițială de 15 minute pentru selectarea expertului.
+
+
+Posibil upgrade la badge-uri și vizibilitate în comunitate.
+
+
+Servicii suplimentare și upsell
+
+
+Badge-uri verificate pentru experți (pentru reputație și vizibilitate).
+
+
+Validări suplimentare de companii sau experți (KYC extins).
+
+
+Servicii de audit și raportare proiecte pentru clienți mari.
+
+
+
+1.4.2. Avantaje competitive ale modelului
+Scalabil: fiecare nivel de serviciu crește valoarea și comisionul fără a necesita creșterea liniară a resurselor umane.
+
+
+Previzibil: abonamente recurente + comisioane pentru fiecare tranzacție.
+
+
+Diferentiere clară față de marketplace-uri existente: matchmaking activ + escrow + reputație verificată.
+
+
+
+1.4.3. Schema simplificată a veniturilor
+Serviciu
+Comision / Fee
+Extras
+Direct Trust
+minim (ex: 2–3%)
+self-service, fără implicare umană
+Guided Trust
+mediu (ex: 5–7%)
+selecție expert 1:1, subscription
+Delegated Trust
+premium (ex: 10–15%)
+management proiect complet, contract exclusiv
+Abonamente
+fix (ex: 50–200€/lună)
+acces comunitate, vizibilitate, call 1:1
+Servicii extra
+variabil
+KYC extins, badge, audit
+
+
+Practic, modelul combină venit tranzacție + abonamente + upsell, cu o scalabilitate mare pentru fiecare segment de serviciu.
+
+1.5. Ce validăm prin MVP
+1.5.1. Validarea cererii de piață
+Dacă companiile și experții B2B sunt dispuși să folosească un sistem escrow digital pentru tranzacții între ei.
+
+
+Dacă există interes pentru matchmaking activ și selecție expert prin TRUST HUB.
+
+
+Dacă modelul de abonamente + comision tranzacție este acceptabil pentru piață.
+
+
+1.5.2. Validarea funcționalității cheie
+Escrow automatizat: crearea contractului, blocarea fondurilor, eliberarea la confirmarea livrării.
+
+
+Task creation: companii pot crea taskuri cu ID expert sau pot solicita matchmaking.
+
+
+Selecție expert: validarea fluxului Guided Trust — call 15’ + selecție expert.
+
+
+Notificări și confirmări: confirmarea livrării, status task, dispute flow simplificat.
+
+
+1.5.3. Validarea încrederii și reputației
+Testarea procesului de verificare KYC pentru companii și experți.
+
+
+Acordarea primelor badge-uri de reputație (ex: după 3 tranzacții fără dispute).
+
+
+Verificarea feedback-ului inițial asupra sistemului de rating și încredere digitală.
+
+
+1.5.4. Validarea experienței utilizatorului
+Dashboard simplu pentru companii și experți, cu vizibilitate clară asupra taskurilor și a fondurilor în escrow.
+
+
+Feed cu taskuri și workflow aprobat manual de TRUST HUB.
+
+
+Flow de creare, aprobare și finalizare task funcțional și intuitiv.
+
+
+
+1.5.5. Obiective concrete MVP
+Creșterea încrederii: utilizatorii finalizează prima tranzacție fără dispute.
+
+
+Demonstrăm funcționalitatea escrow + flow de livrare + release automat.
+
+
+Validăm că matchmaking-ul activ adaugă valoare comparativ cu platformele standard.
+
+
+Adunăm feedback despre pricing (comisioane și abonamente).
+
+
+Stabilim baza pentru extinderea comunităților private și badge-urilor reputaționale.
+
+
+
+Practic, MVP-ul nu construiește toate funcționalitățile Nice-to-Have (ex: analytics avansat, multiple tipuri de contracte, tokenizare, marketplace extins), ci doar ce este esential pentru testarea pieței și a fluxului principal de valoare.
+
+ 1.6. Cerere de investiție / resurse necesare (sumar)
+Obiectiv: Finanțarea MVP-ului pentru ESCRO, inclusiv dezvoltare full-stack, integrare Stripe Connect, KYC și sistem reputațional.
+
+
+Resurse cheie necesare:
+
+
+Echipa de development (full-stack dev + QA)
+
+
+Design UX/UI pentru dashboard-uri și feed
+
+
+Legal / compliance pentru contracte și termeni escrow
+
+
+Servere și infrastructură cloud (pentru aplicație și baze de date)
+
+
+Marketing B2B pentru primele validări și onboarding early adopters
+
+
+Rezultat așteptat: MVP funcțional care validează cererea de piață, fluxul principal ESCRO și experiența utilizatorilor.
+
+
+
+2.1. Misiune TRUST HUB
+Misiunea noastră:
+ Să construim încredere digitală între companii și experți, transformând relațiile B2B în colaborări sigure, transparente și scalabile, indiferent de industrie sau dimensiunea companiei.
+Elemente cheie:
+Garantăm siguranță financiară prin escrow automatizat.
+
+
+Oferim selecție și verificare expert personalizată, eliminând riscurile colaborărilor tradiționale.
+
+
+Cream un ecosistem B2B privat și controlat, unde reputația și experiența utilizatorilor devin principii de bază.
+
+
+Misiunea nu e doar despre servicii — e despre construirea unei culturi de încredere digitală care să devină standardul pentru piața B2B.
+
+2.2. Viziune TRUST HUB (3–5 ani) — actualizat
+Viziunea noastră:
+ Să devenim platforma de referință B2B bazată pe încredere, unde companiile și experții colaborează fără frică de riscuri, dispută sau pierderi financiare. TRUST HUB devine sinonim cu siguranță, profesionalism și selecție inteligentă, iar pe termen lung obiectivul este să evoluăm spre un clearing house B2B, un punct central de procesare și securizare a tuturor tranzacțiilor între companii și experți.
+Componente cheie ale viziunii pe termen mediu și lung:
+Ecosistem complet de servicii B2B
+
+
+Începem cu MVP-ul ESCRO ca bază solidă: escrow sigur, matchmaking expert, verificare reputație.
+
+
+Evoluăm spre servicii adiționale, audit, raportare detaliată și soluții complexe pentru proiecte B2B.
+
+
+Comunități private și rețele de încredere
+
+
+Grupuri exclusive de companii și experți, cu mecanisme de verificare și confidențialitate.
+
+
+Valorificarea badge-urilor de reputație și trust score ca standard industrial, pregătind terenul pentru rolul de clearing house.
+
+
+Automatizare și inteligență în matchmaking
+
+
+Algoritmi care recomandă expertul potrivit pentru fiecare task, reducând necesitatea intervenției umane.
+
+
+În timp, sistemul poate gestiona și arbitra automat tranzacții multiple simultan, consolidând poziția de clearing house.
+
+
+Standard de încredere B2B recunoscut pe piață
+
+
+TRUST HUB devine etalonul prin care companiile și experții evaluează siguranța colaborării.
+
+
+Credibilitatea și reputația platformei permit extinderea treptată către rolul de clearing house.
+
+
+Scalabilitate și extindere internațională
+
+
+Consolidăm mai întâi piața locală cu un MVP solid.
+
+
+Pe termen lung, TRUST HUB poate deveni clearing house B2B internațional, centralizând și securizând tranzacții și proiecte complexe între companii și experți.
+
+2.3. Poziționare pe piața B2B — Propoziție de valoare unică (actualizat)
+TRUST HUB se diferențiază prin:
+Încredere digitală garantată
+
+
+Spre deosebire de platformele standard, unde escrow și selecția expert sunt separate, TRUST HUB combină plata securizată + verificarea expertului + reputație digitală, oferind un mecanism complet de siguranță.
+
+
+Matchmaking activ și selecție expert personalizată
+
+
+Nu doar un marketplace pasiv; platforma recomandă expertul potrivit pentru fiecare task.
+
+
+Spre deosebire de majoritatea platformelor existente (90% automate, bazate pe cod), TRUST HUB integrează input uman acolo unde contează: selecția expertului, medierea disputelor și formarea echipelor pentru proiecte complexe.
+
+
+Rețele private și comunități B2B verificate
+
+
+Companiile și experții sunt verificați înainte de a accesa comunitățile private.
+
+
+Se creează un ecosistem sigur, unde reputația și badge-urile devin criterii de încredere.
+
+
+Scalabilitate progresivă către clearing house B2B
+
+
+Începem cu MVP-ul ESCRO și validăm fluxurile principale de încredere.
+
+
+Pe termen mediu și lung, TRUST HUB poate deveni clearing house B2B, centralizând și securizând toate tranzacțiile între companii și experți, fără a compromite siguranța și controlul.
+
+
+Combinarea tehnologiei cu intervenția umană
+
+
+Fluxuri automate pentru escrow, notificări și livrare, dar decizia umană intervine doar acolo unde adaugă valoare reală, ridicând calitatea și încrederea utilizatorilor.
+
+2.4. Principii de design TRUST HUB
+1. Încredere ca pilon central
+Toate fluxurile aplicației sunt gândite să genereze siguranță și predictibilitate.
+
+
+Escrow-ul automatizat garantează că fondurile sunt protejate până la confirmarea livrării de către ambele părți.
+
+
+Badge-urile, verificările KYC și scorurile de reputație validează identitatea și istoricul companiilor și experților.
+
+
+2. Control uman selectiv
+Spre deosebire de platformele complet automate, TRUST HUB combină tehnologia cu inputul uman acolo unde contează:
+
+
+Selecția expertului pentru fiecare task (Guided Trust).
+
+
+Medierea și soluționarea disputelor.
+
+
+Formarea echipelor pentru proiecte complexe (Delegated Trust).
+
+
+Această implicare selectivă ridică calitatea serviciului și încrederea utilizatorilor, fără a compromite eficiența operațională.
+
+
+3. Confidențialitate și securitate
+Conturile și comunitățile sunt private, accesibile doar membrilor verificați.
+
+
+Fluxurile de comunicare între companii și experți se desfășoară într-un mediu securizat, cu criptare și gestionare conform GDPR.
+
+
+Datele financiare și informațiile sensibile sunt protejate și nu sunt vizibile altor membri din ecosistem.
+
+
+4. Filosofia MVP
+Designul este modular și scalabil, permițând adăugarea de funcționalități „nice-to-have” fără a compromite siguranța sau experiența utilizatorului.
+
+
+Se prioritizează funcționalitățile esențiale pentru încredere și tranzacții sigure, urmând ca evoluțiile ulterioare să extindă ecosistemul.
+
+
+
+Scopul documentului & Public țintă
+3.1. Ce conține acest document
+Acest document este conceput pentru a oferi o viziune completă și clară asupra TRUST HUB și produsului ESCRO, astfel încât orice cititor — fie investitor, dezvoltator, avocat sau membru al echipei de produs — să înțeleagă exact ce vrem să construim și cum.
+Structura și scopul fiecărei secțiuni:
+Rezumat executiv
+
+
+Prezentarea conceptului, viziunea, problemele pieței, soluția, modelul de business și cererea de investiție.
+
+
+Viziune, misiune și poziționare
+
+
+Arată de ce TRUST HUB este unic pe piața B2B și cum combinația de tehnologie + input uman oferă un avantaj competitiv.
+
+
+Scopul documentului & Public țintă
+
+
+Definește cine citește documentul și cum poate fi folosit pentru implementare, luare decizii și evaluare strategică.
+
+
+Sumar al serviciilor TRUST HUB
+
+
+Detaliază ESCRO Direct, ESCRO Match și ESCRO Managed, plus nivelurile de implicare ale TRUST HUB.
+
+
+Arhitectura produsului și UX
+
+
+Componente principale, fluxuri de date, dashboard-uri, comunități și principii de confidențialitate.
+
+
+Roluri și permisiuni
+
+
+Cine poate face ce în sistem, de la admin la expert, companie și arbitru intern.
+
+
+Fluxuri principale (user flows)
+
+
+Onboarding, creare task, escrow, dispute, cedere proiecte — pas cu pas, astfel încât orice dev să înțeleagă logica completă.
+
+
+Pagini / ecrane (UX) și UI specifics
+
+
+Wireframe-uri textuale, stări UI, mesaje sistem și accesibilitate.
+
+
+Statusuri, reguli de tranziție și automatizări
+
+
+Enum statusuri job și escrow, logica trecerii între statusuri, trigger-e automate și intervenții manuale.
+
+
+Logica Escrow (detaliată tehnic & operațional)
+
+
+Tipuri de escrow, crearea contractului, gestionarea fondurilor, eliberare automată, dispute și audit trail.
+
+
+Sistemul de verificare & reputație
+
+
+KYC, recomandări, badge-uri, trust score și politici de revocare.
+
+
+Comunități private — structură și moderare
+
+
+Reguli de acces, structura hub-urilor, moderare și mecanisme de privacy.
+
+
+Notificări, email templates și logging
+
+
+Lista notificărilor, template-uri standard și logare pentru audit și debugging.
+
+
+Admin & Operare
+
+
+Proceduri interne, SLA-uri, dashboard KPI pentru board.
+
+
+Model financiar & pricing
+
+
+Comisioane, abonamente, revenue streams, proiecții și politici de refund.
+
+
+Securitate, GDPR & conformitate legală
+
+
+Cerințe minimale GDPR, securizarea fondurilor, termeni legali și risc legal.
+
+
+Metrici & KPI pentru lansare și prime 6 luni
+
+
+KPI operaționali, de adopție și financiari, plus dashboard de monitorizare.
+
+
+Roadmap de dezvoltare — MVP -> Faza 2
+
+
+Funcționalități must-have, prioritizare pe trimestre, lista „Nice to Have”, dependențe externe.
+
+
+Plan de testare & rollout
+
+
+Testare funcțională, UX cu early adopters, lansare beta și comunicare B2B.
+
+
+Risc & scenarii de criză
+
+
+Scenarii de fraudă, chargebacks, litigii și continuitate operațională.
+
+
+Appendix A — Wireframes text / mockups
+
+
+Wireframe Dashboard Company, Pagina Task, Escrow Page, Admin Console.
+
+
+Appendix B — Modele de documente legale
+
+
+T&C, model contract ESCRO, formulare de acceptare livrare.
+
+
+Appendix C — Checklist pentru developer
+
+
+API endpoints sugerate, schema DB conceptuală, test data pentru QA.
+
+
+Appendix D — Lista „Nice to Have”
+
+
+Trust Score engine avansat, matchmaking ML, integrare video, tokenizare, marketplace.
+
+
+Concluzie & pași următori
+
+
+Rezumat priorități, propunere next meeting, contacte cheie.
+
+Scop concret al documentului:
+Să fie referința unică pentru implementare, decizii de produs și validare investițională.
+
+
+Oricine îl citește trebuie să înțeleagă exact cum funcționează TRUST HUB și ESCRO, de la procesul de onboarding, la escrow, până la managementul comunităților și rularea completă a proiectelor B2B.
+3.2. Cine îl citește și de ce
+Acest document este destinat mai multor tipuri de cititori, fiecare cu scopuri diferite, astfel încât să poată înțelege și implementa TRUST HUB și ESCRO corect:
+1. Investitori
+De ce citesc: să înțeleagă conceptul, piața țintă, oportunitatea, modelul de business și planul de monetizare.
+
+
+Ce urmăresc: validarea fezabilității, scalabilității și potențialului de creștere; claritate asupra fluxurilor de escrow și diferențierea față de platformele existente.
+
+
+Cum folosesc documentul: pentru decizii de finanțare și discuții strategice cu echipa fondatoare.
+
+
+2. Dezvoltatori / echipa tehnică
+De ce citesc: să înțeleagă exact ce funcționalități trebuie implementate, cum se leagă rolurile, fluxurile de lucru și integrarea Stripe Connect pentru escrow.
+
+
+Ce urmăresc: wireframes, user flows, statusuri job/escrow, API-uri, logica automatizărilor și modul în care inputul uman interacționează cu procesele automate.
+
+
+Cum folosesc documentul: ca roadmap pentru dezvoltarea MVP, testare și scalare ulterioară.
+
+
+3. Echipa legal / compliance
+De ce citesc: pentru a se asigura că toate procesele respectă legislația aplicabilă (B2B, GDPR, plăți) și că termeni, contracte și SLA-uri sunt corecte.
+
+
+Ce urmăresc: modele de documente legale, politici de confidențialitate, reguli de escrow și proceduri de arbitraj.
+
+
+Cum folosesc documentul: pentru a pregăti contracte, T&C, politici interne și pentru validarea riscului legal.
+
+
+4. Product & design
+De ce citesc: să înțeleagă filosofia UX, principiile de design, fluxurile utilizatorilor și prioritățile MVP.
+
+
+Ce urmăresc: structura paginilor, wireframes, stările UI, comunități private, notificări și modul în care intervenția umană se integrează cu automatizarea.
+
+
+Cum folosesc documentul: pentru planificarea experienței utilizatorului, testare UX și definirea backlog-ului de produs.
+
+
+Mesaj cheie:
+Documentul servește drept singura sursă de referință pentru toate deciziile importante legate de TRUST HUB și ESCRO, de la investiție, dezvoltare, compliance până la experiența utilizatorului și operare.
+
+3.3. Cum se folosește: roadmap de implementare
+Acest document nu este doar informativ, ci și un ghid practic pentru implementarea TRUST HUB și ESCRO, astfel încât fiecare cititor să știe ce acțiuni să întreprindă și în ce ordine.
+1. Structurare pe etape
+Documentul este organizat astfel încât să permită urmărirea clară a etapelor de dezvoltare, testare și lansare:
+Planificare și design
+
+
+Înțelegerea conceptului, principiilor de design și structurii platformei.
+
+
+Definirea wireframes și user flows pentru fiecare tip de utilizator (companie, expert, admin).
+
+
+Implementare tehnică
+
+
+Dezvoltatorii folosesc secțiunile: Arhitectura produsului, Fluxuri principale, Pagini / ecrane, UI specifics, Statusuri și automatizări.
+
+
+Integrarea Stripe Connect și logica escrow conform specificațiilor.
+
+
+Compliance și legal
+
+
+Echipa legal utilizează modelele din Appendix B și regulile de verificare/reputatie pentru a asigura conformitatea GDPR, a contractelor și a proceselor de arbitraj.
+
+
+Testare și validare MVP
+
+
+Checklist-ul din Plan de testare & rollout asigură că toate funcționalitățile esențiale sunt verificate înainte de lansare.
+
+
+Early adopters testează UX, securitatea și funcționalitatea escrow.
+
+
+Lansare și operare
+
+
+Dashboard KPI și metrici operaționali (KPI) pentru monitorizare.
+
+
+Proceduri interne de administrare, moderare și arbitraj.
+
+
+Extindere și evoluție
+
+
+După validarea MVP-ului, se pot implementa funcționalități „Nice to Have” din Appendix D.
+
+
+Scalarea către ecosistem complet, comunități, și pe termen lung către clearing house B2B.
+
+
+2. Cum folosește fiecare tip de cititor roadmap-ul
+Investitori: verifică progresul și milestone-urile, înțeleg riscurile și planul de creștere.
+
+
+Dezvoltatori: urmează pașii tehnici pentru implementarea completă a MVP-ului, folosind wireframes, fluxuri și statusuri.
+
+
+Legal: verifică conformitatea la fiecare etapă și aprobați procesele înainte de lansare.
+
+
+Product & Design: prioritizează funcționalitățile MVP, testează UX și pregătește upgrade-uri pentru fazele următoare.
+
+
+3. Filosofie de utilizare
+Documentul trebuie consultat continuu, nu doar la începutul proiectului.
+
+
+Orice decizie de produs, modificare tehnică sau update legal trebuie să fie corelată cu specificațiile din acest roadmap.
+
+
+Servește ca sursă de adevăr unică (single source of truth) pentru toate echipele implicate.
+
+
+
+4. Sumar al serviciilor TRUST HUB
+TRUST HUB oferă trei niveluri de servicii ESCRO, fiecare adaptat la nevoile clientului și gradul de implicare al TRUST HUB:
+4.1 ESCRO DIRECT
+ESCRO DIRECT este serviciul cel mai simplu și rapid din ecosistemul TRUST HUB. Este gândit pentru situațiile în care clientul și expertul se cunosc deja, dar există un nivel de nesiguranță sau risc de neplată / livrare incompletă.
+Target: companii (SRL/PFA) și experți deja cunoscuți.
+
+
+Comision: cel mai mic dintre cele trei servicii, pentru a încuraja adopția rapidă și tranzacții frecvente.
+
+
+Intervenție umană: zero, totul este automatizat prin platformă și Stripe Connect.
+
+
+
+Flux operațional pas cu pas
+Creare task
+
+
+Clientul intră în platformă și completează un task, incluzând:
+
+
+Titlu și descriere
+
+
+Deliverables / livrabile
+
+
+Suma și modalitatea de plată
+
+
+Deadline
+
+
+ID-ul expertului (dacă este cunoscut și existent în platformă)
+
+
+Taskul este automat verificat pentru corectitudinea datelor și eligibilitatea expertului.
+
+
+Plată în escrow
+
+
+Clientul virează suma în escrow prin Stripe Connect.
+
+
+Fondurile sunt blocate, vizibile doar pentru client și sistemul TRUST HUB.
+
+
+Nu sunt eliberate până la confirmarea livrării.
+
+
+Notificări și timeline
+
+
+Clientul și expertul primesc notificări automate:
+
+
+Confirmare creare task
+
+
+Fonduri primite în escrow
+
+
+Reminder deadline
+
+
+Timeline vizibil în dashboard: status task → funded → in progress → delivered → released.
+
+
+Livrare și confirmare
+
+
+Expertul livrează rezultatul direct în platformă (upload, link, document, demo etc.).
+
+
+Clientul confirmă livrarea:
+
+
+Dacă acceptă, fondurile sunt eliberate automat.
+
+
+Dacă refuză, poate deschide dispute (arbitraj intern).
+
+
+Feedback și reputație
+
+
+După finalizare, ambele părți pot lăsa feedback.
+
+
+Tranzacția contribuie la badge-uri și trust score pentru expert și companie.
+
+
+
+Principii și diferențiatori
+100% self-service: fără interacțiune umană sau selecție externă.
+
+
+Siguranță maximă: fondurile nu părăsesc escrow-ul până la confirmare.
+
+
+Rapid și transparent: timeline clar, notificări automate și interfață simplă.
+
+
+Onboarding rapid: doar verificarea companiei și expertului este necesară, fără call-uri video.
+
+
+Ideal pentru tranzacții recurente: atunci când clientul și expertul au deja relație, dar vor să elimine riscul de neplată.
+
+
+
+4.2. ESCRO MATCH (subscription + call 1:1)
+Scop și context
+ESCRO MATCH este serviciul intermediat de TRUST HUB. Este gândit pentru situațiile în care clientul are nevoie de un expert, dar nu știe pe cine să aleagă sau vrea să se asigure că expertul este potrivit pentru proiectul său.
+Target: companii care au nevoie de selecție profesională a expertului și garantarea plății.
+
+
+Comision: mai mare decât ESCRO DIRECT, pentru că include input uman și abonament activ.
+
+
+Intervenție umană: echipa TRUST HUB implicată în selectarea expertului potrivit după un call video scurt de evaluare.
+
+
+
+Flux operațional pas cu pas
+Creare task
+
+
+Clientul definește taskul în platformă:
+
+
+Titlu și descriere
+
+
+Livrabile / criterii de succes
+
+
+Buget
+
+
+Deadline
+
+
+ID expertului nu este necesar, deoarece platforma va recomanda expertul potrivit.
+
+
+Selecție expert
+
+
+Clientul trebuie să aibă abonament activ pentru a accesa serviciul.
+
+
+TRUST HUB programează un call video de 15 minute 1:1 cu clientul pentru clarificarea nevoilor și obiectivelor.
+
+
+Echipa analizează proiectul și selectează expertul ideal din rețeaua validată.
+
+
+Creare task în ESCRO
+
+
+Odată ales expertul, taskul este creat în ESCRO și fondurile sunt puse în escrow.
+
+
+Comisionul include:
+
+
+Fee din platformă (abonament)
+
+
+Comision escrow pentru procesarea plății
+
+
+Timeline și notificări
+
+
+Status task: pending match → expert assigned → funded → in progress → delivered → released.
+
+
+Toate notificările sunt automate, dar echipa TRUST HUB poate interveni manual dacă apar probleme.
+
+
+Livrare și confirmare
+
+
+Expertul livrează taskul în platformă, iar clientul confirmă livrarea.
+
+
+În caz de dispută, echipa TRUST HUB poate interveni pentru arbitraj intern, folosind inputul direct al clientului și expertului.
+
+
+Feedback și reputație
+
+
+După finalizare, feedback-ul afectează trust score și poate contribui la badge-uri de expert validat.
+
+
+Tranzacțiile reușite cresc credibilitatea ambelor părți și facilitează ESCRO DIRECT viitor.
+
+
+
+Principii și diferențiatori
+Selecție personalizată: nu există nicăieri altundeva recomandare directă de expert combinată cu escrow.
+
+
+Input uman strategic: echipa TRUST HUB intervine doar acolo unde contează – selectarea expertului.
+
+
+Comision corect: combină plata sigură prin escrow cu abonament, reflectând valoarea serviciului uman.
+
+
+Privacy și verificare: doar companii și experți validați pot participa; datele și discuțiile sunt private.
+
+
+Ideal pentru proiecte complexe sau one-off: atunci când clientul vrea siguranță maximă și expert potrivit.
+
+ 4.3. ESCRO MANAGED (outsourcing complet / contract exclusiv)
+Scop și context
+ESCRO MANAGED este serviciul premium al TRUST HUB. Este gândit pentru situațiile în care clientul vrea să externalizeze complet un proiect, fără să se ocupe personal de selecția experților sau managementul livrabilelor.
+Target: companii cu proiecte complexe, critice sau cu nevoie de confidențialitate maximă.
+
+
+Comision: cel mai mare dintre cele trei servicii, reflectând implicarea completă a TRUST HUB.
+
+
+Intervenție umană: completă – formare echipă de experți, management taskuri, livrabile și raportare directă.
+
+
+
+Flux operațional pas cu pas
+Inițiere proiect
+
+
+Clientul creează un request general în platformă, descriind proiectul:
+
+
+Obiective și scope
+
+
+Deadline general
+
+
+Buget estimativ
+
+
+Clientul semnează un contract de exclusivitate și încredere deplină, care include:
+
+
+Obligațiile TRUST HUB și echipei sale
+
+
+NDA și confidențialitate
+
+
+Termeni de livrare și penalități (dacă este cazul)
+
+
+Formarea echipei
+
+
+TRUST HUB selectează echipa optimă de experți pentru proiect:
+
+
+Experți verificați, cu badge și trust score valid
+
+
+Skillset potrivit pentru fiecare deliverable
+
+
+Echipa este configurată pe platformă, cu roluri și responsabilități clar definite.
+
+
+Creare taskuri și fund management
+
+
+Platforma creează automat taskuri individuale pentru fiecare expert.
+
+
+Clientul virează fondurile în escrow, divizate pe milestone-uri sau faze (dacă e cazul).
+
+
+Comisionul include fee premium TRUST HUB + comision escrow.
+
+
+Management și livrare
+
+
+TRUST HUB gestionează proiectul end-to-end:
+
+
+Monitorizare progres taskuri
+
+
+Notificări automate și manuale către client
+
+
+Upload livrabile și validare
+
+
+Echipa TRUST HUB poate face intervenții directe, redistribuind taskuri dacă apar probleme.
+
+
+Confirmare și release
+
+
+Clientul aprobă livrabilele finale.
+
+
+Fondurile sunt eliberate automat în funcție de milestone-uri sau complet.
+
+
+În caz de dispute, TRUST HUB intervine ca arbitru principal, garantând livrarea conform contractului.
+
+
+Feedback și reputație
+
+
+Clientul poate evalua echipa și experții individuali.
+
+
+Experții primesc badge și trust score ajustat, iar clientul primește raport final detaliat.
+
+
+
+Principii și diferențiatori
+Externalizare completă: clientul se concentrează pe business, TRUST HUB gestionează proiectul.
+
+
+Control și transparență: dashboard clar cu toate taskurile, statusurile și timeline-ul livrabilelor.
+
+
+Confidențialitate totală: doar echipa TRUST HUB și clientul au acces la date.
+
+
+Trust premium: inputul uman și procesul verificat fac ca serviciul să fie singurul de acest tip cu escrow + echipă completă gestionată.
+
+
+Ideal pentru proiecte complexe: când riscul, timpul și confidențialitatea sunt critice.
+
+
+
+ESCRO MANAGED este serviciul flagship care consolidează poziția TRUST HUB ca furnizor de încredere digitală B2B, combinând escrow sigur, input uman și management complet de proiect.
+
+ 4.4. Harta serviciilor și nivelurile de implicare TRUST HUB
+Această secțiune sintetizează diferențele dintre cele trei servicii ESCRO, nivelul de implicare al TRUST HUB, costuri aproximative și tipul de client/experți vizați.
+Serviciu ESCRO
+Nivel de implicare TRUST HUB
+Tip client
+Tip expert
+Comision & Fee
+Caracteristici cheie
+ESCRO DIRECT
+0% (self-service)
+Client + expert deja cunoscuți
+Expert cunoscut de client
+Comision minim (plată escrow doar)
+- Creare task direct
+- Escrow automat
+- Livrare & confirmare
+- Feedback & trust score
+- Ideal pentru tranzacții recurente
+ESCRO MATCH
+~30% (input uman selectiv)
+Client care caută expert potrivit
+Expert validat în platformă
+Comision escrow + fee abonament
+- Call 1:1 de 15’ cu TRUST HUB
+- Selecție expert optim
+- Task creat și fonduri puse în escrow
+- Feedback & trust score
+- Privacy și verificare strictă
+ESCRO MANAGED
+100% (management complet)
+Client care externalizează complet proiecte
+Echipa formată din experți validați
+Comision premium + fee abonament
+- Formare echipă TRUST HUB
+- Contract exclusiv & NDA
+- Taskuri împărțite pe membri echipă
+- Escrow milestone/final
+- Monitorizare & livrare end-to-end
+- Raport final detaliat
+- Input uman maxim, control total
+
+
+Cheia vizualizării
+Nivelul de implicare: de la 0% la 100%, arată cât input uman intervine.
+
+
+Tip client & expert: definesc cine se potrivește fiecărui serviciu.
+
+
+Comision & fee: reflectă valoarea serviciului și resursele implicate.
+
+
+Caracteristici cheie: sumarizează avantajele, pentru ca investitorul sau dev-ul să înțeleagă rapid diferențele și logica serviciilor.
+
+
+
+Observații
+Această hartă va fi de bază și pentru wireframes UX și pentru definirea rolurilor și permisiunilor.
+
+
+Arată clar progresia de la self-service → input uman selectiv → full outsourcing.
+
+
+Accentul este pe încredere și control: cu cât serviciul e mai complex, cu atât implicarea TRUST HUB crește, iar clientul primește garanții mai mari.
+
+
+
+5. Arhitectura produsului (overview)
+Scopul acestei secțiuni este să ofere o privire de ansamblu asupra structurii TRUST HUB și ESCRO, pentru ca dev-ul, investitorul sau board-ul să înțeleagă componentele principale, rolurile lor și fluxurile de date.
+
+5.1 Componente principale
+Feed / Task Center
+
+
+Aprobare manuală TRUST HUB înainte de publicare.
+
+
+Filtrare pe tip task, industrie, status.
+
+
+Vizibil doar pentru experți verificați și clientul creator.
+
+
+Interfață: lista taskurilor cu status, prioritate, deadline.
+
+
+Escrow Engine
+
+
+Integrare Stripe Connect (Standard / Express).
+
+
+Tipuri de escrow: fix, milestone, retainer.
+
+
+Logica automată: fund holding, release, dispute.
+
+
+API intern pentru dashboard și notificări.
+
+
+Dashboards
+
+
+Company Dashboard: creare task, status livrabile, fund release, raport, notificări.
+
+
+Expert Dashboard: taskuri atribuite, timeline livrabile, status plăți, trust score.
+
+
+Admin Console: moderare feed, aprobare taskuri, KYC, dispute, raportare KPI.
+
+
+Comunități private
+
+
+Grupuri separate pentru companii și experți.
+
+
+Acces controlat și verificare board.
+
+
+Facilități: AMA, quick pitch, mini-feed privat, document sharing.
+
+
+Notificări
+
+
+In-app și email.
+
+
+Event-driven: funding, delivery, dispute, milestone, badge.
+
+
+Sistem de verificare & reputație
+
+
+Badge-uri, trust score, KYC, criterii verificare.
+
+
+Tracking istoric tranzacții, dispute și feedback.
+
+
+
+5.2 Fluxuri de date și responsabilități (conceptual)
+Client → Platformă: creare task, upload fonduri, request match/managed.
+
+
+Platformă → Expert: notificare task, livrabile, status livrare.
+
+
+Expert → Platformă: upload livrabile, confirmare progres, feedback.
+
+
+Platformă → Escrow Engine: hold, release, refund, chargeback.
+
+
+Admin → Platformă: aprobare task, arbitraj, selecție expert, intervenție manuală.
+
+
+
+5.3 Politica de confidențialitate
+Acces strict pe roluri: client, expert, admin.
+
+
+Date private între părți implicate.
+
+
+Comunități anonimizate pentru membri neverificați.
+
+
+Log-uri și audit trail pentru toate acțiunile.
+
+
+
+5.4 Limitări MVP vs Faza 2
+MVP: feed aprobat manual, escrow standard, dashboard simplu, comunități basic, input uman doar la MATCH/MANAGED.
+
+
+Faza 2: automatizare feed, escrow avansat, funcții comunitate, trust score engine complex, notificări avansate, dashboard KPI.
+
+6. Roluri și permisiuni (specificate)
+Platforma TRUST HUB funcționează ca un ecosistem cu nivele clare de acces și responsabilități. Fiecare tip de utilizator are o identitate verificată (KYC) și un set de permisiuni strict definite, pentru a asigura echilibru între libertate operațională și siguranță juridică.
+6.1. Admin / Board TRUST HUB — permisiuni complete
+Rol: coordonare strategică, arbitraj final și supravegherea întregului ecosistem.
+ Permisiuni:
+acces complet la toate conturile și tranzacțiile (read-only pentru fonduri escrow);
+
+
+validare KYC pentru companii și experți;
+
+
+moderare disputelor și emiterea deciziilor finale;
+
+
+modificarea statusurilor joburilor și escrow-urilor;
+
+
+setarea taxelor, comisioanelor și politicilor de utilizare;
+
+
+acces la dashboard KPI, rapoarte financiare și jurnal complet de activitate;
+
+
+posibilitatea de a desemna arbitri sau auditori externi;
+
+
+blocare / suspendare conturi în caz de fraudă sau nerespectare termeni;
+
+
+validare a comunităților și moderare conținut (feed, comentarii, profile).
+
+
+În arhitectura de tip clearing house, acest rol evoluează în "Trust Board" — un grup de administratori independenți care gestionează fondul de garanție și procesul de certificare.
+
+6.2. Company (Client) — permisiuni și limitări (SRL / PFA)
+Rol: entitate juridică sau freelancer care solicită servicii profesionale.
+ Permisiuni:
+creare și publicare task-uri (ESCRO DIRECT, MATCH sau MANAGED);
+
+
+alegere expert din listă sau solicitare de recomandare (input uman);
+
+
+încărcare documente, briefuri și livrabile;
+
+
+inițiere plată escrow și vizualizare timeline financiar;
+
+
+comunicare directă cu expertul prin chat securizat;
+
+
+deschiderea unei dispute și participare la procesul de arbitraj;
+
+
+acces la istoricul tranzacțiilor, facturi și rapoarte de proiect;
+
+
+acces la grupul privat al companiilor verificate;
+
+
+posibilitatea de a recomanda alți experți sau firme partener.
+
+
+Limitări:
+fondurile nu pot fi retrase odată ce sunt blocate în escrow;
+
+
+modificarea termenilor contractuali se face doar cu acordul expertului și al platformei;
+
+
+companiile provizorii (necertificate fiscal) au limite de volum și funcționalitate.
+
+
+
+6.3. Expert (Service Provider) — roluri, permisiuni, restricții
+Rol: furnizor de servicii profesionale (freelancer, agenție, consultant).
+ Permisiuni:
+aplicare la taskuri publice;
+
+
+acceptare contract escrow și încărcare livrabile;
+
+
+comunicare directă cu clientul și echipa TRUST HUB;
+
+
+retragerea fondurilor după eliberare;
+
+
+acces la grupul de experți și resurse educaționale (Trust Academy);
+
+
+posibilitatea de a primi badge-uri de reputație și certificate.
+
+
+Restricții:
+nu poate contacta companii în afara platformei pentru proiecte active;
+
+
+nu poate modifica termeni contractuali fără aprobarea clientului și a sistemului escrow;
+
+
+fondurile rămân blocate până la confirmarea livrării sau expirarea termenului escrow;
+
+
+experții provizorii (fără badge) nu pot participa la ESCRO MANAGED.
+
+
+
+6.4. Arbitru intern — responsabilități și limite
+Rol: actor neutru, numit de TRUST HUB pentru a analiza disputele și a decide obiectiv asupra eliberării fondurilor.
+ Permisiuni și responsabilități:
+acces doar la dosarele de dispută (documente, mesaje, livrabile);
+
+
+poate recomanda soluții parțiale (partial release / refund);
+
+
+poate solicita documente suplimentare de la părți;
+
+
+decizia finală se validează de Board;
+
+
+fiecare arbitru are un jurnal de cazuri și scor intern de acuratețe (calitate decizională).
+
+
+Arbitrajul intern este gândit ca o etapă intermediară între conflict și rezolvare legală, pentru a menține ecosistemul curat și rapid.
+
+6.5. Conturi verificate vs. provizorii (statuturi de cont)
+Statuturi:
+Provizoriu (Pending KYC):
+
+
+acces limitat (max. 1 proiect / valoare mică);
+
+
+fără acces la escrow real (demo sau test);
+
+
+fără drept de dispută reală.
+
+
+Verificat (KYC complet):
+
+
+acces total la escrow, contracte, comunități;
+
+
+eligibil pentru badge și arbitraj.
+
+
+Certificat (Trusted):
+
+
+nivel premium cu garanții financiare și istoric impecabil;
+
+
+acces prioritar în ESCRO MATCH & MANAGED;
+
+
+poate deveni arbitru sau partener intern în clearing future.
+
+
+
+7. Fluxuri principale (user flows) — secțiunea care explică ce se întâmplă pas cu pas în interiorul TRUST HUB / ESCRO, din momentul în care un utilizator intră până la finalizarea unui proiect.
+Aici trebuie să fie foarte clar cine inițiază acțiunea, ce face platforma, unde intervine omul și unde se procesează automatizarea.
+ 7.1. Onboarding companie (KYC business)
+(Stripe): dacă folosești Stripe Identity / Connect (Express/Custom), Stripe poate face o mare parte din KYC/KYB (verificare identitate, verificare cont bancar, documente). Stripe poate returna status (verified / unverified) prin API/webhook.
+
+
+(Trust Hub):
+
+
+colectezi meta-date specific platformei (CUI, persoană de contact, domeniu, documente contractuale) și stochezi link-ul / rezultatului KYC din Stripe.
+
+
+faci verificarea manuală complementară (site, LinkedIn, risc reputațional) doar când vrei control uman.
+
+
+controlezi statusul contului în aplicație (Pending / Approved / Rejected) pe baza webhook-urilor Stripe + verificare internă.
+
+
+Integrare: subscribe la webhooks Stripe pentru account.updated, identity.verification_session (sau echivalent), payout events; sincronizezi status KYC în DB.
+
+
+7.2. Onboarding expert (verificare, recomandare)
+(Stripe): colectează dovada identității și cont bancar al expertului; poate gestiona verificarea Payout-urilor (KYC) și limitările legale.
+
+
+(Trust Hub):
+
+
+păstrezi profilul profesional (portofoliu, recomandări), logica de invitație / trusted-pending și criteriile pentru badge.
+
+
+rulezi validarea manuală a calității / portofoliului; decizi dacă expertul poate accesa ESCRO MANAGED.
+
+
+Integrare: webhook account.person.updated sau identity pentru a ști când expertul este KYC-approved — apoi emiți badge pending flow.
+
+
+7.3. Creare task — ESCRO DIRECT (cu/ fără ID expert)
+(Stripe): gestionează plățile: creare PaymentIntent / SetupIntent, capturare fond în cont platformă sau în custodie (dependent Connect type), posibil să folosești payment_intent + transfer/destination_charge. Stripe tratează dispute/chargebacks nivel financiar.
+
+
+(Trust Hub):
+
+
+UI pentru creare task, validare logică business (buget, livrabile).
+
+
+aprobarea publicării task (moderare).
+
+
+creezi contractul intern și trimiți request către Stripe pentru a bloca fondul (create PaymentIntent / charge).
+
+
+monitorizezi webhooks Stripe: payment_intent.succeeded, charge.dispute.created etc.
+
+
+gestionezi dispute operațional (documente, arbitraj) — Stripe gestionează doar disputele de card, nu disputele de livrare.
+
+
+Integrare: folosești webhook-uri pentru payment_intent.*, charge.*, transfer.*, și loghezi toate evenimentele în audit trail.
+
+
+7.4. Request match → call 15’ → ESCRO MATCH
+(Stripe): același rol financiar — crează PaymentIntent la confirmare expert, ține fondul până la release; KYC deja verificat.
+
+
+(Trust Hub):
+
+
+programezi și execuți call-ul 1:1 (tool extern sau integrat), faci matching manual.
+
+
+după aprobare, emiți comanda către Stripe pentru a bloca suma (dacă clientul n-a plătit deja pe fluxul de checkout).
+
+
+păstrezi jurnalul consultanței, deciziile de matching și persoana care a făcut pairing-ul (audit).
+
+
+Integrare: trigger pentru creare PaymentIntent la finalul call-ului; webhook-uri pentru succes/eșec.
+
+
+7.5. Cedere proiect → ESCRO MANAGED (contract și kickoff)
+(Stripe): gestionează fluxurile de plată complexe: split pe milestone-uri, multiple transfers către subcontractori dacă vrei; poate gestiona payout-urile, retențiile și dispute financiare.
+
+
+(Trust Hub):
+
+
+semnezi contractul (documentat în platformă), definești milestone-urile și logica de eliberare.
+
+
+creezi un escrow “global” logic în platformă și emiți PaymentIntents / Setup pentru a bloca sumele (Stripe stochează sau reține pe contul platformei în funcție de setup).
+
+
+gestionezi distribuirea internă a fondurilor către experți (prin Stripe Transfers), monitorizare livrabile, account manager dedicat, raportare.
+
+
+arbitraj operațional și execuție managerială (nu Stripe).
+
+
+Integrare: folosești payouts, transfers, și webhook-uri pentru toate etapele; păstrezi audit pentru orice transfer.
+
+
+
+Concluzie practică (ce face Stripe vs ce face Trust Hub)
+Stripe preia: KYC/KYB (partea financiară), procesare plăți, reținere/blocking de fonduri, dispute financiare (chargebacks), payout către experți. Stripe emite webhook-uri cu evenimente cheie.
+
+
+Trust Hub păstrează controlul asupra: product logic (feed, moderare), aprobări umane (matching, managed), arbitraj pentru disputele de livrare, reputație/badge-uri, comunități private, UI/UX și reguli de business (statusuri job).
+
+
+Integrări necesare: webhook handling robust, mapping evenimente Stripe → statusuri interne, reconciliere financiară, mecanism de retry/rollback la erori de plată.
+ 7.6. Aplicare / selecție expert (workflow intern)
+1️⃣ Flux general
+Când o companie publică un job, există două variante de participare a experților:
+Direct apply → expertul aplică singur la job (ESCRO DIRECT);
+
+
+Match request → platforma intervine activ (ESCRO MATCH / MANAGED).
+
+
+Indiferent de flux, selecția trece prin aceleași etape de bază.
+
+2️⃣ Etape de selecție (Trust Hub)
+Aplicare expert – expertul completă profilul (Stripe account existent, KYC finalizat, cont bancar activat).
+
+
+Datele din Stripe sunt deja verificate automat (status = verified).
+
+
+Platforma verifică doar criteriile de potrivire: experiență, limbă, rating, badge-uri, activitate recentă.
+
+
+Screening automat – un sistem intern (sau input uman) elimină aplicațiile incomplete sau irelevante.
+
+
+Poate include un scor automat: match score = relevanță domeniu + disponibilitate + feedback anterior.
+
+
+Screening uman – dacă jobul e strategic (ESCRO MATCH/MANAGED), intervine echipa Trust Hub:
+
+
+analiză manuală de portofoliu, interviu scurt, validare reputație;
+
+
+eventual un call de 15 minute pentru a verifica potrivirea (poate fi automat programat).
+
+
+Selecție finală / confirmare – compania primește shortlist-ul, alege expertul.
+
+
+în momentul confirmării, se activează fluxul de escrow Stripe:
+
+
+(Stripe) creează PaymentIntent pentru suma convenită;
+
+
+(Trust Hub) marchează jobul ca “In escrow - Pending start”.
+
+
+
+3️⃣ După selecție
+Contractare automată – platforma generează contractul standard, completat automat cu datele din Stripe (nume legal, IBAN, business name).
+
+
+Kickoff call – opțional, programat automat; după call, status devine Active / In Progress.
+
+
+Release fonduri – fondurile sunt eliberate pe milestone-uri (manual sau automat), conform webhook-urilor Stripe (transfer.created, payout.paid).
+
+
+
+4️⃣ Ce face Stripe aici
+Stripe gestionează exclusiv partea financiară: KYC, payout, blocarea și eliberarea banilor, dispute financiare.
+
+
+Trust Hub doar confirmă momentul în care se face un transfer sau o eliberare (în funcție de progresul jobului).
+
+
+
+5️⃣ Ce face Trust Hub aici
+controlează potrivirea umană și calitatea livrărilor;
+
+
+validează reputația și comportamentul experților (inclusiv decizii de suspendare sau escaladare);
+
+
+oferă „transparență operațională” între părți, fără să atingă fluxul financiar direct;
+
+
+gestionează partea de comunicare, arbitraj, contracte, scoring și raportare.
+
+
+
+6️⃣ Rezultatul final
+Prin combinația Stripe + input uman:
+KYC și plățile sunt 100% automatizate;
+
+
+selecția, reputația și arbitrajul sunt gestionate uman — ceea ce creează diferențierea reală între un marketplace de masă și un clearing house de încredere.
+
+7.7. Kickoff & Management de Proiect (ESCRO MANAGED / MATCH)
+1️⃣ Obiectiv
+Să se creeze un flux clar, sigur și fără ambiguități între cele trei entități:
+Clientul (Compania) – cel care a plasat banii în escrow;
+
+
+Expertul – cel care livrează munca;
+
+
+Trust Hub – garantul relației, care decide când fondurile pot fi eliberate (în baza progresului).
+
+
+
+2️⃣ Faza 1 – Kickoff (start oficial al proiectului)
+După confirmarea expertului și blocarea banilor în escrow:
+Meeting automat programat (Google Meet / Zoom API):
+
+
+Se stabilesc clar livrabilele, termenul și milestone-urile.
+
+
+Trust Hub (managerul de cont) participă doar la proiectele MANAGED.
+
+
+Document de pornire (Kickoff Doc) generat automat:
+
+
+Include: titlul proiectului, timeline, milestones, responsabilități, sumă totală blocată.
+
+
+Este salvat în panoul fiecărei părți (client / expert / admin Trust Hub).
+
+
+Status job = Active. Stripe confirmă că fondurile sunt „held in escrow”.
+
+
+
+3️⃣ Faza 2 – Execuție
+Aici apar diferențele între ESCRO DIRECT și ESCRO MANAGED:
+A. ESCRO DIRECT
+Clientul și expertul colaborează direct în chatul securizat;
+
+
+Milestone-urile pot fi create și marcate ca livrate de către client;
+
+
+Eliberarea fondurilor se face automat la fiecare milestone (dacă clientul confirmă sau nu contestă în 72h);
+
+
+Trust Hub intervine doar în caz de dispută.
+
+
+B. ESCRO MANAGED
+Un Project Manager Trust Hub coordonează comunicarea și aprobările;
+
+
+Există un dashboard central cu:
+
+
+status milestone (Not Started / In Progress / Review / Approved);
+
+
+progres procentual (bară vizuală);
+
+
+log automat al mesajelor și fișierelor;
+
+
+Managerul validează fiecare milestone;
+
+
+Stripe eliberează automat fondurile după confirmarea Trust Hub → “Transfer to Expert initiated”.
+
+
+
+4️⃣ Faza 3 – Finalizare & Închidere
+Review final automat – ambele părți oferă feedback reciproc (calitate, comunicare, punctualitate);
+
+
+Scoring reputațional – actualizat în baza feedbackului + respectarea termenelor + lipsa disputelor;
+
+
+Status job = Completed → banii eliberați integral;
+
+
+Document final (Closure Report) – se generează automat, cu:
+
+
+suma totală plătită;
+
+
+ratinguri;
+
+
+feedbackuri;
+
+
+log-ul escrow Stripe (datele de plată, timpi, dispute, eliberări);
+
+
+semnăturile electronice implicite.
+
+
+
+5️⃣ Dispute & arbitraj
+Dacă apar conflicte:
+Clientul poate bloca eliberarea unui milestone și solicită intervenția Trust Hub;
+
+
+Trust Hub analizează livrabilele și decide (în 48h) una dintre cele trei opțiuni:
+
+
+Release – fondurile merg la expert;
+
+
+Refund – banii se întorc la client;
+
+
+Split – procentual, între părți.
+ (Stripe Connect permite transfer parțial prin transfer_reversal)
+
+
+Toate deciziile sunt înregistrate automat într-un Audit Log — pentru trasabilitate 100%.
+
+6️⃣ Ce aduce Stripe aici
+Stripe devine infrastructura de încredere financiară:
+ține banii blocați în siguranță până la decizia Trust Hub;
+
+
+eliberează sau returnează fondurile fără a le trece prin conturile Trust Hub (no money held on platform);
+
+
+oferă un layer de legal compliance (PSD2, AML, KYC, liability transfer).
+
+
+
+7️⃣ Ce aduce Trust Hub aici
+control reputațional și arbitraj uman;
+
+
+echilibru între viteză (automate flows) și siguranță (manual oversight);
+
+
+garanție morală și profesională: “nu lucrăm cu oricine, dar când lucrăm, garantăm integritatea”.
+
+ 7.8. Dispute & Arbitraj — Flux complet de gestionare a conflictelor
+
+1️⃣ Obiectiv
+Asigurarea unei soluționări rapide, neutre și documentate a oricărui conflict între Client (Company) și Expert (Provider), fără a afecta integritatea fondurilor blocate în escrow.
+ Scopul nu e doar rezolvarea litigiului, ci și menținerea încrederii generale în ecosistemul TRUST HUB.
+
+2️⃣ Când se poate deschide o dispută
+O dispută poate fi inițiată doar în două cazuri:
+După livrarea unui milestone – dacă clientul nu este mulțumit de rezultat.
+
+
+După expirarea termenului de livrare – dacă expertul întârzie sau nu răspunde.
+
+
+Nu pot exista dispute în timpul unui milestone activ — doar după ce a fost marcat „Delivered” sau a trecut deadline-ul.
+
+3️⃣ Inițierea disputei
+Oricare dintre părți poate declanșa disputa, dar fluxul este diferit:
+A. Dacă o deschide Clientul:
+apasă butonul „Open Dispute” din pagina milestone-ului;
+
+
+selectează motivul (dropdown: Work Quality / Delay / Miscommunication / Other);
+
+
+atașează dovezi (fișiere, capturi, mesaje);
+
+
+Stripe marchează automat fondurile aferente milestone-ului ca “on hold” — adică nu se mai pot elibera până la verdict.
+
+
+B. Dacă o deschide Expertul:
+poate reclama că Clientul a confirmat livrarea dar nu a acceptat milestone-ul / a refuzat fără motiv valid;
+
+
+procesul e identic: formular, descriere, dovezi;
+
+
+banii rămân blocați în escrow până la decizia Trust Hub.
+
+
+
+4️⃣ Etapele disputei
+Procesul se derulează standard în 3 faze:
+Faza 1 — Colectare date (max. 24h)
+Trust Hub solicită ambele părți să încarce toate dovezile (prin interfața dedicată);
+
+
+ambele părți pot adăuga comentarii sau răspunsuri;
+
+
+toate materialele sunt salvate automat în „Dispute Log”.
+
+
+Faza 2 — Analiză & Deliberare (max. 48h)
+Arbitru intern (selectat din echipa Trust Hub) analizează:
+
+
+calitatea livrabilului față de cerințele contractuale;
+
+
+termenele;
+
+
+istoricul comunicării;
+
+
+dacă e necesar, poate solicita o ședință de conciliere video (15 min) cu ambele părți;
+
+
+decizia este luată pe baza principiului echității și documentației obiective, nu al volumului de argumente.
+
+
+Faza 3 — Decizie & Execuție (max. 24h după deliberare)
+Arbitru selectează una dintre cele 3 acțiuni:
+
+
+Release funds (expertul are dreptate);
+
+
+Refund client (clientul are dreptate);
+
+
+Partial split (ex. 60–40);
+
+
+Platforma declanșează automat în Stripe una dintre acțiunile:
+
+
+transfer_release
+
+
+transfer_reversal
+
+
+split_transfer (parțial, prin custom logic de Connect).
+
+
+
+5️⃣ Post-dispute outcomes
+După rezoluție:
+jobul este marcat “Resolved”;
+
+
+ambele părți primesc un Raport de Arbitraj PDF (cu detaliile tranzacției, decizia, justificare);
+
+
+sistemul aplică automat penalizări reputaționale:
+
+
+–10 puncte pentru partea găsită vinovată;
+
+
+–5 puncte pentru partea care a generat conflict procedural;
+
+
+disputele repetate duc la badge suspendat sau chiar ban temporar.
+
+
+
+6️⃣ Avantajele modelului TRUST HUB
+🔹 Transparent: fiecare pas e înregistrat în „Audit Trail” (data, ora, acțiunea, userul).
+ 🔹 Neutru: Arbitru Trust Hub nu este implicat în proiect, deci nu are conflict de interese.
+ 🔹 Sigur financiar: Stripe garantează că fondurile nu pot fi accesate sau retrase până la decizie.
+ 🔹 Rapid: întregul proces are un SLA maxim de 72h (24 + 48).
+ 🔹 Scalabil: la nevoie, procesul poate fi automatizat parțial (machine learning + template decisions).
+
+7️⃣ Stripe în contextul disputei
+Stripe funcționează ca motorul financiar:
+permite blocarea automată a sumelor în litigiu (status: held);
+
+
+gestionează reversările parțiale fără a afecta balanța platformei;
+
+
+asigură trasabilitatea legală (toate transferurile sunt logate cu balance_transaction_id);
+
+
+asigură conformitate PSD2 și anti-fraudă.
+
+
+
+8️⃣ Rolul Trust Hub
+Analizează, decide, documentează.
+
+
+Menține integritatea procesului și încrederea în ecosistem.
+
+
+În cazuri grave (fraudă, neglijență, încălcări T&C), poate marca contul cu “Under Review” și suspenda temporar accesul la noi task-uri.
+
+
+
+
+
+7.9. Deschidere dispută → arbitraj intern → rezoluție
+Obiectiv: rezolvare rapidă, neutră și documentată a conflictelor legate de livrare sau termene, păstrând banii blocați în escrow până la decizie.
+Când se deschide disputa
+După livrarea unui milestone (client nemulțumit) sau după expirarea termenului (expert întârzie).
+
+
+Disputa nu se deschide în timpul execuției unui milestone; doar după Delivered sau Deadline passed.
+
+
+Inițiere (formular)
+Partea care deschide disputa completează motiv (Work Quality / Delay / Miscommunication / Other) și atașează dovezi.
+
+
+Stripe marchează fondurile relevante ca held/on hold.
+
+
+Etapele
+Colectare dovezi (max 24h) — upload fișiere, mesaje; toate intră în „Dispute Log”.
+
+
+Analiză & deliberare (max 48h) — arbitru intern analizează contractul vs livrabile; poate cere conciliere video 15’.
+
+
+Decizie & execuție (max 24h după deliberare) — una din acțiuni: Release funds / Refund client / Partial split. Acțiunile declanșează apeluri API Stripe (transfer_release, transfer_reversal, logică split).
+
+
+Post-decision
+Job marcat Resolved; raport PDF emis cu justificare; penalizări reputaționale automate (ex: -10 puncte pentru partea găsită vinovată).
+
+
+Disputele repetate → badge suspendat sau ban temporar.
+
+
+Totul înregistrat în Audit Trail pentru trasabilitate.
+ 
+7.10. Închidere proiect și raportare finală
+
+1️⃣ Obiectiv
+Asigurarea unei finalizări complete, clare și documentate a fiecărui proiect — din punct de vedere contractual, financiar și reputațional — indiferent dacă s-a încheiat prin livrare, refund sau arbitraj.
+ Scopul este ca fiecare parte implicată (Client, Expert, Trust Hub) să aibă o urmă digitală completă și o măsură obiectivă de performanță.
+
+2️⃣ Condiții de închidere a unui proiect
+Un proiect (task) poate fi închis automat sau manual, în funcție de context:
+A. Închidere automată (default)
+toate milestone-urile au fost marcate drept “Delivered” și “Accepted”;
+
+
+toate fondurile din escrow au fost eliberate integral către expert;
+
+
+nu există dispute active;
+
+
+sistemul setează statusul jobului → completed.
+
+
+B. Închidere manuală
+doar un Admin Trust Hub poate marca un proiect ca „Closed” în următoarele cazuri:
+
+
+a fost emis refund complet;
+
+
+s-a decis prin arbitraj split payout (rezoluție specială);
+
+
+contul uneia dintre părți a fost suspendat (fraudă / KYC invalid).
+
+
+
+3️⃣ Pașii închiderii (flux complet)
+1. Confirmare finală livrare
+Expertul marchează milestone-ul final ca Delivered;
+
+
+Clientul confirmă Accept Delivery;
+
+
+Stripe eliberează fondurile;
+
+
+sistemul afișează mesaj:
+
+
+ “Proiectul a fost livrat și plătit cu succes. Mulțumim că folosești TRUST HUB.”
+
+
+
+2. Generare raport automat
+Platforma compilează toate datele relevante:
+
+
+timeline proiect (creare, milestones, dispute, decizii);
+
+
+total plăți și comisioane;
+
+
+status escrow și tranzacții Stripe;
+
+
+rating reciproc (Client → Expert, Expert → Client);
+
+
+se generează un Raport PDF oficial de proiect (număr unic de referință).
+
+
+3. Rating & feedback
+la finalizare, ambele părți sunt invitate să evalueze colaborarea:
+
+
+⭐️ 1–5 stele;
+
+
+câmp text scurt: “Ce a mers bine?” / “Ce poate fi îmbunătățit?”;
+
+
+sistemul calculează Trust Score actualizat în timp real.
+
+
+4. Publicare în profiluri
+rezultatul proiectului apare în:
+
+
+Profilul companiei (cu status “Completed Project”);
+
+
+Profilul expertului (cu detalii despre livrare, scor, feedback);
+
+
+disputele rezolvate apar doar intern, fără expunere publică, dar influențează scorul.
+
+
+5. Arhivare & jurnalizare
+toate evenimentele (inclusiv tranzacțiile Stripe) se salvează în „Audit Trail”;
+
+
+datele pot fi exportate de părți în format PDF sau CSV;
+
+
+proiectul devine read-only, fără posibilitate de modificare ulterioară.
+
+
+
+4️⃣ Scor de încredere și efecte post-proiect
+La închiderea proiectului:
+Expertul care finalizează 3 proiecte fără dispute active → primește automat Badge Verified;
+
+
+Clientul cu minim 5 proiecte plătite integral și fără dispute → primește Trust Badge Company;
+
+
+orice proiect închis prin refund complet → scade reputația ambelor părți (-5 puncte fiecare).
+
+
+
+5️⃣ Rol Stripe în procesul de închidere
+Stripe finalizează automat:
+release_funds către contul expertului;
+
+
+application_fee către Trust Hub (comision platformă);
+
+
+închide balance transaction cu status paid & closed;
+
+
+emite raport automat disponibil în dashboardul intern Trust Hub.
+
+
+
+6️⃣ Beneficii și impact
+procesele financiare se termină curat (fără fonduri blocate);
+ reputația e consolidată progresiv;
+oferă dovadă legală în caz de audit sau control financiar;
+platforma rămâne curată și predictibilă (zero taskuri rămase “în aer”).
+
+ 7.10. Închidere proiect și raportare finală
+
+
+Pagini / ecrane (UX) — lista completă
+ 8.1. Public: Landing page (Home) — elemente cheie pentru vânzare B2B
+ 8.2. Auth: Login / Register (SRL / PFA flow KYC)
+ 8.3. Dashboard Company (detaliat)
+ 8.4. Dashboard Expert (detaliat)
+ 8.5. Feed / Task Center (aprobare manuală)
+ 8.6. Pagina Task (detaliu task + butoane)
+ 8.7. Pagina Escrow (timeline bani + acțiuni)
+ 8.8. Chat & Livrabile (upload / proof)
+ 8.9. Page Dispute / Arbitraj (flux documentat)
+ 8.10. Grup Comunitate Company (mini-feed privat)
+ 8.11. Grup Comunitate Expert (mini-feed privat)
+ 8.12. Profil Company (verificare, contracte, istoric)
+ 8.13. Profil Expert (badge, tranzacții, portofoliu)
+ 8.14. Admin Console (moderare feed, KYC, dispute, raportare)
+ 8.15. Pages legale: T&C, Privacy, Pricing, SLA
+
+
+UI specifics pentru fiecare pagină (wireframe text)
+ 9.1. Lista elementelor UI per pagină (buton exact, text, dropdown, modale)
+ 9.2. Stări UI (loading, error, succes, locked)
+ 9.3. Mesaje sistem standard (template)
+ 9.4. Accesibilitate și responsabilități vizuale (MVP minimum)
+
+
+10. Statusuri, reguli de tranziție și automatizări
+
+10.1. Enum statusuri Job
+Status
+Descriere
+draft
+Job creat dar nesalvat public; incomplet sau fără ofertă trimisă.
+pending_approval
+Ofertă trimisă de expert, așteaptă acceptarea companiei (sau invers).
+active
+Job aprobat, escrow creat, dar lucrul nu a început (așteaptă funding complet).
+in_progress
+Escrow-ul e finanțat și lucrul efectiv a început.
+delivered
+Expertul a trimis livrabilul pentru milestone-ul curent.
+disputed
+Una dintre părți a deschis o dispută (fonduri blocate).
+completed
+Toate milestone-urile au fost livrate și acceptate, fondurile eliberate.
+closed
+Job închis manual de admin sau prin refund complet / arbitraj final.
+
+
+10.2. Enum statusuri Escrow
+Status
+Descriere
+created
+Escrow-ul a fost inițializat (contract semnat, dar nefinanțat).
+funded
+Plata a fost făcută, fondurile sunt în contul escrow.
+held
+Fondurile sunt blocate (de ex. dispută deschisă).
+released
+Fondurile au fost transferate expertului.
+refunded
+Fondurile au fost returnate clientului.
+disputed
+Escrow-ul asociat are o dispută activă.
+
+
+10.3. Condiții de trecere între statusuri (logica completă)
+Job transitions
+From → To
+Condiție declanșatoare
+Actor / Trigger
+draft → pending_approval
+Job complet + ofertă trimisă
+Expert
+pending_approval → active
+Acceptare ofertă + escrow creat
+Company
+active → in_progress
+Escrow marcat funded (Stripe confirmat)
+Sistem
+in_progress → delivered
+Expert apasă “Mark as Delivered”
+Expert
+delivered → completed
+Company acceptă livrarea (sau expiră perioada de dispută)
+Company / Auto
+delivered → disputed
+Company deschide dispută în perioada de review
+Company
+disputed → completed
+Arbitraj decide release
+Admin
+disputed → closed
+Arbitraj decide refund complet / split
+Admin
+completed → closed
+Închidere administrativă / arhivare
+Sistem
+
+Escrow transitions
+From → To
+Condiție declanșatoare
+Actor / Trigger
+created → funded
+Plata completată cu succes
+Stripe Webhook
+funded → released
+Acceptare livrare / auto-release
+Sistem
+funded → held
+Dispută deschisă
+Company
+held → released
+Arbitraj decide release
+Admin
+held → refunded
+Arbitraj decide refund
+Admin
+refunded → closed
+Fonduri returnate integral
+Stripe confirmation
+released → closed
+Fonduri plătite expertului
+Stripe confirmation
+
+
+10.4. Trigger-e automate
+Tip automatizare
+Condiție
+Acțiune
+Timeout ofertă
+Job pending_approval > 72h fără răspuns
+Auto-close job → status closed
+Timeout funding
+Job active > 48h fără escrow funded
+Auto-cancel → closed
+Auto-start
+Escrow funded
+Auto-change job → in_progress
+Auto-release funds
+delivered > 72h fără dispută
+Auto-release escrow → released + job completed
+Auto-close dispute
+disputed > 72h fără răspuns ambele părți
+Admin fallback: split 50/50 sau refund complet
+Notification triggers
+La fiecare schimbare de status (job sau escrow)
+Email + in-app + log în Audit Trail
+Auto-archive
+completed sau closed > 30 zile
+Mutare în “Archived Projects”
+
+
+10.5. Rutele manuale vs automatizate
+Acțiune
+Manual
+Automat
+Creare job
+✅
+❌
+Aprobare ofertă
+✅
+❌
+Creare escrow
+✅
+❌
+Confirmare plată
+❌
+✅ (Stripe webhook)
+Începere lucrări
+❌
+✅
+Marcare livrare
+✅
+❌
+Acceptare livrare
+✅
+✅ (după timeout)
+Deschidere dispută
+✅
+❌
+Rezoluție dispută
+✅ (Admin)
+❌
+Release/Refund
+✅ (Admin/System)
+✅ (auto-release după termen)
+Închidere proiect
+✅ (Admin)
+✅ (după completare automată)
+Notificări / Audit
+❌
+✅
+
+
+11. Logica Escrow (detaliată tehnic & operațional)
+
+11.1. Tipuri de escrow suportate
+Fix (Fixed Price Escrow)
+
+
+Suma totală a jobului e definită de la început.
+
+
+Plata este complet blocată în escrow înainte de startul lucrării.
+
+
+Eliberarea se face integral la acceptarea livrabilelor.
+
+
+Milestone Escrow
+
+
+Jobul este împărțit în mai multe milestone-uri.
+
+
+Fiecare milestone are sumă proprie și criterii de livrare.
+
+
+Fondurile sunt eliberate progresiv, pe măsură ce milestone-urile sunt acceptate.
+
+
+Retainer / Subscription-based Escrow
+
+
+Plata este recurentă (de ex. lunar) pentru o colaborare continuă.
+
+
+Fondurile sunt blocate periodic, și release-ul se face după verificarea lunară a livrabilelor.
+
+
+Notă: Stripe Connect poate gestiona toate tipurile, inclusiv split-uri între mai mulți experți și auto-release.
+
+11.2. Creare contract: termeni, deliverables, criterii de acceptare
+Contractul este generat automat la crearea jobului. Conține:
+
+
+Suma totală / milestone-urile
+
+
+Termen de livrare și deadline pentru dispute
+
+
+Criterii de acceptare (ce se consideră livrat complet)
+
+
+Penalități / opțiuni refund în caz de nerespectare
+
+
+Date despre client și expert (KYC verificat)
+
+
+Semnătura poate fi digitală (Stripe + consimțământ în platformă).
+
+
+
+11.3. Gestionarea fondurilor
+Fondurile sunt procesate prin Stripe Connect (Express sau Standard).
+
+
+Flux recomandat:
+
+
+Clientul plătește → Stripe confirmă → fondurile blocate în escrow
+
+
+Release către expert: Stripe transferă direct → taxele platformei aplicate automat
+
+
+Refund/Chargeback: Stripe gestionează fondurile înapoi către client sau parțial la expert
+
+
+Platforma trebuie să păstreze un audit trail intern, dar Stripe gestionează majoritatea fondurilor.
+
+
+
+11.4. Eliberare automată
+Reguli standard:
+
+
+Livrare acceptată de client → auto-release după X zile (configurabil, ex: 3 zile)
+
+
+Livrare acceptată tacit (client nu acționează în termenul limită) → auto-release
+
+
+Milestone Escrow: fiecare milestone poate avea un trigger separat pentru eliberare.
+
+
+
+11.5. Refund & chargeback handling
+Client poate solicita refund dacă criteriile nu sunt îndeplinite → fondurile intră în status held.
+
+
+Chargeback Stripe: platforma este notificată → fondurile blocate → arbitraj intern.
+
+
+Decizia finală: refund complet, partial release, sau release integral către expert.
+
+
+
+11.6. Dispute flow financiar
+Dispută deschisă → fondurile held → notificare ambelor părți.
+
+
+Posibile scenarii:
+
+
+Rezolvare amiabilă → release sau partial release
+
+
+Arbitraj intern TRUST HUB → decizie manuală → actualizare status escrow & job
+
+
+Timeout dispute → auto-release parțial sau split (configurat)
+
+
+Logica trebuie să țină cont de milestone-uri și de tipul escrow-ului.
+
+
+
+11.7. Audit trail / jurnal tranzacții
+Fiecare tranzacție în escrow trebuie să fie logată:
+
+
+Plată inițială, milestone funded
+
+
+Eliberare către expert
+
+
+Refund / chargeback
+
+
+Dispute / arbitraj
+
+
+Timeout / auto-release
+
+
+Jurnalul este necesar pentru: raportare internă, audit financiar, dispute legale.
+
+
+Notă generală: Stripe gestionează majoritatea fluxurilor monetare și de securitate, platforma trebuie doar să supravegheze și să intervină la disputes, manual overrides, și logare pentru audit.
+
+12. Sistemul de verificare & reputație
+Scop: Asigură încredere și siguranță în ecosistemul TRUST HUB, printr-un sistem structurat de verificare a companiilor și experților, evaluare a reputației și badge-uri care reflectă nivelul de încredere.
+
+12.1. KYC business (cerințe minimale)
+Companiile trebuie să furnizeze:
+
+
+Certificat de înregistrare SRL/PFA.
+
+
+Date fiscale și bancare validate.
+
+
+Contact principal și e-mail verificat.
+
+
+Scopul este să filtrăm entitățile fictive și să prevenim fraudele încă de la început.
+
+
+
+12.2. Mecanism recomandare / invitație expert → trusted pending
+Un expert sau o companie poate fi invitată de un user existent cu badge maxim, din cercul de încredere.
+
+
+Recomandarea generează un statut Pending Verification cu badge-ul “Recommended by Trusted User”.
+
+
+Acces limitat în platformă până când criteriile de activare sunt îndeplinite:
+
+
+3 tranzacții finalizate fără dispute → badge Trusted.
+
+
+Această metodă creează un circuit de încredere controlat și organic în ecosistem.
+
+
+
+12.3. Badge-uri și criterii
+Structură:
+Trial / Pending
+
+
+Toți utilizatorii noi fără recomandare.
+
+
+Acces limitat la platformă; pot testa ESCRO DIRECT în sandbox sau cu supraveghere Admin.
+
+
+Recommended by Trusted User
+
+
+Primul pas pentru cei recomandați de un user Trusted.
+
+
+Badge vizibil pe profil și în dashboard: “Recommended by Trusted User”.
+
+
+Acces moderat: pot participa la taskuri, dar cu monitorizare și limitări de volume.
+
+
+Trusted
+
+
+Devine automat după 3 tranzacții finalizate fără dispute.
+
+
+Acces complet: participă liber la taskuri ESCRO DIRECT, MATCH și MANAGED, poate recomanda alți utilizatori.
+
+
+Badge vizibil: Trusted Expert / Trusted Company.
+
+
+Reguli suplimentare:
+Recomandările trebuie să fie validate și verificabile.
+
+
+Orice dispută sau comportament suspect poate duce la suspendarea sau revocarea badge-ului.
+
+
+Auto-referințele nu sunt permise.
+
+
+
+12.4. Trust Score (metrici propuse) — versiune MVP simplificată
+Scor numeric 0–100 pentru fiecare utilizator (companie sau expert).
+
+
+Calcul bazat pe:
+
+
+Număr de tranzacții finalizate fără dispute (pondere mare).
+
+
+Recomandări primite de la utilizatori Trusted.
+
+
+Istoricul dispute-urilor și calitatea livrabilelor (feedback de la client).
+
+
+Scorul influențează vizibilitatea în sistem: cei cu scor mai mare apar mai sus în recomandări și în feed.
+
+
+În MVP, scorul este simplificat: 3 tranzacții fără dispute = full Trusted Score pentru experți recomandați.
+
+
+
+12.5. Politici de suspendare / revocare badge
+Suspendare temporară în cazul dispute-urilor multiple sau comportament neadecvat.
+
+
+Revocare permanentă dacă există fraude sau încălcări repetate.
+
+
+Admin-ul poate interveni manual pentru ajustarea badge-urilor și scorurilor.
+
+
+Toate acțiunile sunt înregistrate în jurnalul de audit pentru transparență.
+
+
+
+13. Comunități private — structură și moderare
+Scop: Crearea unor hub-uri private și securizate unde utilizatorii TRUST HUB interacționează, schimbă know-how, colaborează pe proiecte și cresc vizibilitatea experților și companiilor de încredere.
+
+13.1. Reguli de acces (verificare + aprobare Board)
+Accesul în comunități se bazează pe badge-uri și statusuri de reputație:
+
+
+Trusted și Recommended by Trusted User pot accesa majoritatea hub-urilor.
+
+
+Utilizatorii în Trial / Pending au acces limitat sau doar la feed-uri vizuale, fără posibilitate de postare.
+
+
+Board-ul TRUST HUB aprobă manual accesul în hub-uri premium sau specializate.
+
+
+Fiecare utilizator trebuie să fie verificat KYC / reputație înainte de a primi acces complet.
+
+
+
+13.2. Structură inițială a hub-urilor (canale recomandate)
+Hub General: pentru toate companiile și experții Trusted; discuții generale și anunțuri oficiale.
+
+
+Hub Proiecte / Taskuri: pentru ESCRO MATCH și MANAGED, comunicare legată de taskuri active.
+
+
+Hub Industry Specific: canale dedicate pe verticala de business (ex: IT, Legal, Finance, Marketing).
+
+
+Hub AMA / Q&A: acces la sesiuni cu experți și board TRUST HUB.
+
+
+Hub Learning / Case Studies: exemple practice, best practices, discuții de mentorat.
+
+
+
+13.3. Moderare, reguli de posting și flow de aprobare postări
+Postările sunt monitorizate automat pentru spam și conținut neadecvat.
+
+
+Utilizatorii Trial / Pending nu pot posta liber, doar submit pentru aprobare de către moderator.
+
+
+Utilizatorii Trusted pot posta direct, dar există posibilitatea de raportare și revocare rapidă a postărilor.
+
+
+Admin / Moderatori verifică periodic feed-urile și pot interveni în dispute.
+
+
+Flow tipic pentru postare:
+
+
+User submit post → sistem automat verifică reguli minime → trimis la moderator dacă e necesar.
+
+
+Moderator aprobă sau respinge → notificare user.
+
+
+
+13.4. Mecanisme de privacy și anonimizare (dacă necesar)
+Posibilitatea de a posta anonim în hub-uri de discuții, doar pentru feedback sau brainstorming.
+
+
+Datele sensibile ale tranzacțiilor sau contractelor nu sunt vizibile decât pentru părțile implicate și Admin.
+
+
+Control granular: Board-ul poate decide cine vede ce tip de postare sau fișier încărcat.
+
+
+
+13.5. Activări de valoare: AMA, case studies, quick pitch nights
+AMA (Ask Me Anything): sesiuni regulate cu experți sau membrii Board; acces pe baza badge-urilor.
+
+
+Case Studies: prezentarea de proiecte reale finalizate prin ESCRO, pentru învățare și reputație.
+
+
+Quick Pitch Nights: evenimente online pentru membri care doresc să prezinte idei / servicii, cu feedback rapid.
+
+
+Webinars & Workshops: training și mentorat pentru membrii Trusted sau Recommended.
+
+
+
+14. Notificări, email templates și logging
+Scop: Asigurarea transparenței, comunicării eficiente și auditului complet pentru toate tranzacțiile și interacțiunile din platformă.
+
+14.1. Lista notificărilor esențiale (in-app + email)
+Notificările trebuie să acopere toate momentele critice din fluxurile ESCRO și din comunitățile private:
+Creare task / contract escrow
+
+
+Notificare către expert și companie că un task a fost inițiat.
+
+
+Trigger: task creat sau contract semnat.
+
+
+Plată / Hold / Funded
+
+
+Expert și companie sunt notificați când fondurile intră în escrow.
+
+
+Livrare / Proof of Work
+
+
+Expert notifică compania că livrabilele sunt gata.
+
+
+Compania confirmă primirea și aprobă release-ul.
+
+
+Eliberare fonduri / Release
+
+
+Notificare finală pentru ambele părți că banii au fost eliberați.
+
+
+Dispute / Arbitraj
+
+
+Oricare dintre părți poate deschide dispute → notificare către Admin / Arbitru.
+
+
+Statusul disputei se actualizează automat, notificări către părțile implicate.
+
+
+Badge & Trust Score updates
+
+
+User primește notificare când badge-ul sau statusul de reputație se schimbă (ex: devenit Trusted, Recommended).
+
+
+Reminder & Timeout Alerts
+
+
+Task-uri near deadline, dispute inactive, milestone neconfirmat.
+
+
+Comunicare comunități private
+
+
+Mention în hub, reply la postare, invitație AMA / event.
+
+
+
+14.2. Template-uri standard (funding, delivery, dispute, badge)
+Email / in-app standard pentru fiecare tip de notificare:
+
+
+Funding: „Fondurile pentru Task [X] au fost puse în escrow. Vezi detalii aici [link].”
+
+
+Delivery: „Expertul [Y] a marcat livrarea pentru Task [X]. Confirmă pentru eliberarea fondurilor.”
+
+
+Dispute: „S-a deschis o dispută pentru Task [X]. Vezi detalii și statusul aici [link].”
+
+
+Badge / Reputation: „Felicitări! Contul tău a fost actualizat la badge-ul Trusted / Recommended.”
+
+
+Toate template-urile sunt personalizabile și scalabile, pentru viitoare extinderi și brand voice.
+
+
+
+14.3. Logare event-driven pentru audit și debugging
+Fiecare acțiune relevantă în sistem trebuie logată automat:
+
+
+Creare / modificare task, crearea contractului escrow, modificări de status, dispute.
+
+
+Orice eliberare sau refund de fonduri.
+
+
+Update-uri badge și Trust Score.
+
+
+Logging-ul trebuie să fie event-driven, astfel încât Admin și Board să poată reface istoria completă a fiecărei tranzacții sau dispute.
+
+
+Structura logurilor:
+
+
+timestamp, user_id, action, entity_id, previous_status, new_status, triggered_by, notes.
+
+
+Aceste date servesc atât pentru audit intern, cât și pentru debugging în dezvoltare.
+
+
+
+15. Admin & Operare (proceduri interne)
+Scop: Să asigurăm funcționarea corectă, sigură și transparentă a platformei, protecția fondurilor și respectarea standardelor de calitate pentru toate părțile implicate.
+
+15.1. Flux verificare cont (KYC checklist)
+Scop: Validarea identității și legitimității companiilor și experților.
+
+
+Pași pentru verificare:
+
+
+Companie / expert completează datele inițiale (SRL/PFA sau persoană fizică).
+
+
+Upload documente obligatorii: ID, certificat înregistrare firmă, documente fiscale.
+
+
+Sistemul face verificarea automată de bază (ex: validare CUI, verificare ID scan).
+
+
+Admin verifică manual documentele încărcate și aprobat / respins.
+
+
+Contul primește statusul: Verified, Pending, Rejected.
+
+
+Userii fără recomandare intră inițial ca Pending / Trial, cu restricții, până la primele 3 tranzacții.
+
+
+
+15.2. Procedură arbitraj intern (pas cu pas)
+Scop: Rezolvarea disputelor între companie și expert într-un mod echitabil și rapid.
+
+
+Workflow:
+
+
+Oricare dintre părți deschide dispută → notificare Admin / Arbitru.
+
+
+Arbitru revizuiește task-ul, contractul, livrabilele și comunicările.
+
+
+Dacă e necesar, solicită clarificări de la părți prin platformă (in-app chat).
+
+
+Decide acțiunea: release total / partial / refund / escaladare.
+
+
+Rezoluția este comunicată automat ambelor părți + logată în jurnalul sistemului.
+
+
+
+15.3. SLA pentru răspunsuri (MVP targets)
+Targeturi pentru MVP:
+
+
+KYC verification: max 48h de la upload complet.
+
+
+Dispute initial review: 24h de la deschidere.
+
+
+Task escalated issues: 12h pentru confirmare primară, update la 48h.
+
+
+Notificările automate și reminder-ele asigură că Admin-ul respectă aceste SLA-uri.
+
+
+
+15.4. Dashboard KPI pentru board (transparență operațională)
+Scop: Board-ul să vadă starea platformei în timp real și să poată lua decizii strategice.
+
+
+KPI-uri afișate:
+
+
+Număr companii / experți verificate vs pending.
+
+
+Task-uri active, livrate, disputate.
+
+
+Volume escrow: total fonduri în hold, release, refund.
+
+
+SLA compliance: % task-uri și dispute procesate în termen.
+
+
+Trust Score distribution: badge-uri, recommended, trusted.
+
+
+Dashboard poate include grafice simple și heatmaps pentru activitățile critice.
+ 
+
+
+16. Model financiar & pricing
+Scop: Să definim modul în care platforma generează venit, să asigurăm sustenabilitatea și să oferim transparență utilizatorilor.
+
+16.1. Structura comisioane (Direct / Match / Managed)
+Serviciu ESCRO
+Comision tipic
+Observații
+Direct Trust
+1–2% din tranzacție
+Self-service, plata securizată prin Stripe Connect, fără implicare umană.
+Guided Trust (Match)
+5–10% + abonament
+Include selecție expert, call 15’, recomandare și validare; fee escrow + platform fee.
+Delegated Trust (Managed)
+15–20% + contract personalizat
+Proiecte externalizate complet, management echipă TRUST HUB, control complet prin dashboard.
+
+Observație: Comisioanele pot fi adaptate pe industrie sau complexitate proiect, cu transparență în dashboard.
+
+16.2. Abonamente (beneficii, criterii de eligibilitate)
+Structură:
+
+
+Free / Trial: acces limitat, useri fără recomandare, status “pending”, max 3 tranzacții.
+
+
+Standard: acces la Guided Trust, call 15’, task limitat / lună, suport minimal.
+
+
+Premium: acces complet la Delegated Trust, management echipă, raportare avansată, SLA prioritizat.
+
+
+Criterii de eligibilitate:
+
+
+Companiile și experții trebuie să fie verificate (KYC) sau recomandate de un user trusted.
+
+
+Limite tranzacții pentru trial → full access la abonament activ.
+
+
+
+16.3. Revenue streams adiționale
+Certificări / validări premium: badge-uri avansate, training pentru experți.
+
+
+Feature-uri suplimentare: rapoarte detaliate, analytics, integrare workflow custom.
+
+
+Servicii de mediere / consultanță: pentru task-uri complexe sau Delegated Trust.
+
+
+Fee-uri one-time: onboarding pentru companii enterprise, integrare API personalizată.
+
+
+
+16.4. Proiecție financiară simplificată pentru MVP (sintetic)
+Scenariu conservator 12 luni:
+
+
+Număr companii onboarded: 50
+
+
+Număr experți verified: 200
+
+
+Tranzacții medii / lună: 100
+
+
+GMV (gross marketplace volume): $500k
+
+
+Venituri estimate (comisioane + abonamente): $35–50k
+
+
+Observație: MVP servește validarea cererii și fluxurilor, proiecțiile devin precise după T1–T2.
+
+
+
+16.5. Politici de refund & taxe
+Refund:
+
+
+Task livrat corect → refund doar la dispute acceptată.
+
+
+Task nefinalizat / cancelat → returnare fonduri prin Stripe Connect.
+
+
+Taxe:
+
+
+TVA și alte taxe locale se aplică în funcție de jurisdictie.
+
+
+Comisioanele ESCRO includ fees Stripe + platformă.
+
+
+
+Securitate, GDPR & conformitate legală
+ 17.1. Cerințe minimale GDPR (stocare, acces, dreptul la ștergere)
+ 17.2. Securizarea fondurilor și conformitate plăți (recomandări)
+ 17.3. Termeni legali pentru utilizatori (draft structure)
+ 17.4. Risc legal & mitigări (dispute, litigii, fraudă)
+
+
+Metrici & KPI pentru lansare și prime 6 luni
+ 18.1. KPI operaționali (onboarding time, TTR dispute etc.)
+ 18.2. KPI de adopție (active companies, experts verified)
+ 18.3. KPI financiar (GMV, revenue, ARPU)
+ 18.4. Dashboard de monitorizare (ce arată adminul)
+
+
+Roadmap de dezvoltare — MVP -> Faza 2
+ 19.1. Funcționalități must-have pentru MVP (listă sprintabilă)
+ 19.2. Prioritizare pe trimestre (T0–T3)
+ 19.3. Lista „Nice to Have” (detaliată separat)
+ 19.4. Dependențe externe & estimări resurse
+
+
+Plan de testare & rollout
+ 20.1. Testare funcțională (checklist)
+ 20.2. Testare UX cu early adopters (scripturi)
+ 20.3. Lansare beta (criterii de trecere la public)
+ 20.4. Plan comunicare lansare (B2B outreach)
+
+
+Risc & scenarii de criză
+ 21.1. Scenarii de fraudă și contramăsuri
+ 21.2. Cum gestionăm chargebacks & litigii
+ 21.3. Plan de continuitate (downtime, incident financiar)
+
+
+Appendix A — Wireframes text / mockups (descrise)
+ 22.1. Wireframe Dashboard Company (element cu element)
+ 22.2. Wireframe Pagina Task (inclusiv butoane și modale)
+ 22.3. Wireframe Escrow Page (timeline & calls-to-action)
+ 22.4. Wireframe Admin Console (KYC, dispute queue)
+
+
+Appendix B — Modele de documente legale (template)
+ 23.1. Termeni și condiții (schemă)
+ 23.2. Model contract ESCRO (clauze esențiale)
+ 23.3. Formular de acceptare livrare / dovadă
+
+
+Appendix C — Checklist pentru developer
+ 24.1. API endpoints sugerate (principale)
+ 24.2. Schema DB (conceptuală)
+ 24.3. Mocks & test data pentru QA
+
+
+Appendix D — Lista „Nice to Have” (future backlog)
+ 25.1. Trust Score engine avansat
+ 25.2. Matchmaking bazat pe ML
+ 25.3. Integrare video calls native & recording
+ 25.4. Tokenizare / proof-of-trust
+ 25.5. Marketplace servicii & integrări externe
+
+
+Concluzie & pași următori
+ 26.1. Rezumat al priorităților de implementare
+ 26.2. Propunere de next meeting / livrabile
+ 26.3. Contacte cheie (roluri și responsabilități interne)
+
+
+
+
+
+
+
+Perfect, hai să le fac umane, naturale, ca și cum le-ai spune tu unui prieten la o cafea. Fără limbaj de influencer, fără teorie, fără „hook-uri fabricate”. Ton direct, cald, real. Asta te va diferenția instant.
+Îți dau 14 exemple de video-uri care sună a om, nu a strategie.
+
+Zilele 1–14: versiunea „umană”, naturală, fără bullshit
+
+Textele pe care le-am făcut sunt bune ca vibe, dar pentru primele două zile mai trebuie un strop de context — nu direct, nu tehnic, nu „fac un proiect”, dar suficient cât să-i facă pe oameni să înțeleagă că tu vorbești despre colaborare, încredere, rolul tău între companii și experți.
+Trebuie să lași să se vadă — foarte subtil — că:
+tu lucrezi între oameni
+
+
+tu vezi multe dinamici
+
+
+tu vrei să repari ceva în modul în care colaborează companiile
+
+
+tu ai o direcție clară care urmează să se contureze
+
+
+Fără să spui produsul, fără să spui detalii, doar context social.
+Hai să-ți rescriu Ziua 1 și 2 ca să fie mai „direcționate”, dar tot naturale, tot simple, tot umane:
+
+🔹 Ziua 1 — varianta cu direcție subtilă, naturală, clară
+**„De ceva timp tot ajung în discuții între firme care vor să colaboreze, dar intră cu frică în ele.
+ Nu vorbesc aici de neîncredere gratuită… ci de lipsa unei structuri clare.
+Azi am văzut din nou situația asta: două companii ok, două intenții bune, dar blocaj total.
+ Și m-a lovit încă o dată ideea asta:
+ oamenii nu au nevoie neapărat de consultanți, au nevoie de un cadru corect în care să lucreze.
+Când lipsește cadrul, apare confuzia.
+ Când apare confuzia, apare tensiunea.
+ Când apare tensiunea, orice proiect pare riscant.”**
+Aici direcția e limpede: tu vorbești despre „cadru”, despre structură, despre colaborare.
+ Când va apărea ulterior ESCRO, va părea natural.
+
+🔹 Ziua 2 — varianta cu context + direcție
+**„În ultima perioadă am stat în multe discuții între companii și experți.
+ Și observ același lucru la toată lumea: oamenii sunt buni, intențiile sunt bune… dar modul în care comunică nu are niciodată un punct de pornire clar.
+Primul mesaj e vag → proiectul devine vag.
+ Așa se pierde încrederea.
+ Așa apar conflictele.
+Eu am început, în timp, să pun mereu câteva întrebări ca să limpezesc lucrurile.
+ Și de fiecare dată în 30 de secunde se vede exact problema.
+ Mâine vi le spun, poate ajută și pe altcineva.”**
+Aici le spui clar că tu vezi dinamica dintre companii și experți, ceea ce e fix direcția ta.
+
+🔥 CE AI REALIZAT PRIN VERSIONAREA ASTA?
+✔️ ești uman, dar, totuși, e clar că vii din zona B2B
+ ✔️ se simte că ești între companii și experți
+ ✔️ se simte că ai un „skill” al tău: clarificarea situațiilor
+ ✔️ se simte că urmează ceva, dar nu e spus
+ ✔️ publicul începe să te asocieze cu „claritate, structură, colaborare”
+ ✔️ ești exact omul potrivit ca founder pentru ESCRO & TRUST HUB
+Asta era lipsa din versiunile anterioare.
+
+Dacă vrei, rescriu acum și Zilele 3–7 din Săptămâna 1 în tonul ăsta mai bine direcționat.
+Spune doar: „Da, vere, rescrie 3–7.”
+Ai spus:
+da te rog
+ChatGPT a spus:
+Perfect, hai să le rescriem pe 3–7 în același ton:
+ ✔️ uman
+ ✔️ natural
+ ✔️ clar
+ ✔️ cu direcție subtilă spre colaborare, firme, experți, structură
+ ✔️ fără să pari consultant
+ ✔️ fără să pari că vinzi ceva
+
+🔹 Ziua 3 — claritate în livrare (fără ton tehnic)
+**„Zilele trecute am zis că primul mesaj setează tot proiectul.
+ Azi am realizat ceva simplu: oamenii se chinuie nu pentru că nu sunt buni, ci pentru că nu spun ce înseamnă ‘gata’.
+Când întrebi:
+ ‘Ce livrezi exact?’
+ ‘Cum arată finalul?’
+ ‘Ce nu intră în proiect?’
+ dispare tot haosul.
+E incredibil cât de repede se luminează discuția când pui lucrurile astea pe masă.
+ Nu are legătură cu expertiza.
+ Are legătură cu claritatea.”**
+Aici te poziționezi ca un om care observă patternuri reale în colaborări.
+
+🔹 Ziua 4 — avansul și încrederea (cu poziționare clară)
+**„Azi am auzit din nou întrebarea: ‘E ok să dau avans?’
+ Și răspunsul e mereu același: depinde.
+Dacă știi ce primești în schimb, e ok.
+ Dacă îl dai doar ca ‘așa se face’, o să te doară mai târziu.
+În colaborări, avansul nu e problema.
+ Confuzia e problema.
+ Dacă nu e clar ce plătești, avansul pare risc.
+ Dacă e clar… devine doar un pas normal într-un proces.”**
+Concret, simplu, uman, realist.
+
+🔹 Ziua 5 — presupunerile și costul emoțional
+**„Tot aud povești de la oameni care au pierdut bani în proiecte.
+ Nu pentru că cineva a vrut rău… ci pentru că au presupus.
+Presupunerile sunt cel mai scump lucru într-o colaborare.
+ Când nu întrebi, mintea începe să umple golurile cu scenarii.
+ Și scenariile sunt periculoase.
+Dacă ai două minute înainte să intri într-un proiect, întreabă-te:
+ ‘Ce presupun aici fără să verific?’
+ Îți salvează timp, bani și energie.”**
+Aici te poziționezi ca omul calm care previne conflictele.
+
+🔹 Ziua 6 — timpul ca parte din încredere
+**„Un lucru pe care îl văd des: oamenii evită să vorbească despre timp.
+ De parcă timpul ar fi ceva negociabil.
+Poți să ai cel mai bun expert… dacă nu e clar când livrează, proiectul tot o ia razna.
+ Termenele nu sunt doar date din calendar.
+ Termenele sunt parte din încredere.
+ Când clarifici timpul, clarifici și relația.”**
+Ton matur, nu educativ, doar observație.
+
+🔹 Ziua 7 — rolul tău de connector (subtil, fără să spui direct)
+**„Azi am fost prins între două companii care erau la un pas de scandal.
+ Și nu s-a rezolvat cu proceduri, nici cu mailuri lungi.
+ S-a rezolvat cu un call de 15 minute.
+Când ai pe cineva neutru în discuție, se calmează totul instant.
+ Emoțiile se așază, fiecare își spune partea, iar tensiunea dispare.
+Mi se pare fascinant cât de mult contează o a treia voce uneori.”**
+Aici se construiește clar percepția: tu ești omul ăla care vede, mediază, calmează, clarifică.
+
+🔥 Rezumat: ce obții cu această Săptămână 1
+✔️ oamenii înțeleg imediat direcția ta (colaborare, claritate, încredere)
+ ✔️ pari profesionist fără să spui ce faci exact
+ ✔️ îți creezi terenul perfect pentru conceptul ESCRO
+ ✔️ arăți că tu ai experiență reală, nu opinii teoretice
+ ✔️ publicul începe deja să te întrebe: „dar tu exact cu ce te ocupi?”
+Asta vrem.
+ Oamenii trebuie să ceară detaliile. Nu să le dai tu.
+
+🔷 Ziua 8 — alegerea expertului (natural, nu teoretic)
+**„Mă întreabă des lumea: ‘cum îți dai seama că ai găsit expertul potrivit?’.
+ Și adevărul e plictisitor de simplu: vezi cum te simți când vorbești cu el.
+Dacă discuția curge natural și omul te înțelege rapid… ai șanse mari să iasă treabă bună.
+ Dacă e forțat, dacă nu te simți în largul tău, dacă trebuie să explici de zece ori… nu o să meargă, indiferent cât de talentat e.
+În colaborări, chimia contează mai mult decât pare.”**
+
+🔷 Ziua 9 — primul mesaj spune tot
+**„Un expert bun nu îl vezi după portofoliu și nici după preț.
+ Îl vezi după primul mesaj.
+Dacă este clar, structurat și la obiect… deja ai jumătate din drum făcut.
+ Dacă e vag, ambiguu sau ‘vedem noi pe parcurs’… o să aveți probleme.
+Primul mesaj îți arată cât respect are omul pentru timpul tău.”**
+
+🔷 Ziua 10 — cum vezi o dispută înainte să explodeze
+**„O dispută nu apare niciodată din senin.
+ O simți cu două săptămâni înainte dacă ești atent.
+Primele semne?
+ Mesaje tot mai scurte.
+ Termene mutate fără motiv.
+ Ton diferit.
+ Un fel de ‘ceva nu mai e aliniat’.
+Dacă simți asta, nu ignora.
+ Oprește-te, pune totul în scris și clarifică.
+ Prevenția e gratis.
+ Disputa costă timp, bani și nervi.”**
+
+🔷 Ziua 11 — mini-planul care salvează proiecte
+**„Am observat ceva în proiectele care merg bine: au o ordine clară a pașilor.
+ Nu un roman.
+ Doar 2–3 etape puse într-un mesaj scurt.
+Când știi ‘ce fac acum, ce urmează și ce înseamnă finalul’, dispar 80% din neînțelegeri.
+ Lipsa structurii e cea mai mare sursă de stres.”**
+
+🔷 Ziua 12 — pentru experți: verificarea banilor
+**„Un sfat pentru experți: verificați tot ce ține de bani.
+ Nu pentru că cineva ar fi neserios… ci pentru că greșelile umane există.
+Un cont scris greșit, un payout întârziat, un detaliu omis… și ți-ai stricat luna.
+ Nu lăsați partea financiară pe ‘lasă că merge’.
+ E zona care trebuie verificată de două ori.”**
+
+🔷 Ziua 13 — De ce ascult înainte să vorbesc
+„M-am prins de un lucru: oamenii îți spun tot ce ai nevoie dacă îi lași să vorbească suficient.
+De multe ori, cei mai grăbiți să explice ceva nu caută neapărat o soluție — caută pe cineva care chiar îi ascultă.
+Așa apar conexiunile bune.
+Nu din replici inteligente, ci din liniștea în care înțelegi exact ce au în față.
+Pentru mine, asta e baza fiecărei colaborări.”
+
+🔷 Ziua 14 — primul teaser (fără reclamă, foarte soft)
+**„Dacă mă urmărești de câteva zile, probabil ai văzut un tipar: eu vorbesc mereu despre încredere, claritate și colaborare.
+ Pentru că astea sunt lucrurile care țin orice proiect în picioare.
+Lucrez la ceva în zona asta.
+ Nu mă grăbesc, pentru că vreau să fie făcut corect și cu oamenii potriviți.
+ Deocamdată doar pun bazele și ascult piața.”**
+Este exact teaser-ul fin, inteligent, fără să pară CÂTUȘA „urmează ceva mare”.
+
+🔥 Rezultatul Săptămânii 2
+✔️ lumea începe să te vadă ca o voce echilibrată între companii și experți
+ ✔️ creezi încredere fără să spui „eu sunt mediator/expert/founder”
+ ✔️ ai setat deja tonul: calm, clar, matur, profesionist
+ ✔️ contextul e perfect pentru Etapa 3 (introducerea conceptelor de sistem, cadru, mecanism)
+
+Ce trebuie să simtă oamenii după aceste 14 zile?
+„Omul ăsta chiar înțelege problemele din piață.”
+
+
+„Nu vrea să-mi vândă nimic, chiar dacă construiește ceva.”
+
+
+„Pare calm, echilibrat, cu valori clare.”
+
+
+„Mi-ar plăcea să lucrez cu el.”
+
+
+Asta e poziționarea ideală înainte să introduci ESCRO/Trust Hub.
+🔷 Ziua 15 — „O chestie pe care o observ tot mai des”
+**„Îmi dau seama tot mai des că oamenii lucrează împreună, dar evită să spună sincer ce îi deranjează.
+ Toți sunt politicoși, totul sună frumos la început… iar după două luni izbucnește scandalul.
+Și cred că problema nu e lipsa contractului.
+ E lipsa curajului de a spune din primele cinci minute: ‘băi, asta nu-mi place’.
+Ce am învățat eu?
+ Cine e sincer la început, lucrează liniștit până la final.”**
+
+🔷 Ziua 16 — „Problema reală nu e lipsa de experți… e altceva”
+**„Nu cred că România duce lipsă de experți.
+ Sunt mulți oameni buni.
+ Ce lipsește e predictibilitatea.
+Azi ai răspuns în 5 minute.
+ Mâine în 5 zile.
+ Și când apare imprevizibilitatea… se rupe filmul.
+Eu încerc să înțeleg de ce, ca piață, încă nu știm să ne gestionăm timpul.
+ Timpul arată respectul, nu skill-ul.”**
+
+🔷 Ziua 17 — „Un pattern ciudat pe care îl văd des”
+**„Văd ceva amuzant în piață.
+ Companiile mari vor să lucreze cu experți mici.
+ Experții mici se poartă ca și cum ar fi corporații.
+Și undeva la mijloc se blochează comunicarea.
+ Nimeni nu mai spune ‘nu știu’.
+ Nimeni nu mai spune ‘mi-e teamă’.
+Toată lumea joacă roluri.
+ Ironia e că, dacă am fi toți mai vulnerabili, am lucra de zece ori mai bine.”**
+
+🔷 Ziua 18 — „Lucru pe care nu-l întreabă nimeni”
+**„Toți întreabă ‘cât costă?’ și ‘cât durează?’.
+ Foarte rar aud întrebarea: ‘cum lucrezi tu ca om?’.
+Acolo se cunoaște adevărul.
+ Cum reacționezi când se strică ceva?
+ Cum reacționezi când greșește cineva?
+Eu nu cred în colaborări bune fără oameni OK la bază.
+ Caracterul nu poate fi acoperit de skill.”**
+
+🔷 Ziua 19 — „Ce mă irită profund în piața de servicii”
+**„Mă scoate din sărite când văd cum oamenii confundă încrederea cu simpatie.
+ ‘Îl place, deci sigur e potrivit.’
+Nu.
+ Încrederea nu vine din cât de carismatic e cineva, ci din cât de consecvent e.
+Prefer un expert rigid, dar punctual,
+ decât unul super prietenos… dar imprevizibil.
+ Simpatia nu ține loc de structură.”**
+
+🔷 Ziua 20 — „Un adevăr dureros”
+**„Majoritatea proiectelor nu eșuează din lipsă de competență.
+ Eșuează pentru că oamenii evită discuțiile incomode.
+‘Lasă, poate se rezolvă.’
+ Nu se rezolvă singure.
+Dacă nu ai curaj să spui ‘aici e problema’, problema te va găsi ea pe tine.
+ Și mult mai scump.”**
+
+🔷 Ziua 21 — „Întrebarea care separă amatorii de profesioniști”
+**„În întâlniri pun mereu aceeași întrebare:
+ ‘Tu cum vrei să comunicăm?’.
+Atât.
+ Răspunsul spune tot.
+Un profesionist are un sistem.
+ Un amator are doar WhatsApp-ul.
+ Și diferența se vede în prima săptămână de lucru.”**
+
+🔥 Ce ai obținut cu aceste 7 zile?
+✔️ oamenii încep să te perceapă ca pe cineva care vede mecanisme reale în piață
+ ✔️ continui direcția corectă: încredere, claritate, comportamente, colaborare
+ ✔️ pare natural, nu gândit „de manual”
+ ✔️ nimeni nu simte că pregătești un produs — dar li se aprinde becul
+ ✔️ ai construit poziționarea ta: observator, mediator, connector
+
+🔷 Ziua 22 — „Comportamentul care spune totul despre o companie”
+**„Dacă vrei să vezi cum e o companie cu adevărat… uită-te cum vorbește când e sub presiune.
+ Când totul merge bine, toți par profesioniști.
+ Dar când apare o întârziere sau o greșeală… acolo vezi nivelul real.
+Respectul nu se vede în pitch-uri sau prezentări.
+ Respectul se vede în momentele tensionate.”**
+
+🔷 Ziua 23 — „Un paradox românesc”
+**„Românii își doresc colaborări pe termen lung… dar evită să pună reguli de la început.
+ Și e ironic, pentru că exact regulile sunt cele care protejează relația.
+Regulile nu înseamnă neîncredere.
+ Dimpotrivă.
+ Regulile sunt dovada că îți pasă suficient cât să nu ajungi la ceartă.”**
+
+🔷 Ziua 24 — „Cel mai bun indicator de încredere”
+**„Cel mai bun indicator că o colaborare o să meargă bine nu e portofoliul.
+ E ritmul.
+Dacă omul îți răspunde constant, chiar și scurt, proiectul o să fie ok.
+ Dacă dispare trei zile și revine cu un roman… pregătește-te de haos.
+Ritmul arată seriozitatea, nu lungimea mesajului.”**
+
+🔷 Ziua 25 — „O lecție învățată prea târziu”
+**„Mult timp am simțit nevoia să demonstrez.
+ Că știu, că pot, că merit locul la masă.
+Acum nu mai am energia asta.
+ Acum vreau doar discuții sincere și parteneriate sănătoase.
+ Când ai oamenii potriviți lângă tine, restul vine natural.”**
+
+🔷 Ziua 26 — „Un lucru mic care schimbă totul”
+**„Un detaliu mic schimbă complet o colaborare: recapitularea.
+ La finalul discuției, trimiți un mesaj scurt.
+‘Facem X până la data Y.
+ Tu livrezi Z.
+ Eu mă ocup de W.’
+Mesajul ăsta de 20 de secunde îți salvează două luni de stres.
+ E cel mai simplu tool pe care nu-l folosește nimeni.”**
+
+🔷 Ziua 27 — „O chestie personală”
+**„Mi-am dat seama că eu nu sunt atras de proiecte… sunt atras de oameni.
+ Pot să refuz un proiect mare dacă simt lipsă de compatibilitate.
+ Și pot să accept un proiect mic dacă simt caracterul potrivit.
+Compatibilitatea bate valoarea.
+ De fiecare dată.”**
+
+🔷 Ziua 28 — „Prima mențiune subtilă despre ce construiești”
+**„Lucrez la ceva fix pentru zona asta: oameni care vor să colaboreze fără frică, fără tensiune și fără neclaritate.
+ Nu e despre tehnologie.
+ E despre oameni și felul în care lucrăm între noi.
+Când sunt gata primele testări, le arăt aici.
+ Dacă vrei să fii printre primii, lasă un ‘vreau’.”**
+
+🔥 Observă ce e diferit față de etapa 1:
+aici nu mai predai trucuri → ci arăți cum vezi tu lumea
+
+
+nu ești profesor → ești observator
+
+
+tonul e mai matur, mai personal, mai calm
+
+
+nu ești guru → ești om normal care vede multe și vorbește deschis
+
+
+nu are legătură directă cu proceduri → ci cu oameni și dinamici
+
+
+publicul începe să simtă că „bă, omul ăsta trăiește pe bune în piață”
+
+
+Asta construiește respect, nu doar „awareness”.
+Excelentă întrebare — pentru că asta e exact greșeala pe care o fac 90% dintre fondatori: sar direct din “am o idee” → “lansăm mâine”, fără construcție strategică de percepție.
+Tu ai făcut deja primul pas cum trebuie: ai construit încrederea umană.
+ Acum trebuie doar să o organizezi în etape, logic, fără să grăbești nimic.
+
+🔹 Structura completă de comunicare & poziționare până la lansare
+👉 5 ETAPE mari, fiecare cu rol clar și conținut specific.
+
+🩵 ETAPA 1 — ÎNCREDERE PERSONALĂ (Zilele 1–14)
+🎯 Scop:
+Să te faci cunoscut ca om de încredere și conector natural între oameni, fără să spui ce construiești.
+ Lumea trebuie să te placă, să te creadă, să simtă că ești „de-al lor”.
+📍Conținut:
+Reflecții scurte, situații din viață, exemple din piață, sfaturi practice de colaborare.
+ Niciun cuvânt despre produs.
+🔚 Când se încheie:
+Când oamenii încep să comenteze cu “adevărat ce spui” sau “de-abia aștept să văd ce faci mai departe”.
+
+💬 ETAPA 2 — OBSERVATORUL PIEȚEI (Zilele 15–28)
+🎯 Scop:
+Să arăți că vezi din interior problemele reale ale colaborărilor — comportamente, mentalități, blocaje.
+ Aici devii vocea echilibrată dintre companii și experți.
+📍Conținut:
+Observații despre oameni, pattern-uri, realități din piață, dileme.
+ Ton: calm, uman, realist.
+ Apare subtil ideea că “lucrezi la ceva”.
+🔚 Când se încheie:
+Când lumea începe să întrebe direct: “ce e, mai exact, proiectul de care tot zici?”
+
+💡 ETAPA 3 — CONCEPTUL (Zilele 29–60)
+🎯 Scop:
+Introduci problema concretă și soluția conceptuală fără să zici „aplicație” sau „produs digital”.
+ E perioada de educație subtilă — oamenii trebuie să înțeleagă ideea de escrow fără s-o numești tehnic.
+📍Conținut:
+“Cum s-ar schimba lucrurile dacă am avea un mecanism care blochează plata până e totul clar?”
+
+
+“Cum ar fi să existe un spațiu în care companiile și experții se pot verifica reciproc?”
+
+
+“Lucrez la un sistem care face exact asta. Vă arăt curând.”
+
+
+Aici poți face chiar teasing vizual (logo parțial, concept grafic, storytelling despre cum a apărut ideea).
+🔚 Când se încheie:
+Când oamenii încep să zică: “vreau să testez”, “cum pot intra?”, “unde mă înscriu?”
+
+🚀 ETAPA 4 — COMUNITATEA PILOT (Zilele 61–90)
+🎯 Scop:
+Formezi nucleul de early adopters — companii și experți care testează platforma.
+ Nu lansezi public, ci doar „test intern”.
+📍Conținut:
+Postări cu “behind the scenes” (cum lucrați, ce feedback primiți)
+
+
+Testimoniale soft din pilot (“am testat sistemul, e genial”)
+
+
+Discuții Q&A live pe tema “încredere digitală”
+
+
+Poți crea grup privat (LinkedIn/Telegram) cu invitație.
+
+
+🔚 Când se încheie:
+Când ai validare reală (minim 10 companii și 20 experți implicați) și reacții pozitive.
+
+🧭 ETAPA 5 — LANSAREA OFICIALĂ (Zilele 90–120)
+🎯 Scop:
+Publicul trebuie să simtă că a fost martor la construcție, nu că doar “ai venit să vinzi ceva”.
+ Lansarea e despre comunitate și misiune, nu despre software.
+📍Conținut:
+Video principal cu tine explicând de ce a apărut ESCRO
+
+
+Cazuri reale din pilot
+
+
+Slogan clar: “Încrederea digitală între companii și experți”
+
+
+Pagina web completă + onboarding prin invitație
+
+
+Comunicare PR: LinkedIn + parteneri + presă nișată (Biziday, start-up.ro, etc.)
+
+
+🔚 Când se încheie:
+Când ai conversii constante (noi companii care cer acces / experți care aplică).
+
+🔒 BONUS: ETAPA 6 — POST-LANSARE (după 120 zile)
+🎯 Scop:
+Consolidezi poziția — devii vocea națională a încrederii digitale B2B.
+📍Conținut:
+Serii video cu studii de caz
+
+
+Colaborări cu organizații (camere de comerț, asociații)
+
+
+“Trust Talks” – mini interviuri cu companii care lucrează prin sistem
+
+
+Crearea brandului personal pe direcția connector economic / digital diplomat
+
+
+
+💬 Rezumat simplu
+Etapă
+Rol
+Durată
+Ce faci
+1
+Construiești încredere personală
+1–14 zile
+Reflectezi, educi, conectezi uman
+2
+Devii observatorul pieței
+15–28 zile
+Arăți că vezi mecanismele reale
+3
+Prezinți conceptul
+29–60 zile
+Educi subtil piața despre soluția ta
+4
+Creezi comunitatea pilot
+61–90 zile
+Strângi oameni și testezi
+5
+Lansezi oficial ESCRO
+90–120 zile
+Public, PR, invitații
+6
+Consolidezi leadershipul
+120+
+Evenimente, parteneriate, vocea industriei
+
+
+Dacă vrei, pot face acum:
+🔷 Ziua 29 — „Cum ar trebui să funcționeze o colaborare normală”
+**„Am observat ceva: oamenii pleacă la drum fie cu încredere oarbă, fie cu zero încredere. Nu prea există mijloc.
+ Dar, în realitate, o colaborare sănătoasă nu se bazează pe încredere absolută… ci pe un proces simplu.
+Eu livrez.
+ Tu confirmi.
+ Banii se mișcă.
+Atât.
+ Fără emoții, fără interpretări.
+ Un sistem clar face mai mult decât cea mai mare încredere.”**
+
+🔷 Ziua 30 — „De ce apar discuțiile pe bani?”
+**„Românii nu se ceartă pe livrare.
+ Se ceartă pe plată.
+Plata e emoție pură:
+ ‘Nu dau banii până nu sunt sigur.’
+ ‘Nu mai lucrez până nu văd ceva.’
+Și acolo explodează tot.
+ De fapt, plata trebuie scoasă din emoție și pusă într-un proces.
+ Când procesul e clar, banii devin doar un pas… nu un stres.”**
+
+🔷 Ziua 31 — „Cum ar fi dacă…?”
+**„Mă tot gândesc la un lucru.
+ Cum ar fi dacă banii ar sta mereu la mijloc?
+Nu la mine.
+ Nu la tine.
+ La mijloc.
+Tu livrezi.
+ Eu confirm.
+ Banii se eliberează.
+Fără presiune, fără ‘hai mai repede’, fără discuții inutile.
+ Mi se pare cel mai sănătos mod de lucru.”**
+
+🔷 Ziua 32 — „Ce înseamnă de fapt siguranță într-o colaborare”
+**„Lumea crede că siguranța înseamnă contracte.
+ Siguranța reală e claritatea: cine face ce, în cât timp, cum se confirmă livrarea și ce se întâmplă dacă ceva nu merge.
+Dacă ai procesul ăsta, ai liniște.
+ Dacă nu-l ai… lucrezi la noroc.
+ Eu nu cred în noroc în business.”**
+
+🔷 Ziua 33 — „Un exemplu care spune totul”
+**„Am văzut o colaborare în care clientul a dat un avans mare.
+ Expertul a livrat ok, dar nu cum își imaginase clientul.
+ N-a fost rea intenție.
+ Doar percepții diferite.
+Dacă banii ar fi stat la mijloc până confirmau amândoi, nu se ajungea la ceartă.
+ Uneori nu trebuie să schimbi oamenii.
+ Trebuie să schimbi procesul.”**
+
+🔷 Ziua 34 — „Problema nu e neîncrederea… e lipsa controalelor”
+**„Lumea zice ‘nu am încredere’.
+ Dar adevărul e că nu lipsa încrederii e problema… ci lipsa controalelor.
+Dacă nu ai cum să controlezi banii și livrarea, normal că apar suspiciuni.
+ Nu e ‘nu am încredere în tine’.
+ E ‘hai să ne protejăm pe amândoi’.”**
+
+🔷 Ziua 35 — „Ce lipsește în România”
+**„Afară, colaborările merg pentru că există un cadru.
+ La noi, cadrul e improvizat: ‘ne înțelegem noi’, ‘scriem pe WhatsApp’, ‘te plătesc când terminăm’.
+Funcționează… până nu mai funcționează.
+ Eu cred că România are nevoie de un sistem clar între companii și experți.
+ Nu încă o platformă cu reclame.
+ Un sistem.”**
+
+🔷 Ziua 36 — „De ce avem nevoie de reguli simple”
+**„90% din conflicte se evită cu două reguli:
+Începem doar după ce banii sunt blocați undeva sigur.
+
+
+Finalizăm doar după ce livrarea e confirmată.
+
+
+Atât.
+ Reguli simple.
+ Zero dramă.”**
+
+🔷 Ziua 37 — „Ce am observat la oamenii serioși”
+**„Oamenii serioși nu se sperie de controale.
+ Nu se sperie de verificare.
+ Nu se sperie de proces.
+Doar cei care au ceva de ascuns devin agitați când apare claritatea.
+ Procesul îi liniștește doar pe cei care sunt cu intenția curată.”**
+
+🔷 Ziua 38 — „Dispute? Normal că apar”
+**„Dispute apar mereu.
+ Nu sunt semn de răutate, sunt semn de lipsă de definire.
+Dacă nu definești finalul, e normal să îl interpretați diferit.
+ Afară, finalul e o bifă.
+ La noi, finalul e o discuție.”**
+
+🔷 Ziua 39 — „Mi-ar plăcea să trăim într-o lume în care…”
+**„Mi-ar plăcea să trăim într-o lume în care companiile și experții lucrează relaxat.
+ Fără să-și țină respirația până la plata finală.
+ Fără avansuri uriașe ca să ‘se simtă în siguranță’.
+Siguranța nu trebuie să fie în buzunarul cuiva.
+ Trebuie să fie într-un mecanism corect.”**
+
+🔷 Ziua 40 — „Ce construiesc?” (teaser direct, dar elegant)
+**„Lucrez la un sistem foarte simplu:
+ când începe colaborarea, banii se blochează într-un loc sigur, se lucrează liniștit, se confirmă, se eliberează.
+Pentru companii și experți care nu vor să se certe.
+ Nu e platformă, nu e marketplace.
+ E doar un mod mai sănătos de a lucra.”**
+
+🔷 Ziua 41 — „Nu vrem mai multe platforme… vrem predictibilitate”
+**„România nu are nevoie de încă o platformă cu profiluri și review-uri.
+ Are nevoie de predictibilitate.
+ De un sistem care aduce claritate între două părți care muncesc.
+Restul e zgomot.
+ Predictibilitatea e adevărata valoare.”**
+
+🔷 Ziua 42 — „Adevărul despre încredere: nu trebuie să fie oarbă”
+**„Avem impresia că încrederea trebuie să fie totală.
+ Nu.
+ Încrederea sănătoasă are parapeți.
+ Are verificări.
+ Are repere clare.
+Eu nu cred în încrederea cu ochii închiși.
+ Cred în încrederea cu protecție.”**
+
+🔷 Ziua 43 — „Întâmplare reală din piață”
+**„Zilele trecute cineva mi-a zis: ‘am pierdut 20.000 de euro și nici acum nu știu dacă e vina mea sau a lui’.
+ Și m-a lovit ceva:
+ problema nici nu mai era banii.
+ Problema era lipsa cadrului.
+Fără cadru, fiecare crede altceva.
+ Și când nu ai repere… toată lumea pare vinovată.”**
+
+🔷 Ziua 44 — „De ce cred eu în sisteme, nu în promisiuni”
+**„Promisiunile sunt frumoase la început.
+ Dar nu țin loc de proces.
+Un sistem bun te protejează indiferent cine e de cealaltă parte.
+ N-ai nevoie să cunoști omul.
+ Ai nevoie să știi că procesul vă protejează pe amândoi.”**
+
+🔷 Ziua 45 — „Întrebarea pe care o primesc cel mai des”
+**„Multă lume mă întreabă: ‘e greu să implementezi un sistem corect între companii și experți?’
+ Nu.
+ Ce e greu e să convingi oamenii că sistemul nu e împotriva lor.
+ E pentru ei.
+Să scoți emoția și să introduci claritatea.
+ Asta schimbăm noi.”**
+
+
+Zilele 46–60 continuăm în același ton, dar din ce în ce mai clar:
+„cum arată procesul ideal între două părți”
+
+
+„de ce e nevoie la nivel mental, nu tehnic”
+
+
+„cum funcționează în țările unde colaborările merg”
+
+
+„de ce banii trebuie să stea la mijloc, nu la cineva în buzunar”
+
+
+„ce înseamnă fairness într-o tranzacție”
+
+
+„de ce verificarea nu e rușine, e protecție”
+
+
+„de ce sistemul trebuie să includă oameni, nu doar software”
+
+
+Și la final, înainte de Etapa 4, faci prima mențiune despre „Trust Hub” ca misiune, nu ca produs.
+🔥 ZILELE 46–60 — Scripturi Complete (premium, mature, fără bullshit)
+
+🔷 Ziua 46 — „România nu are o problemă de expertiză. Are o problemă de metodă.”
+**„Eu nu cred că România duce lipsă de specialiști buni.
+ Cred că duce lipsă de metodă.
+Nu avem cultura proceselor.
+ Avem cultura ‘descurcatului’.
+Și descurcatul merge o dată, de două ori… până nu mai merge.
+ Când ai o metodă, nu ai nevoie de noroc.
+ Ai nevoie doar să o urmezi.”**
+
+🔷 Ziua 47 — „De ce e important ca banii să fie separați de emoții”
+**„Eu nu sunt fanul situațiilor în care banii decid tonul discuției.
+ Când plata e în buzunarul cuiva, apare presiunea.
+ Când plata stă la mijloc, apare calmul.
+E fascinant cum un detaliu atât de mic poate schimba complet dinamica dintre două părți.”**
+
+🔷 Ziua 48 — „Diferența dintre ‘suntem ok’ și ‘e clar’”
+**„Românii folosesc prea des ‘suntem ok’.
+ Și, de cele mai multe ori… nu suntem.
+‘Suntem ok’ înseamnă: nu vreau să intrăm acum în discuția aia.
+ ‘E clar’ e altceva.
+ ‘E clar’ înseamnă că toată lumea știe ce se întâmplă, fără interpretări.”**
+
+🔷 Ziua 49 — „Încrederea nu se construiește cu flori. Se construiește cu reguli.”
+**„Am văzut colaborări care au început cu entuziasm și s-au terminat prost.
+ Nu pentru că oamenii erau răi, ci pentru că nu aveau reguli.
+Regulile nu sunt control.
+ Regulile sunt protecție.
+ Sunt grija pe care o ai față de colaborare.”**
+
+🔷 Ziua 50 — „Când două părți au intenții bune… și totuși apare conflictul”
+**„E interesant: cele mai multe conflicte apar între oameni cu intenții bune.
+ Doar că vorbesc în ritmuri diferite.
+Nu intențiile creează problemele.
+ Ritmul diferit le creează.
+De-aia cred în sisteme care egalizează ritmurile.
+ Nu în sisteme care caută vinovați.”**
+
+🔷 Ziua 51 — „Un lucru pe care îl văd la colaborările mature”
+**„Știi cum recunoști o colaborare matură?
+ Nu după bani.
+ După liniștea dintre mesaje.
+Dacă oamenii pot lucra fără panică la fiecare pauză de trei ore…
+ e clar că sunt maturi profesional.”**
+
+🔷 Ziua 52 — „Cea mai mare iluzie în business”
+**„Cea mai mare iluzie în business e ideea că ‘ne înțelegem din vorbe’.
+ Poate o dată, poate de două ori.
+Dar când e vorba de bani, timp și livrabile…
+ ai nevoie de ceva mai solid decât vibe-ul.”**
+
+🔷 Ziua 53 — „Unde se rupe comunicarea în 80% din cazuri”
+**„Comunicarea nu se rupe la început.
+ Se rupe la primul mic disconfort pe care cineva îl evită.
+O propoziție nespusă la timp costă cât două luni de conflict mai târziu.”**
+
+🔷 Ziua 54 — „Cum arată o colaborare sănătoasă, în 3 scene”
+**„O colaborare sănătoasă arată așa:
+ Scena 1: definim foarte clar ce înseamnă finalul.
+ Scena 2: lucrăm fără teamă, pentru că banii sunt blocați la mijloc.
+ Scena 3: confirmăm livrarea și mergem mai departe liniștiți.
+Asta e tot.
+ Nu e magie.
+ E doar structură.”**
+
+🔷 Ziua 55 — „De ce nu mai cred în avansuri mari”
+**„Avansurile mari nu sunt semn de încredere.
+ Sunt semn de teamă.
+ Teama că poate nu se livrează.
+ Teama că poate nu se plătește.
+Când ai un mecanism corect, nu ai nevoie de avansuri uriașe.
+ Ai nevoie doar de proces.”**
+
+🔷 Ziua 56 — „Când ai un sistem bun, oamenii devin relaxați”
+**„În afară, oamenii sunt mai relaxați nu pentru că sunt mai buni ca noi.
+ Ci pentru că au sisteme bune.
+Un sistem bun te protejează, nu persoana.
+ E o diferență uriașă între a te baza pe oameni… și a te baza pe proces.”**
+
+🔷 Ziua 57 — „Nu toate conflictele sunt rele”
+**„Conflictele nu sunt semn de neprofesionalism.
+ Sunt semn că două părți au standarde diferite.
+Dar dacă ai un mecanism clar de negociere, conflictul devine doar o discuție.
+ Nu o traumă.”**
+
+🔷 Ziua 58 — „Mi-ar plăcea ca în România…”
+**„Mi-ar plăcea ca în România să existe un loc unde companiile și experții lucrează fără anxietate.
+ Fără presiuni.
+ Fără ‘hai mai repede’.
+Mi-ar plăcea ca livrarea și plata să fie doar două bife, nu două surse de stres.”**
+
+🔷 Ziua 59 — „Transparența nu e dușmanul încrederii. E fundația ei.”
+**„Transparența nu înseamnă ‘te verific’.
+ Transparența înseamnă: vreau să fim amândoi liniștiți.
+Un sistem corect nu te expune.
+ Te protejează.
+ Discret și constant.”**
+
+🔷 Ziua 60 — „Suntem aproape”
+**„Săptămânile astea am vorbit despre colaborări, despre tensiuni, despre ritmuri diferite, despre cum putem lucra mai liniștit.
+Și vreau să vă zic ceva:
+ suntem aproape.
+Ce construiesc nu e despre tehnologie.
+ E despre liniște între oameni.
+ Vă arăt curând.”**
+
+🟦 STRUCTURA ETAPEI 4:
+FAZA A – Introducerea conceptului de PILOT (Zilele 61–70)
+FAZA B – Formarea grupului privat & selecția (Zilele 71–80)
+FAZA C – Conversații, feedback, teasere (Zilele 81–90)
+
+🔷 FAZA A — ZILELE 61–70
+👉 „Anunțul pilotului” (fără presiune, fără reclamă)
+
+🔷 Ziua 61 — Prima mențiune clară, oficială, a proiectului
+**„În ultimele două luni am tot vorbit despre colaborări, claritate și încredere.
+ Cred că e momentul să spun ceva direct.
+De aproape un an lucrez la un sistem foarte simplu, care pune ordine între companii și experți.
+ Fără complicații, fără birocrație, fără să rupă ritmul nimănui.
+Funcționează așa: claritate → livrare → confirmare → banii se eliberează.
+ Atât.
+Nu e teorie.
+ E ceva ce urmează să testez cu câțiva dintre voi.”**
+
+🔷 Ziua 62 — De ce fac pilot și nu lansare publică
+**„Eu nu cred în lansări cu artificii și tam-tam.
+ Cred în testări mici, cu oameni serioși, care chiar au trecut prin situații grele.
+De asta nu lansez public.
+ Fac un pilot.
+ Vreau feedback real, nu like-uri. Vreau să văd ce merge, ce nu merge și să ajustez pe bune.
+Prefer să încep cu câțiva oameni potriviți, nu cu mulțimea.”**
+
+🔷 Ziua 63 — Ce fel de oameni caut pentru pilot
+**„Pentru pilot caut două tipuri de oameni:
+companii care au avut cel puțin o colaborare neclară,
+
+
+experți care apreciază regulile simple și clare.
+
+
+Dacă te regăsești în oricare dintre ele, deja ești în zona bună.”**
+
+🔷 Ziua 64 — Unde se pot înscrie (fără link)
+**„Nu pun link, nu pun formulare.
+ Dacă vrei să faci parte din pilot, scrie doar ‘pilot’ în comentarii sau trimite-mi un mesaj direct.
+Prefer să vorbesc personal cu fiecare om.
+ Cred că lucrurile serioase se construiesc prin conversații, nu prin formulare reci.”**
+
+🔷 Ziua 65 — FAQ în stil personal
+„Am primit deja câteva întrebări, așa că le zic aici:
+ • ‘Trebuie să plătesc?’ → Nu.
+ • ‘E complicat?’ → Nu.
+ • ‘Cât durează?’ → 10–15 minute să ne cunoaștem, plus feedback pe parcurs.
+ • ‘Ce primesc?’ → Acces la primul mecanism din România care pune ordine între companii și experți.”
+
+🔷 Ziua 66 — Ce proiecte sunt potrivite pentru pilot
+„Pilotul merge cel mai bine pentru proiecte mici și medii: branding, dev, marketing, design, video, consultanță, administrativ.
+ Nu contează dimensiunea.
+ Contează claritatea.”
+
+🔷 Ziua 67 — Prima dată când spui ESCRO
+**„Sistemul se numește ESCRO.
+ Și face un singur lucru: ține banii într-un loc neutru și îi eliberează doar când ambele părți sunt mulțumite.
+Afară, sistemul ăsta există de ani de zile.
+ La noi… îl construim acum.”**
+
+🔷 Ziua 68 — Introduci TRUST HUB ca brand-mamă
+**„ESCRO este doar începutul.
+ În spate construim ceva mai mare, care se numește TRUST HUB — o infrastructură în care încrederea e prioritatea numărul unu.
+Nu vrem doar tranzacții sigure.
+ Vrem oameni verificați, procese clare și colaborări civilizate.”**
+
+🔷 Ziua 69 — Anunți închiderea înscrierilor
+**„Nu vreau un pilot mare.
+ Vreau unul sănătos.
+ Sunt deja multe companii și experți care mi-au scris.
+Închid înscrierile în câteva zile, ca să pot vorbi personal cu fiecare în parte.”**
+
+🔷 Ziua 70 — Anunț Q&A live / înregistrat
+**„Vineri fac un live scurt în care explic foarte clar ce este pilotul ESCRO și, mai ales, ce NU este.
+• Nu e marketplace.
+ • Nu e loc de spam.
+ • Nu e platformă de oferte.
+E un mecanism de încredere controlată între două părți care vor doar să lucreze liniștit.
+Dacă ai întrebări, lasă-le aici și le iau pe toate în live.”**
+
+
+🔷 Ziua 71 — Închiderea înscrierilor + mesaj de mulțumire
+„Gata, închid înscrierile pentru pilot.
+ Vreau să vorbesc personal cu fiecare om care a scris și să aleg doar oamenii care pot contribui cu ceva real.
+ Mulțumesc tuturor pentru interes.
+ Nu mă așteptam la atâta deschidere.”
+
+🔷 Ziua 72 — Cum faci selecția, explicat deschis
+**„Ca să fie clar: nu aleg oameni după cât de cunoscuți sunt.
+ Aleg oameni după cât de sinceri sunt în discuție și cât de clar vorbesc despre colaborările lor.
+Vreau un grup mic, matur și profesionist.
+ Atât.”**
+
+🔷 Ziua 73 — Anunț despre grupul privat
+„Cei selectați o să primească invitație într-un grup privat.
+ Acolo nu vorbim teorie, nu vorbim motivațional.
+ Vorbim despre procese reale, situații reale și despre cum punem ordine în zona asta împreună.”
+
+🔷 Ziua 74 — Ce se întâmplă în grup (teasing)
+**„În grup o să discutăm studii de caz, cum se rezolvă dispute, cum se setează cadrul unei colaborări și ce înseamnă ‘claritate’ în mod real.
+Nu e un grup de networking.
+ E un grup în care ne putem uita la colaborări cu ochi maturi.”**
+
+🔷 Ziua 75 — Mesaj către cei neselectați
+„Dacă nu intri în primul pilot, nu lua personal.
+ Trebuie să fie un grup mic la început, altfel nu putem testa nimic serios.
+ După ce stabilizăm primul val, facem și al doilea.”
+
+🔷 Ziua 76 — Prima mențiune despre testarea funcțională
+„O parte dintre voi o să primească acces la primele funcționalități.
+ Nu e versiunea finală.
+ E un schelet, dar suficient cât să vedem ce funcționează și ce nu.
+ Asta înseamnă pilot: construim împreună, pas cu pas.”
+
+🔷 Ziua 77 — Teaser vizual mic (fără UI complet)
+„Vă arăt o chestie mică, nu designul final, doar un detaliu din mecanism.
+ E unul dintre elementele care stă la baza ESCRO.
+ Simplu, curat, fără gălăgie.”
+ (aici pui un cadru mic: un timeline, o iconiță, o secțiune mică blurată)
+
+🔷 Ziua 78 — Observație din discuțiile cu pilotul
+**„Primele discuții cu oamenii din pilot au scos la suprafață ceva interesant:
+ toți vor claritate… dar fiecare o definește altfel.
+Asta e provocarea reală.
+ Să găsim un limbaj comun între companii și experți.”**
+
+🔷 Ziua 79 — Anunț despre începutul testelor reale
+„De săptămâna asta începem testele cu primele companii și primii experți.
+ O să fie frumos, o să fie greu, dar o să fie real.
+ Și mi se pare cel mai corect mod de a construi ceva în România.”
+
+🔷 Ziua 80 — Cum te simți ca fondator în momentul ăsta
+**„Să fiu sincer: perioada asta e cea mai grea și cea mai frumoasă în același timp.
+ Ai emoții, ai presiune, ai responsabilitate.
+Dar ai și sentimentul că faci ceva util.
+ Și asta, pentru mine, e suficient ca să merg mai departe.”**
+🔷 Ziua 81 — Prima poveste reală din pilot
+„Unul dintre primele teste din pilot mi-a arătat ceva clar: când ai un proces bun, se liniștesc doi oameni instant.
+ Nu intru în detalii, dar vă spun atât: claritatea calmează.
+ E incredibil cât poate schimba un singur pas bine definit.”
+
+🔷 Ziua 82 — Insight din pilot
+„Ce mi se pare interesant: companiile sunt mai deschise decât experții la procese noi.
+ Experții sunt mai temători.
+ E normal, pentru că ei simt presiunea direct în livrare.
+ Lucrăm cu grijă pe ambele părți ca să fie confortabil pentru toți.”
+
+🔷 Ziua 83 — Mini-teaser: cele 3 lucruri pe care ESCRO le face bine
+**„Sunt trei lucruri pe care ESCRO le face foarte bine:
+ – blochează banii unde trebuie,
+ – oferă claritate la fiecare pas,
+ – te scapă de discuțiile inutile.
+Restul… e bonus.”**
+
+🔷 Ziua 84 — Poveste: o problemă rezolvată în pilot
+„Azi am văzut un task care, în mod normal, ar fi degenerat într-o ceartă.
+ S-a rezolvat în 10 minute doar pentru că am introdus o confirmare intermediară.
+ Atât.
+ E fascinant cât de puțin ai nevoie ca să aduci liniște.”
+
+🔷 Ziua 85 — „Nu urmărim perfecțiunea, urmărim predictibilitatea”
+**„Nu construim ceva perfect.
+ Nici nu vreau asta.
+Construim ceva previzibil.
+ Și, sincer, previzibilitatea e mai sănătoasă decât perfecțiunea.”**
+
+🔷 Ziua 86 — Mesaj către cei care așteaptă lansarea
+**„Întreabă multe lume: ‘când se lansează ESCRO?’.
+ Curând, dar nu grăbim nimic.
+Încrederea nu se lansează.
+ Se construiește.”**
+
+🔷 Ziua 87 — De ce pilotul schimbă tot pentru tine
+„Pilotul m-a făcut să văd ceva important: România e pregătită pentru un mod de lucru mai civilizat.
+ Nu trebuie să reinventăm roata.
+ Trebuie doar să punem ordine acolo unde până acum era improvizație.”
+
+🔷 Ziua 88 — Mini-video cu logica din spate
+**„Vă arăt un fir logic din spate, atât:
+ • cerere
+ → clarificare
+ → blocare fonduri
+ → livrare
+ → confirmare
+ → eliberare.
+Simplu, nu?”**
+(aici poți arăta un mic flowchart, foarte simplu)
+
+🔷 Ziua 89 — Pregătirea terenului pentru lansare
+„În curând pot arăta mai mult.
+ Nu tot, dar suficient cât să înțelegeți de ce sunt atât de implicat în proiectul ăsta.
+ Și de ce cred că e nevoie de el.”
+
+🔷 Ziua 90 — Moment simbolic: pilotul este oficial pornit
+**„Gata.
+ Pilotul ESCRO e oficial pornit.
+E un pas mic pentru mine, dar un pas mare pentru felul în care vreau să lucrăm în România.
+ Vă țin aproape.”**
+
+Ziua 90 — Video Manifest (moment important)
+🎥 Durată recomandată: 45–60 sec
+ 🔵 Energia: calm, centrat, sigur pe tine, fără hype
+Script final:
+**„În ultimul an am lucrat la ceva care m-a schimbat complet.
+ Un sistem simplu și corect, care pune ordine între companii și experți.
+ Nu e o platformă.
+ Nu e un marketplace.
+ E un mecanism de încredere.
+Îl cheamă ESCRO.
+ Și în spate e TRUST HUB — primul ecosistem din România construit pe ideea de încredere digitală.
+Astăzi îl deschid public.”**
+💬 Este manifestul tău. Elegant și serios.
+
+🔷 Ziua 91 — Post dedicat: „De ce TRUST HUB?”
+Text puternic, clar, fără poezie:
+**„TRUST HUB a apărut dintr-o problemă simplă:
+ în România, oamenii lucrează bine, dar colaborează prost.
+ Lipsește încrederea.
+ Lipsește procesul.
+ Lipsește claritatea.
+TRUST HUB e cadrul.
+ ESCRO e primul pas.”**
+
+🔷 Ziua 92 — Principiile TRUST HUB (carusel scurt)
+3–5 slide-uri, curate, fără design încărcat:
+• Încredere cu verificare
+ • Transparență fără expunere
+ • Proces simplu, fără emoție
+ • Protecția ambelor părți
+ • Oameni înainte de software
+
+🔷 Ziua 93 — Video scurt: „Ce face ESCRO în viața reală”
+20–25 secunde.
+**„ESCRO face un singur lucru:
+ ține banii acolo unde trebuie — la mijloc — până e totul clar, confirmat și acceptat de ambele părți.
+Atât.
+ Nicio presiune.
+ Nicio grabă.
+ Doar un mecanism corect.”**
+
+🔷 Ziua 94 — Teaser vizual clean (UI simplu)
+Arăți un timeline sau un card de task, foarte puțin, doar esența.
+Text:
+„Sistemul trebuie să fie atât de simplu încât să vorbească singur.”
+
+🔷 Ziua 95 — Poveste personală: „De ce am construit ESCRO?”
+Ton cald, scurt, autentic:
+**„Am construit ESCRO pentru că m-am săturat să văd oameni buni pierzând timp, bani și relații din cauza lipsei de proces.
+Și pentru că nimeni nu făcea ceva care să rezolve problema reală, nu efectele.
+ Așa că m-am apucat eu.”**
+
+🔷 Ziua 96 — „Cine poate folosi ESCRO?”
+Listă clară, profesională:
+• SRL-uri mici și medii
+ • agenții
+ • freelanceri profesioniști
+ • experți tehnici
+ • companii cu proiecte repetate
+Zero emotional, doar informativ.
+
+🔷 Ziua 97 — „Pilotul și ce am învățat din el”
+**„Pilotul mi-a arătat că România e pregătită pentru un standard nou.
+ Companiile au fost surprinzător de deschise.
+ Experții precauți, dar corecți.
+Concluzia e simplă: era nevoie de ESCRO.”**
+
+🔷 Ziua 98 — Prima mențiune despre preț (foarte soft)
+Fără cifre, doar concept:
+**„ESCRO are trei forme de colaborare:
+ • direct — între două părți care se cunosc
+ • mediat — prin selecție și validare
+ • delegat — proiect complet gestionat
+Comisioanele sunt mici pentru direct, medii pentru mediat și negociate pentru delegat.
+ Totul transparent, fără surprize.”**
+
+🔷 Ziua 99 — Teasing de lansare
+„În câteva zile îl deschidem public.
+ Nu va fi o lansare mare.
+ Va fi o lansare matură.”
+
+🔷 Ziua 100 — Story simplu: energia fondatorului
+„Sunt calm, prezent și sincer emoționat.
+ De mâine deschidem public ceva ce cred că lipsea cu adevărat.”
+
+
+🔷 FAZA B — ZILELE 101–110
+👉 Lansarea ESCRO (oficial)
+
+🔷 Ziua 101 — ANUNȚ OFICIAL: ESCRO este LIVE
+🎥 Video 1 minut, calm, așezat, fără marketing
+**„ESCRO este live.
+ Funcționează simplu, curat, fără complicații.
+Creezi un task, blochezi plata, lucrezi liniștit, confirmi, eliberăm banii.
+ Atât.
+ESCRO nu ține partea nimănui.
+ Ține partea procesului.
+ Și asta schimbă tot.”**
+Tonul trebuie să fie: liniștit, sigur, zero hype — exact poziționarea care te diferențiază.
+🔷 Ziua 102 — Link către site + mesaj calm
+„Am deschis site-ul: [link]
+ Acolo găsești tot ce trebuie: cum funcționează, cine suntem și ce protejează sistemul.
+ Fără marketing.
+ Doar informație.”
+
+🔷 Ziua 103 — Testimoniale din pilot (scurte și reale)
+Folosești 2–3 fraze, naturale, fără să pară inventate:
+„N-am mai avut stres cu banul.”
+ „Totul a fost clar de la început.”
+ „Exact asta lipsea.”
+
+🔷 Ziua 104 — Studiu de caz real (fără nume)
+20 secunde, clar și matur:
+„Două părți aveau un conflict pe livrare.
+ Cu timeline-ul ESCRO am văzut exact unde s-a rupt.
+ S-a rezolvat în 8 minute.
+ De asta contează procesul.”
+
+🔷 Ziua 105 — Post despre obiectivul pe termen lung
+„ESCRO e doar începutul.
+ TRUST HUB va deveni primul cadru complet de colaborare sănătoasă între companii și experți din România.”
+
+🔷 Ziua 106 — Cum arată contul (Company / Expert)
+Teaser vizual minimalist.
+„Card simplu: verificare, taskuri, Trust Score.
+ Fără artificii, fără complexitate inutilă.”
+
+🔷 Ziua 107 — Q&A public (cele mai frecvente întrebări)
+Răspunzi calm, scurt, clar:
+• Cine procesează banii? → Stripe.
+ • Cât durează un proces? → Câteva minute setarea, restul e natural.
+ • Ce se întâmplă în caz de dispute? → Avem arbitraj intern, rapid.
+ • Cum funcționează verificarea? → Identitate + recomandare + istoric.”
+
+🔷 Ziua 108 — Launch behind-the-scenes
+Filmezi natural, fără regie.
+„Așa arată o zi de lansare la noi.
+ Oameni, laptopuri, call-uri și multă muncă reală.”
+
+🔷 Ziua 109 — Recap general al primei săptămâni
+„În primele zile:
+ • X companii înscrise
+ • Y experți validați
+ • Z taskuri în teste
+ Și foarte mult feedback bun.”
+
+🔷 Ziua 110 — Închiderea „early access”
+„Primele înscrieri sunt închise ca să putem lucra decent cu cei intrați deja.
+ Redeschidem în valuri, controlat.”
+
+🔵 FAZA C — Zilele 111–120: Consolidare & PR fără penibil
+
+🔷 Ziua 111 — Articol: „De ce România are nevoie de ESCRO”
+Ton editorial, LinkedIn:
+„Nu lipsesc specialiștii.
+ Lipsește cadrul.
+ ESCRO aduce proces, nu haos.
+ Predictibilitate, nu emoție.”
+
+🔷 Ziua 112 — Podcast sau Live Q&A (30 min)
+Tema:
+„Standardul de colaborare în 2025: cum îl construim și cine are de câștigat.”
+
+🔷 Ziua 113 — Mici momente de educație: Trust Score
+„Trust Score nu e rating.
+ E un indicator de consecvență și comportament.
+ Se construiește în timp, din proiecte reale.”
+
+🔷 Ziua 114 — Parteneriate (anunțuri mici, cu greutate)
+„Am început primele colaborări cu oameni și organizații care cred în aceleași valori.
+ Pas cu pas punem bazele unui standard.”
+
+🔷 Ziua 115 — Mini-workshop pentru companii
+Tema:
+„Cum verifici un expert în 5 minute.”
+ Practic, scurt, fără bullshit.
+
+🔷 Ziua 116 — Mini-workshop pentru experți
+Tema:
+„Cum te prezinți corect unei companii.”
+Ton: respectuos, nu superior.
+
+🔷 Ziua 117 — Infografice share-uibile
+Simplu, clar:
+Cerere → Clarificare → Blocare fonduri → Livrare → Confirmare → Eliberare
+E ceva ce poate rămâne în feed-urile oamenilor.
+
+🔷 Ziua 118 — Poveste personală
+„Cel mai greu moment din construcția ESCRO?
+ Să nu mă grăbesc.
+ Uneori cea mai mare presiune e să te ții de ritmul corect, nu de hype.”
+
+🔷 Ziua 119 — Pregătești „Trusted Circle”
+„Lucrăm la un cerc de profesioniști validați manual.
+ Nu pentru exclusivitate.
+ Pentru standard.”
+
+🔷 Ziua 120 — Închiderea etapei + direcția viitoare
+„ESCRO e live.
+ TRUST HUB prinde formă.
+ Urmează următoarea etapă: Trust Score complet și noi funcționalități.
+ Construim standardul pe termen lung.”
+
+

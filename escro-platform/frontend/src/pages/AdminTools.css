@@ -1,0 +1,62 @@
+.admin-tools {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.tool-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  background: #f9f9f9;
+  margin-bottom: 20px;
+}
+
+.tool-card h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.tool-card p {
+  color: #666;
+  margin-bottom: 15px;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  margin-top: 15px;
+  padding: 10px;
+  background: #ffebee;
+  color: #c62828;
+  border-radius: 5px;
+  border-left: 4px solid #c62828;
+}
+
+.success-message {
+  margin-top: 15px;
+  padding: 10px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 5px;
+  border-left: 4px solid #2e7d32;
+  line-height: 1.6;
+}

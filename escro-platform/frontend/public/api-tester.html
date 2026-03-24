@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESCRO Platform - API Tester</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        h1 { color: #333; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .output { background: #f9f9f9; padding: 10px; margin: 10px 0; border-left: 4px solid #007bff; font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+        .error { border-left-color: #dc3545; color: #dc3545; }
+        .success { border-left-color: #28a745; color: #28a745; }
+        input { padding: 8px; margin: 5px 0; width: 100%; }
+        label { display: block; margin: 10px 0 5px 0; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 ESCRO Platform - API Tester</h1>
+        
+        <div class="section">
+            <h2>1. Backend Health Check</h2>
+            <button onclick="checkBackend()">Check Backend Health</button>
+            <div id="healthOutput" class="output"></div>
+        </div>
+
+        <div class="section">
+            <h2>2. Login & Get Token</h2>
+            <label>Email:</label>
+            <input type="email" id="loginEmail" value="admin@test.com">
+            <label>Password:</label>
+            <input type="password" id="loginPassword" value="password">
+            <button onclick="login()">Login</button>
+            <div id="loginOutput" class="output"></div>
+        </div>
+
+        <div class="section">
+            <h2>3. Get Projects (Admin)</h2>
+            <button onclick="getProjects()">Get All Projects</button>
+            <div id="projectsOutput" class="output"></div>
+        </div>
+
+        <div class="section">
+            <h2>4. Test Project Approval</h2>
+            <label>Project ID:</label>
+            <input type="text" id="projectId" placeholder="Enter project ID">
+            <button onclick="approveProject()">Approve Project</button>
+            <button onclick="rejectProject()">Reject Project</button>
+            <div id="approveOutput" class="output"></div>
+        </div>
+
+        <div class="section">
+            <h2>5. Server Logs</h2>
+            <button onclick="getServerLog()">Refresh Server Log</button>
+            <div id="logOutput" class="output"></div>
+        </div>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('testToken') || '';
+
+        async function checkBackend() {
+            const output = document.getElementById('healthOutput');
+            try {
+                const res = await fetch('http://localhost:5000/api/health');
+                const data = await res.json();
+                output.textContent = `✓ Backend running: ${JSON.stringify(data, null, 2)}`;
+                output.className = 'output success';
+            } catch (e) {
+                output.textContent = `✗ Backend error: ${e.message}`;
+                output.className = 'output error';
+            }
+        }
+
+        async function login() {
+            const output = document.getElementById('loginOutput');
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            try {
+                const res = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (data.token) {
+                    token = data.token;
+                    localStorage.setItem('testToken', token);
+                    output.textContent = `✓ Login successful!\nToken: ${token.substring(0, 50)}...\nUser: ${data.user?.name}`;
+                    output.className = 'output success';
+                } else {
+                    output.textContent = `✗ Login failed: ${JSON.stringify(data)}`;
+                    output.className = 'output error';
+                }
+            } catch (e) {
+                output.textContent = `✗ Error: ${e.message}`;
+                output.className = 'output error';
+            }
+        }
+
+        async function getProjects() {
+            const output = document.getElementById('projectsOutput');
+            if (!token) {
+                output.textContent = '✗ No token. Login first!';
+                output.className = 'output error';
+                return;
+            }
+            try {
+                const res = await fetch('http://localhost:5000/api/admin/projects', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                output.textContent = `✓ Projects loaded (${data.projects?.length || 0}):\n${JSON.stringify(data, null, 2)}`;
+                output.className = 'output success';
+            } catch (e) {
+                output.textContent = `✗ Error: ${e.message}`;
+                output.className = 'output error';
+            }
+        }
+
+        async function approveProject() {
+            const output = document.getElementById('approveOutput');
+            const projectId = document.getElementById('projectId').value;
+            if (!projectId) {
+                output.textContent = '✗ Enter project ID first!';
+                output.className = 'output error';
+                return;
+            }
+            try {
+                const res = await fetch(`http://localhost:5000/api/admin/projects/${projectId}/approve`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                output.textContent = `✓ Response:\n${JSON.stringify(data, null, 2)}`;
+                output.className = 'output success';
+            } catch (e) {
+                output.textContent = `✗ Error: ${e.message}`;
+                output.className = 'output error';
+            }
+        }
+
+        async function rejectProject() {
+            const output = document.getElementById('approveOutput');
+            const projectId = document.getElementById('projectId').value;
+            if (!projectId) {
+                output.textContent = '✗ Enter project ID first!';
+                output.className = 'output error';
+                return;
+            }
+            try {
+                const res = await fetch(`http://localhost:5000/api/admin/projects/${projectId}/reject`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                output.textContent = `✓ Response:\n${JSON.stringify(data, null, 2)}`;
+                output.className = 'output success';
+            } catch (e) {
+                output.textContent = `✗ Error: ${e.message}`;
+                output.className = 'output error';
+            }
+        }
+
+        async function getServerLog() {
+            // This would need a backend endpoint to read logs
+            document.getElementById('logOutput').textContent = 'Check /tmp/server.log on the server';
+        }
+
+        // Auto-check backend on load
+        window.onload = checkBackend;
+    </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+SCRIPT VIDEO - LANDING PAGE PRESENTATION
+Durata: ~30-45 secunde
+
+---
+
+VERSIUNEA 1 (Original - Manual):
+"Salut! Sunt Claudiu Vladau. Dacă v-ați întrebat vreodată ce fac exact și cum pot să vă ajut... răspunsul e pe site.
+
+Lucrez cu oameni care au nevoie de recomandări solide, protecție la tranzacții, sau cineva care să rezolve probleme rapidă și corect.
+
+Matching, management de proiect, escrow, arbitraj — pe site o să înțelegeți exact cum funcționează și ce oferesc.
+
+Mergeți acolo, citiți povestea, și dacă rezonează cu voi, contactați-mă direct.
+
+Și vă mulțumesc că mă urmăriți. Asta înseamnă mult pentru mine."
+[Cuvinte: 118]
+
+---
+
+VERSIUNEA 2 (AI-Refined - Cu API):
+"Oamenii mă întreabă des: 'Ce faci exact, Claudiu?'
+
+Răspunsul simplu: recomandări solide. Management de proiect. Protecție la tranzacții. Și dacă ceva nu merge — intervin și rezolv imparțial.
+
+Nu e marketing. Nu e promisiune goală. E oameni verificați, procese clare, responsabilitate personală.
+
+Site-ul explică totul. Hai acolo, citește-ți povestea — și dacă rezonează, contactează-mă.
+
+Vă mulțumesc că mă urmăriți. Sunteți motivația mea."
+[Cuvinte: 115]
+
+---
+
+VERSIUNEA 3 (Maximum Impact - Conversational):
+"Salut! Ești în situația asta: ai nevoie de cineva potrivit. Protecție la bani. Cineva care să stea lângă tine până se rezolvă.
+
+Sunt Claudiu. Și pe site am explicat exact cum lucrez.
+
+Matching. Escrow. Arbitraj. Transparent. Corect. Responsabil.
+
+Citeşte povestea — o să înțelegi mai bine ce fac. Și dacă e de te-ai vrea ajutor, sunt aici.
+
+Mulțumesc că mă urmăriți!"
+[Cuvinte: 95]
+
+---
+
+RECOMANDARE:
+- Versiunea 2 e cea mai echilibrată (profesional + autentic)
+- Versiunea 3 e mai directă și emoțională (mai bună pentru engagement)
+- Alege în funcție de platform: TikTok = Versiunea 3, LinkedIn/Instagram = Versiunea 2
+
+---
+
+ACȚIUNI PENTRU VIDEO:
+- Slow pan pe landing page hero section
+- Highlight pe service cards
+- Text overlay: "Connector cu Integritate"
+- CTA final: Contact button screenshot
+- Soft background music (profesional, calm)

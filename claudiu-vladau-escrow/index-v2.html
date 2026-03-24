@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claudiu Vladau | Omul de încredere pentru conexiunile tale</title>
+    <meta name="description" content="Specialist în escrow, matching și management de proiect. Conectez oameni buni cu companii bune. Connector echilibrat și garant al corectitudinii.">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        /* Navigation */
+        nav {
+            background: white;
+            padding: 1.5rem 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        nav .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        nav .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e40af;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+        
+        nav .logo span {
+            color: #0ea5e9;
+            margin-left: 0.25rem;
+        }
+        
+        nav a {
+            color: #666;
+            text-decoration: none;
+            margin-left: 2rem;
+            transition: color 0.3s;
+            font-weight: 500;
+        }
+        
+        nav a:hover {
+            color: #1e40af;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, #1e40af 0%, #0ea5e9 100%);
+            color: white;
+            padding: 6rem 2rem;
+            text-align: center;
+        }
+        
+        .hero .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            line-height: 1.2;
+            font-weight: 800;
+        }
+        
+        .hero .subtitle {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            opacity: 0.95;
+            font-weight: 600;
+        }
+        
+        .hero p {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            opacity: 0.9;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: white;
+            color: #1e40af;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin: 0.5rem;
+            transition: all 0.3s;
+            border: 2px solid white;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .cta-button:hover {
+            background: transparent;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        
+        .cta-button.secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .cta-button.secondary:hover {
+            background: white;
+            color: #1e40af;
+        }
+        
+        .cta-button.outline {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+            font-weight: 600;
+        }
+        
+        .cta-button.outline:hover {
+            background: white;
+            color: #1e40af;
+        }
+        
+        /* Section */
+        section {
+            padding: 4rem 2rem;
+        }
+        
+        section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: #1e40af;
+            text-align: center;
+        }
+        
+        section .intro-text {
+            font-size: 1.1rem;
+            color: #666;
+            max-width: 800px;
+            margin: 0 auto 3rem;
+            line-height: 1.8;
+            text-align: center;
+        }
+        
+        /* About */
+        #about {
+            background: white;
+        }
+        
+        .philosophy {
+            background: #f0f9ff;
+            border-left: 5px solid #1e40af;
+            padding: 2rem;
+            margin: 2rem 0;
+            border-radius: 8px;
+        }
+        
+        .philosophy h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+        
+        .philosophy p {
+            color: #555;
+            margin-bottom: 0.8rem;
+        }
+        
+        /* Services */
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .service-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            border-top: 4px solid #1e40af;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+        }
+        
+        .service-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+        
+        .service-card h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        
+        .service-card p {
+            color: #666;
+            line-height: 1.7;
+        }
+        
+        /* Why Claudiu */
+        #why-claudiu {
+            background: #f8f9fa;
+        }
+        
+        .trust-factors {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .trust-factor {
+            background: white;
+            padding: 1.8rem;
+            border-radius: 10px;
+            border-left: 4px solid #0ea5e9;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            transition: all 0.3s;
+        }
+        
+        .trust-factor:hover {
+            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .trust-factor h3 {
+            color: #1e40af;
+            margin-bottom: 0.8rem;
+            font-size: 1.1rem;
+        }
+        
+        .trust-factor p {
+            color: #555;
+            line-height: 1.7;
+        }
+        
+        /* Process */
+        #process {
+            background: white;
+        }
+        
+        .process-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .process-step {
+            background: #f0f9ff;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid #1e40af;
+        }
+        
+        .process-step .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            background: #1e40af;
+            color: white;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        
+        .process-step h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        
+        .process-step p {
+            color: #555;
+            line-height: 1.7;
+        }
+        
+        /* ESCRO Section */
+        #escro {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        }
+        
+        .escro-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            border-left: 5px solid #0ea5e9;
+            margin-top: 1.5rem;
+        }
+        
+        .escro-content h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .escro-content h3:first-child {
+            margin-top: 0;
+        }
+        
+        .escro-content ul {
+            margin-left: 2rem;
+            color: #555;
+        }
+        
+        .escro-content li {
+            margin-bottom: 0.5rem;
+            line-height: 1.7;
+        }
+        
+        .escro-cta {
+            background: #1e40af;
+            color: white;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            margin-top: 2rem;
+        }
+        
+        .escro-cta h3 {
+            color: white;
+            margin-bottom: 1rem;
+        }
+        
+        .escro-cta p {
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 1rem;
+        }
+        
+        /* Testimonials */
+        #testimonials {
+            background: white;
+        }
+        
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .testimonial {
+            background: #f8f9fa;
+            padding: 2rem;
+            border-radius: 10px;
+            border-left: 4px solid #1e40af;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        
+        .testimonial p {
+            color: #555;
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+            font-style: italic;
+        }
+        
+        .testimonial .author {
+            color: #1e40af;
+            font-weight: 600;
+            font-style: normal;
+        }
+        
+        /* Contact/CTA Section */
+        #contact {
+            background: #f8f9fa;
+            padding: 4rem 2rem;
+        }
+        
+        .contact-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .contact-container h2 {
+            margin-bottom: 2rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e7ff;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #1e40af;
+            background: #f0f9ff;
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+        
+        .form-submit {
+            width: 100%;
+            padding: 1rem;
+            background: #1e40af;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .form-submit:hover {
+            background: #0ea5e9;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(30, 64, 175, 0.3);
+        }
+        
+        .email-signup {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 12px;
+            border: 2px solid #1e40af;
+            margin-top: 2rem;
+            text-align: center;
+        }
+        
+        .email-signup h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+        }
+        
+        .email-signup p {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+        
+        .email-signup-form {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .email-signup-form input {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.75rem;
+            border: 2px solid #e0e7ff;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-size: 16px;
+        }
+        
+        .email-signup-form button {
+            padding: 0.75rem 1.5rem;
+            background: #1e40af;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.3s;
+        }
+        
+        .email-signup-form button:hover {
+            background: #0ea5e9;
+        }
+        
+        .email-signup-form button:active {
+            transform: scale(0.98);
+        }
+        
+        /* Problem Section */
+        #problem {
+            background: white;
+        }
+        
+        .problems-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .problem-item {
+            background: #fef2f2;
+            border-left: 4px solid #dc2626;
+            padding: 1.5rem;
+            border-radius: 8px;
+        }
+        
+        .problem-item h4 {
+            color: #dc2626;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .problem-item p {
+            color: #555;
+            line-height: 1.6;
+        }
+        
+        .problem-solution {
+            background: #f0fdf4;
+            border-left: 4px solid #16a34a;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-top: 2rem;
+            text-align: center;
+        }
+        
+        .problem-solution h3 {
+            color: #16a34a;
+            margin-bottom: 1rem;
+        }
+        
+        .problem-solution p {
+            color: #555;
+            line-height: 1.7;
+        }
+        
+        /* Footer */
+        footer {
+            background: #1e40af;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        footer a {
+            color: #0ea5e9;
+            text-decoration: none;
+        }
+        
+        footer a:hover {
+            text-decoration: underline;
+        }
+        
+        footer .footer-links {
+            margin-bottom: 1.5rem;
+        }
+        
+        footer .footer-links a {
+            margin: 0 1rem;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            nav .container {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            nav a {
+                margin: 0.5rem 1rem;
+            }
+            
+            .hero h1 {
+                font-size: 2.2rem;
+            }
+            
+            .hero .subtitle {
+                font-size: 1.1rem;
+            }
+            
+            .hero p {
+                font-size: 1rem;
+            }
+            
+            section h2 {
+                font-size: 2rem;
+            }
+            
+            section {
+                padding: 3rem 1rem;
+            }
+            
+            .email-signup-form {
+                flex-direction: column;
+            }
+            
+            .email-signup-form button {
+                width: 100%;
+            }
+            
+            .form-group input,
+            .form-group textarea,
+            .form-group select {
+                font-size: 16px;
+            }
+            
+            .contact-container {
+                padding: 0 1rem;
+            }
+            
+            .cta-button {
+                display: block;
+                width: 100%;
+                max-width: 300px;
+                margin: 0.5rem auto;
+            }
+        }
+        
+        /* Touch-friendly for mobile */
+        @media (hover: none) and (pointer: coarse) {
+            .cta-button,
+            .form-submit,
+            .email-signup-form button,
+            .service-card,
+            .trust-factor {
+                -webkit-tap-highlight-color: transparent;
+            }
+            
+            .form-submit,
+            .email-signup-form button {
+                padding: 1rem 1.5rem;
+                min-height: 48px;
+            }
+        }
+        
+        /* Accessibility */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0,0,0,0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+        
+        /* Animations */
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        section {
+            animation: slideUp 0.6s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="container">
+            <a href="#" class="logo">Claudiu<span>Vlădău</span></a>
+            <div>
+                <a href="#problem">Problemă</a>
+                <a href="#services">Servicii</a>
+                <a href="#process">Cum lucrez</a>
+                <a href="#escro">ESCRO</a>
+                <a href="#contact">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="container">
+            <h1>Omul de încredere<br>Pentru conexiunile tale</h1>
+            <p class="subtitle">Specialist în escrow, matching & management de proiect</p>
+            <p>Nu te conectez cu primul om disponibil. Te conectez cu oamenii potriviți, pe baza unor recomandări solide și a unui proces clar.</p>
+            <a href="#contact" class="cta-button">Spune-mi ce ai nevoie</a>
+            <a href="#contact" class="cta-button secondary">Întreabă-mă oricând</a>
+        </div>
+    </section>
+
+    <!-- About -->
+    <section id="about">
+        <div class="container">
+            <h2>Cine sunt?</h2>
+            <p class="intro-text">
+                Nu sunt marketingul care promite miracole. Sunt omul care știe cu cine să te conecteze și cum să-ți gestioneze proiectul de la A la Z.
+            </p>
+            
+            <div class="philosophy">
+                <h3>🎯 Filosofia mea</h3>
+                <p>
+                    În escrow și management de proiect, diferența dintre succes și eșec nu e „disponibilitatea”, ci recomandarea și execuția. Am văzut prea mulți oameni care au mers cu „cine era liber” și au pierdut bani, timp sau termene.
+                </p>
+                <p style="margin-top: 1rem;">
+                    Eu nu vin cu o platformă care te conectează cu oricine. Vin cu o rețea selectă de profesioniști pe care îi cunosc, îi verific și îi recomand doar când sunt sigur că pot livra bine.
+                </p>
+            </div>
+            
+            <div class="philosophy">
+                <h3>🤝 Ce fac eu?</h3>
+                <p>
+                    <strong>1. Recomandări (Matching):</strong> Înțeleg exact ce ai nevoie și te conectez cu persoana sau echipa potrivită din rețea.
+                </p>
+                <p style="margin-top: 0.8rem;">
+                    <strong>2. Management de proiect:</strong> Mă asigur că totul merge conform planului: comunicare, termene și calitate.
+                </p>
+                <p style="margin-top: 0.8rem;">
+                    <strong>3. Protecția tranzacției (Escrow):</strong> Banii sunt protejați, contractele sunt clare, iar ambele părți sunt în siguranță.
+                </p>
+                <p style="margin-top: 0.8rem;">
+                    <strong>4. Arbitraj (Rezolvare dispute):</strong> Dacă apar probleme, mediez și, la nevoie, arbitrez imparțial — aceleași reguli pentru toți.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section id="problem">
+        <div class="container">
+            <h2>De ce e greu să găsești oameni buni?</h2>
+            <p class="intro-text">
+                Nu e vina ta. De multe ori, sistemul e făcut prost. Iată unde se rupe filmul și cum te ajut.
+            </p>
+            
+            <div class="problems-grid">
+                <div class="problem-item">
+                    <h4>😰 Așteptări neclare</h4>
+                    <p>Neînțelegeri și dispute. Pierderi de bani. Cele două părți înțeleg diferit ce urmează să se livreze.</p>
+                </div>
+                
+                <div class="problem-item">
+                    <h4>😰 Risc la plată</h4>
+                    <p>Plătești înainte de livrare și primești ceva slab — sau nu primești nimic.</p>
+                </div>
+                
+                <div class="problem-item">
+                    <h4>😰 Potrivire greșită</h4>
+                    <p>Găsești pe cineva „disponibil”, dar nu e potrivit. Timp pierdut, bani pierduți.</p>
+                </div>
+                
+                <div class="problem-item">
+                    <h4>😰 Fără arbitru neutru</h4>
+                    <p>Apare un conflict și nu ai pe cine apela. Ajungi la avocați scumpi și procese care te costă timp și bani.</p>
+                </div>
+                
+                <div class="problem-item">
+                    <h4>😰 Fără verificare</h4>
+                    <p>Nu poți valida credibilitatea cuiva: portofolii false, recomandări inventate, promisiuni goale.</p>
+                </div>
+                
+                <div class="problem-item">
+                    <h4>😰 Fără responsabilitate</h4>
+                    <p>Cineva dispare după ce încasează. Nici răspuns, nici monitorizare, nici soluție.</p>
+                </div>
+            </div>
+            
+            <div class="problem-solution">
+                <h3>✓ Cum te ajut eu</h3>
+                <p>
+                    Aleg oameni verificați din rețeaua mea. Protejez banii prin escrow. Clarific contractele. Țin procesul sub control.
+                    Iar dacă ceva nu merge, intervin și arbitrez imparțial — aceleași reguli pentru toți, fără favoriți.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services -->
+    <section id="services">
+        <div class="container">
+            <h2>Ce servicii ofer?</h2>
+            <p class="intro-text">
+                Flexibilitate totală. Orice ai nevoie — atâta timp cât pot ajuta, mă implic.
+            </p>
+            
+            <div class="services-grid">
+                <div class="service-card">
+                    <h3>💼 Matching (Recomandări)</h3>
+                    <p>
+                        Îți ascult nevoile (buget, termen, constrângeri). Caut în rețeaua mea și îți recomand oamenii potriviți — nu pe cei „disponibili”.
+                        Fac introducerea și mă ocup de follow-up.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>📋 Management de proiect</h3>
+                    <p>
+                        Termene, calitate, comunicare — mă ocup de toate. Coordonez între toți stakeholderii. Tu știi mereu ce se întâmplă și când.
+                        Fără surprize neplăcute.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>🔒 Escrow & protecție</h3>
+                    <p>
+                        Banii rămân protejați până la livrare. Contract clar (ce se livrează, când și la ce cost). Ambele părți sunt în siguranță.
+                        Fără ambiguități.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>⚖️ Rezolvare dispute</h3>
+                    <p>
+                        Dacă apar probleme, mediez (comunicare clară, soluții pragmatice). Dacă medierea nu funcționează, arbitrez imparțial —
+                        decizia e finală și echitabilă.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>🎓 Consiliere</h3>
+                    <p>
+                        Orice întrebare: legal, financiar, operațional sau logistic. Îți răspund direct și clar. Reduc riscul prin ghidaj și experiență.
+                        Răspund în 24 de ore.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>🚨 Intervenție în blocaje</h3>
+                    <p>
+                        Drum înfundat? Blocaj legal? Conflict între părți? Ceva nu merge? Devin punctul de control și mă ocup de rezolvare.
+                        Nu dispar după plată.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why Claudiu -->
+    <section id="why-claudiu">
+        <div class="container">
+            <h2>De ce eu și nu o platformă?</h2>
+            <p class="intro-text">
+                Diferența e în detalii și în reputație. Iată ce nu primești, de obicei, în altă parte:
+            </p>
+            
+            <div class="trust-factors">
+                <div class="trust-factor">
+                    <h3>✓ Recomandări, nu marketing</h3>
+                    <p>
+                        Nu mă vezi promițând miracole. De cele mai multe ori, ajungi la mine prin recomandare — de la cineva care mă cunoaște și are încredere.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Rețea selectă</h3>
+                    <p>
+                        Nu lucrez cu oricine. Lucrez cu oameni pe care îi verific personal și pe care îi recomand cu încredere.
+                        Reputația mea e în joc.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Transparență totală</h3>
+                    <p>
+                        Îți spun adevărul — chiar și când nu e ce vrei să auzi. Fără promisiuni goale. Fără ascunzișuri.
+                        Explic clar de ce iau fiecare decizie.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Responsabilitate personală</h3>
+                    <p>
+                        Dacă ceva nu merge, devine problema mea. Nu dispar după ce iau plata.
+                        Numele meu e legat de rezultat.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Integritate constituțională</h3>
+                    <p>
+                        Urmez reguli chiar și când costă. Imparțialitate: ambele părți sunt tratate la fel, fără favoriți.
+                        Nu există excepții pentru „cine are bani”.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Disponibilitate</h3>
+                    <p>
+                        Problemă în weekend? Mesaj târziu? Intervin când e nevoie. Răspund în 24 de ore.
+                        Responsabilitatea înseamnă prezență.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Process -->
+    <section id="process">
+        <div class="container">
+            <h2>5 pași simpli</h2>
+            <p class="intro-text">
+                Așa funcționează procesul, de la început până la final.
+            </p>
+            
+            <div class="process-grid">
+                <div class="process-step">
+                    <div class="step-number">1</div>
+                    <h3>Tu mă contactezi</h3>
+                    <p>
+                        Îmi spui ce ai nevoie (proiect, expert, tranzacție, sfat). Clarificăm detaliile: buget, termene, constrângeri.
+                        Un apel de 15 minute sau un email.
+                    </p>
+                </div>
+                
+                <div class="process-step">
+                    <div class="step-number">2</div>
+                    <h3>Eu te conectez</h3>
+                    <p>
+                        Caut în rețea oamenii potriviți. Îți fac recomandarea și te introduc personal.
+                        Urmăresc introducerea. De regulă, în 2–3 zile.
+                    </p>
+                </div>
+                
+                <div class="process-step">
+                    <div class="step-number">3</div>
+                    <h3>Protecție și claritate</h3>
+                    <p>
+                        Stabilim un contract clar (ce, când, cât). Escrow: banii rămân în siguranță. Comunicarea e planificată și constantă.
+                        Fără ambiguități. De regulă, 3–5 zile.
+                    </p>
+                </div>
+                
+                <div class="process-step">
+                    <div class="step-number">4</div>
+                    <h3>Livrare și închidere</h3>
+                    <p>
+                        Expertul livrează conform contractului. Tu confirmi că ești mulțumit. Banii se eliberează.
+                        Toată lumea închide corect, cu reputație bună.
+                    </p>
+                </div>
+                
+                <div class="process-step">
+                    <div class="step-number">5</div>
+                    <h3>Dacă apar probleme</h3>
+                    <p>
+                        Intervin: mediez și caut soluții. Dacă trebuie, arbitrez (decizie imparțială și finală).
+                        Rezolvare rapidă: 72h urgent, 7 zile standard.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ESCRO Platform -->
+    <section id="escro">
+        <div class="container">
+            <h2>Următorul pas: platforma ESCRO</h2>
+            <p class="intro-text">
+                Acum fac asta personal. Dar, ca să crească, procesul trebuie să devină scalabil.
+            </p>
+            
+            <div class="escro-content">
+                <p>
+                    Construiesc <strong>ESCRO</strong> — o platformă unde acest proces este automatizat, transparent
+                    și deschis pentru companii și experți verificați.
+                </p>
+                
+                <h3>🚀 Ce urmează?</h3>
+                <ul>
+                    <li><strong>Escrow automatizat</strong> — bani protejați din prima zi</li>
+                    <li><strong>Arbitraj transparent</strong> — decizii explicate clar</li>
+                    <li><strong>Sistem de reputație</strong> — badge-uri care arată istoricul</li>
+                    <li><strong>Matching engine</strong> — un algoritm care găsește potrivirea ideală</li>
+                    <li><strong>Rezolvare dispute 24/7</strong> — fără să depindă totul de mine</li>
+                </ul>
+                
+                <h3>✓ Ce rămâne la fel?</h3>
+                <ul>
+                    <li><strong>Corectitudine de principiu</strong> — principiile > profitul, mereu</li>
+                    <li><strong>Verificare pentru toți</strong> — KYC pentru siguranță</li>
+                    <li><strong>Responsabilitate personală</strong> — mă semnez pe deciziile majore</li>
+                    <li><strong>Aceleași reguli pentru toți</strong> — zero excepții, zero favoriți</li>
+                </ul>
+            </div>
+            
+
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section id="testimonials">
+        <div class="container">
+            <h2>Ce spun clienții?</h2>
+            <p class="intro-text">
+                Oameni cu care am lucrat și care au rămas mulțumiți.
+            </p>
+            
+            <div class="testimonials-grid">
+                <div class="testimonial">
+                    <p>
+                        "Claudiu mi-a găsit avocatul perfect pentru tranzacția mea. Nu m-a conectat cu oricine — a fost o recomandare personală.
+                        Totul a ieșit la timp și fără surprize neplăcute."
+                    </p>
+                    <div class="author">— Adrian M., Texas</div>
+                </div>
+                
+                <div class="testimonial">
+                    <p>
+                        "Am lucrat cu cinci freelanceri în doi ani. Claudiu mi-a recomandat unul dintre ei, iar omul ăla a revenit de 15 ori.
+                        Calitate și seriozitate. Când spun că te conectează bine, nu glumesc."
+                    </p>
+                    <div class="author">— Elena C., București</div>
+                </div>
+                
+                <div class="testimonial">
+                    <p>
+                        "Had a dispute with a contractor. Thought I lost the money. Claudiu mediated, explained both sides,
+                        and reached a fair settlement in 3 days. Professional, transparent, fair."
+                    </p>
+                    <div class="author">— Michael R., New York</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact -->
+    <section id="contact">
+        <div class="contact-container">
+            <h2>Deschide o conexiune nouă</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 2rem;">
+                Spune-mi ce ai nevoie. De acolo, ne ocupăm de restul.
+            </p>
+            
+            <form id="contact-form" action="https://formspree.io/f/xnjzekql" method="POST">
+                <div class="form-group">
+                    <label for="name">Nume complet</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="company">Companie</label>
+                    <input type="text" id="company" name="company" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="role">Rol (companie sau expert?)</label>
+                    <select id="role" name="role" required>
+                        <option value="">-- Selectează --</option>
+                        <option value="company">Companie</option>
+                        <option value="expert">Expert</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="message">Ce ai nevoie?</label>
+                    <textarea id="message" name="message" required placeholder="Descrie-mi situația..."></textarea>
+                </div>
+                
+                <button type="submit" class="form-submit">Trimite mesaj</button>
+            </form>
+            
+            <div style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #e0e7ff;">
+                <p style="text-align: center; color: #666; margin-bottom: 1rem;">
+                    <strong>Răspund în 24 de ore.</strong>
+                </p>
+                <p style="text-align: center; color: #999;">
+                    Oricând, oriunde, orice problemă — sunt aici.
+                    <br><br>
+                    <a href="tel:+40764345782" style="color: #1e40af; text-decoration: none; font-weight: 600; font-size: 1.1rem;">+40 764 345 782</a>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-links">
+                <a href="#about">Despre</a>
+                <a href="#services">Servicii</a>
+                <a href="#process">Cum lucrez</a>
+                <a href="#contact">Contact</a>
+            </div>
+            
+            <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.2);">
+                <p>&copy; 2026 Claudiu Vladau | Connector cu integritate | Garantul corectitudinii</p>
+                <p style="margin-top: 0.5rem; opacity: 0.8;">Bazat pe recomandări. Construit pe încredere.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Contact form submission - Formspree integration
+        document.getElementById('contact-form').addEventListener('submit', function(e) {
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Se trimite...';
+            
+            // Show success after a short delay
+            setTimeout(() => {
+                alert('Mulțumesc pentru mesaj! Te voi contacta în 24 de ore.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }, 1500);
+        });
+        
+        // Email signup form
+        document.getElementById('email-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Se trimite...';
+            
+            setTimeout(() => {
+                alert('Mulțumesc că te-ai abonat! Verifică emailul pentru actualizări.');
+                this.reset();
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }, 1000);
+        });
+        // Smooth scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

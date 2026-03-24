@@ -1,0 +1,16 @@
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+.env
+.env.local
+uploads/
+*.db
+*.sqlite
+.DS_Store
+Thumbs.db
+frontend.log
+package-lock.json

@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claudiu Vladau | Specialist Escrow & Project Matching</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+        }
+        
+        /* Navigation */
+        nav {
+            background: white;
+            padding: 1.5rem 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        nav .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        nav .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e40af;
+            text-decoration: none;
+        }
+        
+        nav .logo span {
+            color: #0369a1;
+        }
+        
+        nav a {
+            text-decoration: none;
+            color: #666;
+            margin-left: 2rem;
+            transition: color 0.3s;
+        }
+        
+        nav a:hover {
+            color: #1e40af;
+        }
+        
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, #1e40af 0%, #0369a1 100%);
+            color: white;
+            padding: 6rem 2rem;
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            line-height: 1.2;
+        }
+        
+        .hero p {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+        }
+        
+        .hero .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.85;
+            margin-bottom: 3rem;
+            font-weight: 300;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: white;
+            color: #1e40af;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin: 0.5rem;
+            border: 2px solid white;
+        }
+        
+        .cta-button:hover {
+            background: transparent;
+            color: white;
+        }
+        
+        .cta-button.secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .cta-button.secondary:hover {
+            background: white;
+            color: #1e40af;
+        }
+        
+        /* Section */
+        section {
+            padding: 5rem 2rem;
+        }
+        
+        section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: #1e40af;
+        }
+        
+        section .intro-text {
+            font-size: 1.1rem;
+            color: #666;
+            max-width: 800px;
+            margin-bottom: 3rem;
+            line-height: 1.8;
+        }
+        
+        /* About */
+        #about {
+            background: white;
+        }
+        
+        .philosophy {
+            background: #f0f9ff;
+            border-left: 5px solid #1e40af;
+            padding: 2rem;
+            margin: 2rem 0;
+            border-radius: 8px;
+        }
+        
+        .philosophy h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+        }
+        
+        .philosophy p {
+            color: #555;
+            line-height: 1.8;
+        }
+        
+        /* Services */
+        #services {
+            background: #f8f9fa;
+        }
+        
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .service-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+        
+        .service-card:hover {
+            box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+            transform: translateY(-4px);
+        }
+        
+        .service-card h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        .service-card p {
+            color: #666;
+            line-height: 1.8;
+        }
+        
+        /* Process */
+        #process {
+            background: white;
+        }
+        
+        .process-timeline {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .process-step {
+            text-align: center;
+            padding: 2rem;
+            border-radius: 8px;
+            background: #f0f9ff;
+            position: relative;
+        }
+        
+        .process-step::before {
+            content: attr(data-step);
+            display: block;
+            width: 50px;
+            height: 50px;
+            background: #1e40af;
+            color: white;
+            border-radius: 50%;
+            line-height: 50px;
+            margin: 0 auto 1rem;
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+        
+        .process-step h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+        }
+        
+        .process-step p {
+            color: #666;
+        }
+        
+        /* Why Claudiu */
+        #why-claudiu {
+            background: #f8f9fa;
+        }
+        
+        .trust-factors {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .trust-factor {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border-top: 3px solid #1e40af;
+        }
+        
+        .trust-factor h3 {
+            color: #1e40af;
+            margin-bottom: 0.5rem;
+        }
+        
+        .trust-factor p {
+            color: #666;
+            font-size: 0.95rem;
+        }
+        
+        /* Contact */
+        #contact {
+            background: linear-gradient(135deg, #1e40af 0%, #0369a1 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        #contact h2 {
+            color: white;
+        }
+        
+        .contact-methods {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+        
+        .contact-method {
+            background: rgba(255,255,255,0.1);
+            padding: 2rem;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .contact-method h3 {
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+        
+        .contact-method p {
+            font-size: 1.1rem;
+            opacity: 0.95;
+        }
+        
+        .contact-method a {
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .contact-method a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Footer */
+        footer {
+            background: #0f172a;
+            color: #ccc;
+            text-align: center;
+            padding: 2rem;
+            margin-top: 3rem;
+        }
+        
+        /* Testimonials */
+        #testimonials {
+            background: white;
+        }
+        
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .testimonial {
+            background: #f0f9ff;
+            padding: 2rem;
+            border-radius: 8px;
+            border-left: 5px solid #1e40af;
+        }
+        
+        .testimonial p {
+            color: #555;
+            margin-bottom: 1rem;
+            font-style: italic;
+            line-height: 1.8;
+        }
+        
+        .testimonial .author {
+            color: #1e40af;
+            font-weight: 600;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .hero p {
+                font-size: 1.2rem;
+            }
+            
+            section h2 {
+                font-size: 2rem;
+            }
+            
+            nav a {
+                margin-left: 1rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="container">
+            <a href="#" class="logo">Claudiu<span>Vladau</span></a>
+            <div>
+                <a href="#about">Despre</a>
+                <a href="#services">Servicii</a>
+                <a href="#process">Cum Lucrez</a>
+                <a href="#contact">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="container">
+            <h1>Omul de Încredere<br>Pentru Conexiunile Tale</h1>
+            <p class="subtitle">Specialist în Escrow, Matching & Project Management</p>
+            <p>Nu te conectez cu oricine disponibil. Te conectez cu oamenii potriviți, cu recomandări solide și rezultate garantate.</p>
+            <a href="#contact" class="cta-button">Ce ai nevoie?</a>
+            <a href="#contact" class="cta-button secondary">Întreabă-mă oricând</a>
+        </div>
+    </section>
+
+    <!-- About -->
+    <section id="about">
+        <div class="container">
+            <h2>Cine sunt?</h2>
+            <p class="intro-text">
+                Nu sunt marketingul care promite rapi și rezultate. Sunt omul care știe cu cine să te conecteze și cum să-ți gestionez proiectul din A până la Z.
+            </p>
+            
+            <div class="philosophy">
+                <h3>🎯 Filosofia mea</h3>
+                <p>
+                    În industria escrow și project management, diferența între succes și eșec nu e disponibilitatea - e recomandarea și execuția. 
+                    Am văzut prea mulți oameni care au semnat cu "disponibili" și au pierdut bani sau termene.
+                </p>
+                <p style="margin-top: 1rem;">
+                    Eu nu vin cu o platformă care te conectează cu toți. Vin cu o rețea selectă de profesioniști pe care îi cunosc, 
+                    pe care îi verific, și pe care îi recomand doar dacă sunt sigur că vor face treabă bună.
+                </p>
+            </div>
+            
+            <div class="philosophy">
+                <h3>🤝 Ce fac eu?</h3>
+                <p>
+                    <strong>1. Matching:</strong> Aud ce ai nevoie și te conectez cu persoana/echipa potrivită din rețea.
+                </p>
+                <p style="margin-top: 0.5rem;">
+                    <strong>2. Project Management:</strong> Mă asigur că totul merge conform planului - comunicație, termene, calitate.
+                </p>
+                <p style="margin-top: 0.5rem;">
+                    <strong>3. Advisory:</strong> Consult la orice pas - legal, financiar, operațional - ce crezi că îți trebuie.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services -->
+    <section id="services">
+        <div class="container">
+            <h2>Ce Servicii Oferesc?</h2>
+            <p class="intro-text">
+                Flexibilitate totală. Orice ai nevoie - atata timp cât pot să ajut.
+            </p>
+            
+            <div class="services-grid">
+                <div class="service-card">
+                    <h3>💼 Escrow & Intermediație</h3>
+                    <p>
+                        Gestionez tranzacții imobiliare în SUA. De la acordare până la closing, 
+                        mă asigur că ambele părți sunt protejate și toate documentele sunt corecte.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>🔗 Matching Profesional</h3>
+                    <p>
+                        Ai nevoie de avocat? Contractor? Accountant? Inspector imobiliar? 
+                        Te conectez cu oameni pe care îi cunosc și pe care îi verific.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>📋 Project Management</h3>
+                    <p>
+                        Mă ocup de timeline, comunicație, coordonare între toți stakeholderii. 
+                        Tu vei ști exact ce se întâmplă și când.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>🎓 Advisory & Consultanță</h3>
+                    <p>
+                        Întrebări despre proces? Neliniști despre contract? Vreau să înțeleg detaliile? 
+                        Răspund oricând.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>🌐 Rezolvă Problemele</h3>
+                    <p>
+                        Ceva nu merge? Drum lung, blocaj legal, conflict între părti? 
+                        Mă ocup de rezolvare - problema mea devine.
+                    </p>
+                </div>
+                
+                <div class="service-card">
+                    <h3>📞 Distanță - No Problem</h3>
+                    <p>
+                        Ești în România, eu sunt în SUA. Zoom, apel, WhatsApp - oricând, 
+                        orice oră, îți răspund și îți mă ocup.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Process -->
+    <section id="process">
+        <div class="container">
+            <h2>Cum Lucrez?</h2>
+            <p class="intro-text">
+                Proces simplu, transparent, fără surprize.
+            </p>
+            
+            <div class="process-timeline">
+                <div class="process-step" data-step="1">
+                    <h3>Consultație</h3>
+                    <p>
+                        Tu îmi spui ce ai nevoie. Discutăm detalii, budget, timeline, așteptări. 
+                        Eu ascult și înțeleg total situația.
+                    </p>
+                </div>
+                
+                <div class="process-step" data-step="2">
+                    <h3>Matching</h3>
+                    <p>
+                        Caut din rețeaua mea persoana/echipa potrivită. Te fac prezentări cu 
+                        recomandare personală.
+                    </p>
+                </div>
+                
+                <div class="process-step" data-step="3">
+                    <h3>Execuție</h3>
+                    <p>
+                        Suntem toți în aceeași echipă. Mă ocup de coordonare, comunicație, 
+                        termene și calitate.
+                    </p>
+                </div>
+                
+                <div class="process-step" data-step="4">
+                    <h3>Încheiare</h3>
+                    <p>
+                        Proiect terminat corect. Toate documentele în regulă. 
+                        Tu ești mulțumit, toți sunt mulțumiți.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why Claudiu -->
+    <section id="why-claudiu">
+        <div class="container">
+            <h2>De ce eu?</h2>
+            <p class="intro-text">
+                Diferența e în detalii și relații. Evo ce nu găsești la alții:
+            </p>
+            
+            <div class="trust-factors">
+                <div class="trust-factor">
+                    <h3>✓ Recomandări, Nu Marketing</h3>
+                    <p>
+                        Nu mă găsești pe Facebook promițând miracole. Te vine recomandare 
+                        de la cineva pe care-l cunoști.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Rețea Selectă</h3>
+                    <p>
+                        Nu lucrez cu toți. Lucrez cu oameni pe care îi verific și pe care 
+                        îi recomand cu încredere.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Transparență Totală</h3>
+                    <p>
+                        Ție îți spun adevărul - chiar dacă nu e ce vrei să auzi. 
+                        Fără false promisiuni.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Responsabilitate</h3>
+                    <p>
+                        Dacă ceva nu merge, e problema mea. Mă ocup de rezolvare. 
+                        Nu dispar după ce iau plata.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Dostoynost (Dignitate)</h3>
+                    <p>
+                        Lucrez pe bază de respect și reputație. Pentru mine, 
+                        o referință bună = 1000 de reclame.
+                    </p>
+                </div>
+                
+                <div class="trust-factor">
+                    <h3>✓ Oricând Disponibil</h3>
+                    <p>
+                        Apel la 2 AM? Chat la 11 PM? Apare problemă pe weekend? 
+                        Sunt acolo.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section id="testimonials">
+        <div class="container">
+            <h2>Ce Spun Clienții?</h2>
+            <p class="intro-text">
+                Oameni cu care am lucrat și care sunt mulțumiți.
+            </p>
+            
+            <div class="testimonials-grid">
+                <div class="testimonial">
+                    <p>
+                        "Claudiu mi-a găsit avocatul perfect pentru tranzacție mea. 
+                        Nu m-a conectat cu oricine - a făcut recomandare personală. 
+                        Totul a ieșit perfect în termen."
+                    </p>
+                    <div class="author">— Adrian M., Texas</div>
+                </div>
+                
+                <div class="testimonial">
+                    <p>
+                        "Aveam o problemă cu documentele la closing. Oricine altcineva ar fi spus 
+                        'nu-i treaba mea'. Claudiu s-a ocupat și a rezolvat în 48 de ore."
+                    </p>
+                    <div class="author">— Maria T., California</div>
+                </div>
+                
+                <div class="testimonial">
+                    <p>
+                        "Nu-i marketing, e trust. Claudiu vorbește adevărul chiar și când nu-ți place. 
+                        Asta e ce-mi place la el - nu mă minte."
+                    </p>
+                    <div class="author">— Ion G., Florida</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact -->
+    <section id="contact">
+        <div class="container">
+            <h2>Ce ai nevoie?</h2>
+            <p class="intro-text" style="color: white; opacity: 0.9;">
+                Cea mai simplă cale - contactează-mă direct. Spune-mi ce-ți trebuie și facem de acolo.
+            </p>
+            
+            <div class="contact-methods">
+                <div class="contact-method">
+                    <h3>📞 Apel / WhatsApp</h3>
+                    <p>
+                        Cel mai rapid. Apelează sau WhatsApp oricând.
+                        <br><br>
+                        <a href="tel:+14155551234">+1 (415) 555-1234</a>
+                    </p>
+                </div>
+                
+                <div class="contact-method">
+                    <h3>💬 Zoom / Video Call</h3>
+                    <p>
+                        Vrei să discutăm detalii? Scheduler de apă zoom.
+                        <br><br>
+                        <a href="mailto:claudiu@vladau.com">Scheduler Zoom</a>
+                    </p>
+                </div>
+                
+                <div class="contact-method">
+                    <h3>📧 Email</h3>
+                    <p>
+                        Pentru documente sau follow-up.
+                        <br><br>
+                        <a href="mailto:claudiu@vladau.com">claudiu@vladau.com</a>
+                    </p>
+                </div>
+            </div>
+            
+            <div style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.2);">
+                <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">
+                    <strong>Răspund în 24h.</strong>
+                </p>
+                <p style="opacity: 0.9;">
+                    Oricând, oricunde, orice problemă - sunt aici.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 Claudiu Vladau | Specialist Escrow & Project Management</p>
+            <p style="margin-top: 0.5rem; opacity: 0.7;">Bazat pe recomandări. Construit pe încredere.</p>
+        </div>
+    </footer>
+</body>
+</html>

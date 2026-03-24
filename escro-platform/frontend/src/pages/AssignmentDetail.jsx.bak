@@ -1,0 +1,880 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import { contractAPI } from '../services/api';
+
+const formatMessageDate = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const isYesterday = new Date(now - 86400000).toDateString() === date.toDateString();
+  if (isToday) return date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  if (isYesterday) return 'Ieri ' + date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleDateString('ro-RO', { day: '2-digit', month: '2-digit' }) + ' ' + date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+};
+
+export default function AssignmentDetail() {
+  const { taskId, assignmentId } = useParams();
+  const { user: authUser } = useAuth();
+  const navigate = useNavigate();
+  const [assignment, setAssignment] = useState(null);
+  const [milestones, setMilestones] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [activeTab, setActiveTab] = useState('details');
+  const [contracts, setContracts] = useState([]);
+  const [workflowStatus, setWorkflowStatus] = useState(null);
+  const messagesEndRef = useRef(null);
+  const [currentUser, setCurrentUser] = useState(authUser);
+
+  const user = currentUser;
+
+  console.log('[AssignmentDetail] taskId:', taskId, 'assignmentId:', assignmentId);
+
+  useEffect(() => {
+    if (!authUser) {
+      const fetchUser = async () => {
+        try {
+          const response = await axios.get('/api/auth/me', {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          setCurrentUser(response.data.user);
+        } catch (err) {
+          console.error('Failed to fetch user:', err);
+        }
+      };
+      fetchUser();
+    } else {
+      setCurrentUser(authUser);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    fetchAssignmentDetails();
+  }, [taskId, assignmentId]);
+
+  useEffect(() => {
+    if (activeTab === 'chat') fetchMessages();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const fetchMessages = async () => {
+    try {
+      const response = await axios.get(`/api/projects/${assignmentId}/messages`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setMessages(response.data.messages || response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch messages:', err);
+    }
+  };
+
+  const fetchAssignmentDetails = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`/api/tasks/${taskId}/assignments/${assignmentId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setAssignment(response.data.assignment);
+      setMilestones(response.data.milestones || []);
+    } catch (err) {
+      setError('Nu s-au putut încărca detaliile asignării');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchContracts = async () => {
+    try {
+      const response = await contractAPI.getProjectContracts(assignmentId);
+      setContracts(response.data.contracts || []);
+      const workflowResponse = await contractAPI.getWorkflowStatus(assignmentId);
+      setWorkflowStatus(workflowResponse.data.workflow);
+    } catch (err) {
+      console.error('Failed to fetch contracts:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (assignmentId) fetchContracts();
+  }, [assignmentId]);
+
+  const handleAcceptContract = async (contractId) => {
+    try {
+      await contractAPI.acceptContract(contractId);
+      setSuccess('Ai acceptat contractul!');
+      fetchContracts();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to accept contract');
+    }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !assignment) return;
+    const recipientId = assignment.expert_id || assignment.company_id || assignment.client_id;
+    if (!recipientId) {
+      setError('Nu există destinatar');
+      return;
+    }
+    try {
+      await axios.post('/api/messages', {
+        project_id: assignmentId,
+        content: newMessage,
+        recipient_id: recipientId
+      }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      setNewMessage('');
+      fetchMessages();
+    } catch (err) {
+      setError('Failed to send message');
+    }
+  };
+
+  const getMilestoneStatus = (status) => {
+    const colors = { pending: '#ffc107', in_progress: '#17a2b8', delivered: '#28a745', approved: '#20c997', disputed: '#dc3545', released: '#6f42c1' };
+    return colors[status] || '#6c757d';
+  };
+
+  const getStatusBgColor = (status) => {
+    const bgColors = { pending: '#fff3cd', in_progress: '#cfe2ff', delivered: '#d1e7dd', approved: '#a8e6cf', disputed: '#f8d7da', released: '#e2d9f3' };
+    return bgColors[status] || '#f8f9fa';
+  };
+
+  const getStatusLabel = (status) => {
+    const labels = { pending: 'În așteptare', in_progress: 'În Lucru', delivered: 'Livrat', approved: 'Aprobat', disputed: 'Dispută', released: 'Eliberat' };
+    return labels[status] || status;
+  };
+
+  const getStatusIcon = (status) => {
+    const icons = { pending: '⏳', in_progress: '🔄', delivered: '📤', approved: '✅', disputed: '⚠️', released: '💰' };
+    return icons[status] || '❓';
+  };
+
+  const styles = {
+    container: { 
+      padding: '2rem', 
+      maxWidth: '1400px', 
+      margin: '0 auto', 
+      fontFamily: "'Inter', -apple-system, sans-serif", 
+      backgroundColor: '#f8fafc', 
+      minHeight: '100vh' 
+    },
+    header: { 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      marginBottom: '2rem' 
+    },
+    backButton: { 
+      padding: '0.75rem 1.5rem', 
+      backgroundColor: 'white', 
+      color: '#4b5563', 
+      border: '1px solid #e5e7eb', 
+      borderRadius: '12px', 
+      cursor: 'pointer', 
+      fontWeight: '600', 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '0.5rem',
+      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+      transition: 'all 0.2s ease'
+    },
+    alert: { 
+      padding: '1rem 1.25rem', 
+      borderRadius: '12px', 
+      marginBottom: '1.5rem', 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '0.75rem' 
+    },
+    alertError: { 
+      backgroundColor: '#fef2f2', 
+      color: '#dc2626', 
+      border: '1px solid #fecaca' 
+    },
+    alertSuccess: { 
+      backgroundColor: '#f0fdf4', 
+      color: '#16a34a', 
+      border: '1px solid #bbf7d0' 
+    },
+    tabs: { 
+      display: 'flex', 
+      gap: '0.5rem', 
+      marginBottom: '2rem',
+      backgroundColor: 'white',
+      padding: '0.5rem',
+      borderRadius: '16px',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+    },
+    tab: { 
+      padding: '0.875rem 1.5rem', 
+      backgroundColor: 'transparent', 
+      color: '#6b7280', 
+      border: 'none', 
+      cursor: 'pointer', 
+      fontWeight: '600', 
+      borderRadius: '12px',
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '0.5rem',
+      transition: 'all 0.2s ease'
+    },
+    tabActive: { 
+      backgroundColor: '#3b82f6', 
+      color: 'white',
+      boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' 
+    },
+    card: { 
+      backgroundColor: 'white', 
+      borderRadius: '20px', 
+      padding: '2rem', 
+      marginBottom: '1.5rem', 
+      boxShadow: '0 4px 20px rgba(0,0,0,0.06)', 
+      border: '1px solid #f1f5f9' 
+    },
+    cardHeader: { 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      marginBottom: '1.5rem',
+      paddingBottom: '1rem',
+      borderBottom: '1px solid #f1f5f9'
+    },
+    cardTitle: { 
+      margin: 0, 
+      fontSize: '1.35rem', 
+      fontWeight: '700', 
+      color: '#1e293b' 
+    },
+    button: { 
+      padding: '0.75rem 1.5rem', 
+      borderRadius: '12px', 
+      cursor: 'pointer', 
+      fontWeight: '600', 
+      border: 'none', 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '0.5rem',
+      transition: 'all 0.2s ease'
+    },
+    buttonPrimary: { 
+      backgroundColor: '#3b82f6', 
+      color: 'white',
+      boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+    },
+    buttonSuccess: { 
+      backgroundColor: '#22c55e', 
+      color: 'white',
+      boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)'
+    },
+    labelSmall: { 
+      display: 'block', 
+      marginBottom: '0.5rem', 
+      fontWeight: '600', 
+      color: '#9ca3af', 
+      fontSize: '0.75rem', 
+      textTransform: 'uppercase', 
+      letterSpacing: '0.05em' 
+    },
+    grid2: { 
+      display: 'grid', 
+      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+      gap: '1.5rem' 
+    },
+    statCard: { 
+      backgroundColor: '#f8fafc', 
+      padding: '1.5rem', 
+      borderRadius: '16px',
+      border: '1px solid #f1f5f9',
+      transition: 'all 0.2s ease'
+    },
+    statValue: { 
+      fontSize: '1.75rem', 
+      fontWeight: '700', 
+      margin: '0.25rem 0' 
+    },
+    statLabel: { 
+      fontSize: '0.85rem', 
+      color: '#64748b', 
+      fontWeight: '500' 
+    },
+    badge: { 
+      display: 'inline-flex', 
+      alignItems: 'center', 
+      gap: '0.35rem', 
+      padding: '0.4rem 0.85rem', 
+      borderRadius: '99px', 
+      fontWeight: '600', 
+      fontSize: '0.85rem' 
+    },
+    milestoneCard: { 
+      padding: '1.5rem', 
+      borderRadius: '16px', 
+      marginBottom: '1rem', 
+      border: '1px solid',
+      transition: 'all 0.2s ease'
+    },
+    chatContainer: { 
+      border: '1px solid #e5e7eb', 
+      borderRadius: '20px', 
+      height: '600px', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      backgroundColor: 'white', 
+      overflow: 'hidden',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.06)'
+    },
+    chatMessages: { 
+      flex: 1, 
+      overflowY: 'auto', 
+      padding: '1.5rem', 
+      backgroundColor: '#f9fafb' 
+    },
+    chatInput: { 
+      display: 'flex', 
+      padding: '1rem', 
+      borderTop: '1px solid #e5e7eb', 
+      backgroundColor: 'white', 
+      gap: '0.75rem' 
+    },
+    chatInputField: { 
+      flex: 1, 
+      padding: '0.875rem 1rem', 
+      borderRadius: '12px', 
+      border: '1px solid #e5e7eb', 
+      fontSize: '1rem', 
+      outline: 'none',
+      transition: 'all 0.2s ease'
+    },
+    partyCard: { 
+      padding: '1.75rem', 
+      borderRadius: '16px',
+      border: '1px solid #f1f5f9',
+      backgroundColor: '#fafbfc',
+      transition: 'all 0.2s ease'
+    },
+    sectionTitle: { 
+      fontSize: '1.25rem', 
+      fontWeight: '700', 
+      color: '#1e293b',
+      marginBottom: '1.25rem'
+    },
+    text: { 
+      fontSize: '1rem', 
+      color: '#475569', 
+      lineHeight: '1.7' 
+    },
+    link: { 
+      color: '#3b82f6', 
+      textDecoration: 'none', 
+      fontWeight: '600',
+      transition: 'color 0.2s ease'
+    },
+    totalBox: { 
+      marginTop: '1.5rem', 
+      padding: '1.25rem', 
+      backgroundColor: '#f0fdf4', 
+      borderRadius: '12px', 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      border: '1px solid #bbf7d0' 
+    },
+    progressBar: {
+      height: '8px',
+      backgroundColor: '#e5e7eb',
+      borderRadius: '99px',
+      overflow: 'hidden',
+      marginTop: '0.5rem'
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: '99px',
+      transition: 'width 0.3s ease'
+    },
+    infoCard: {
+      padding: '1.25rem',
+      borderRadius: '12px',
+      border: '1px solid'
+    }
+  };
+
+  const getProjectStatusColor = (status) => {
+    const colors = { open: '#0891b2', assigned: '#8b5cf6', in_progress: '#3b82f6', completed: '#22c55e' };
+    return colors[status] || '#6b7280';
+  };
+
+  const getProjectStatusLabel = (status) => {
+    const labels = { open: 'Deschis', assigned: 'Asignat', in_progress: 'În Lucru', completed: 'Finalizat' };
+    return labels[status] || status;
+  };
+
+  if (loading) return <div style={{...styles.container, display: 'flex', justifyContent: 'center', alignItems: 'center'}}><div><h2 style={{color: '#3b82f6'}}>Se încarcă...</h2></div></div>;
+  if (!assignment) return <div style={{...styles.container, padding: '4rem', textAlign: 'center'}}><div style={styles.card}><h2 style={{color: '#ef4444'}}>Asignare negăsită</h2><button onClick={() => navigate(-1)} style={{...styles.button, ...styles.buttonPrimary, margin: '0 auto'}}>← Înapoi</button></div></div>;
+
+  const isParty1 = user?.id === (assignment?.expert_id || assignment?.company_id);
+  const isParty2 = user?.id === assignment?.client_id;
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <button onClick={() => navigate(`/task/${taskId}`)} style={styles.backButton}>← Înapoi la Task</button>
+      </div>
+
+      {error && <div style={{...styles.alert, ...styles.alertError}}><span style={{flex: 1}}>{error}</span><button onClick={() => setError('')} style={{border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626'}}>✕</button></div>}
+      {success && <div style={{...styles.alert, ...styles.alertSuccess}}><span style={{flex: 1}}>{success}</span><button onClick={() => setSuccess('')} style={{border: 'none', background: 'none', cursor: 'pointer', color: '#16a34a'}}>✕</button></div>}
+
+      <div style={styles.tabs}>
+        {['details', ...(user && (isParty1 || isParty2) ? ['chat', 'contracts'] : [])].map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{...styles.tab, ...(activeTab === tab ? styles.tabActive : {})}}>
+            {tab === 'details' && '📋 Detalii'} {tab === 'chat' && '💬 Chat'} {tab === 'contracts' && '📜 Contracte'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'details' && (
+        <div>
+          <div style={styles.card}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #f1f5f9'}}>
+              <div>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: '99px',
+                  fontWeight: '600',
+                  fontSize: '0.8rem',
+                  backgroundColor: assignment.status === 'completed' ? '#dcfce7' : 
+                                 assignment.status === 'in_progress' ? '#dbeafe' : '#fef3c7',
+                  color: assignment.status === 'completed' ? '#16a34a' : 
+                        assignment.status === 'in_progress' ? '#1d4ed8' : '#d97706',
+                  marginBottom: '1rem'
+                }}>
+                  {assignment.status === 'completed' ? '✓ Finalizat' : 
+                   assignment.status === 'in_progress' ? '🔄 În Lucru' : '⏳ În Așteptare'}
+                </span>
+                <h2 style={{margin: 0, fontSize: '1.75rem', fontWeight: '700', color: '#1f2937', lineHeight: '1.3'}}>{assignment.title}</h2>
+              </div>
+            </div>
+            
+            <p style={{...styles.text, fontSize: '1.05rem', marginBottom: '2rem', color: '#4b5563'}}>{assignment.description}</p>
+            
+            <div style={styles.grid2}>
+              <div style={{...styles.statCard, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0'}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'}}>
+                  <span style={{fontSize: '1.5rem'}}>💰</span>
+                  <span style={{...styles.statLabel, color: '#16a34a'}}>BUGET</span>
+                </div>
+                <p style={{...styles.statValue, color: '#16a34a', margin: 0, fontSize: '2rem'}}>{assignment.budget_ron.toLocaleString()} <span style={{fontSize: '1rem', fontWeight: '500'}}>RON</span></p>
+              </div>
+              <div style={{...styles.statCard, backgroundColor: '#f0f9ff', border: '1px solid #bae6fd'}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'}}>
+                  <span style={{fontSize: '1.5rem'}}>⏱️</span>
+                  <span style={{...styles.statLabel, color: '#0369a1'}}>TERMEN</span>
+                </div>
+                <p style={{...styles.statValue, color: '#0284c7', margin: 0, fontSize: '2rem'}}>{assignment.timeline_days} <span style={{fontSize: '1rem', fontWeight: '500'}}>zile</span></p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem'}}>
+            <div style={{...styles.partyCard, borderTop: '4px solid #3b82f6'}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem'}}>
+                <div style={{width: '40px', height: '40px', borderRadius: '12px', backgroundColor: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem'}}>👤</div>
+                <h4 style={{margin: 0, fontSize: '1rem', fontWeight: '700', color: '#1e40af'}}>Beneficiar</h4>
+              </div>
+              {assignment.client_name && (
+                <div>
+                  <p style={{margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#1f2937'}}>{assignment.client_name}</p>
+                  <Link to={`/profile/${assignment.client_id}`} style={{...styles.link, fontSize: '0.9rem', marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem'}}>Vezi profil →</Link>
+                </div>
+              )}
+            </div>
+            <div style={{...styles.partyCard, borderTop: '4px solid #22c55e'}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem'}}>
+                <div style={{width: '40px', height: '40px', borderRadius: '12px', backgroundColor: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem'}}>👨‍💻</div>
+                <h4 style={{margin: 0, fontSize: '1rem', fontWeight: '700', color: '#047857'}}>Prestator</h4>
+              </div>
+              {assignment.expert_id ? (
+                assignment.expert_name && (
+                  <div>
+                    <p style={{margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#1f2937'}}>{assignment.expert_name}</p>
+                    <Link to={`/profile/${assignment.expert_id}`} style={{...styles.link, fontSize: '0.9rem', marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem'}}>Vezi profil →</Link>
+                  </div>
+                )
+              ) : assignment.company_id ? (
+                assignment.company_name_full && (
+                  <div>
+                    <p style={{margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#1f2937'}}>{assignment.company_name_full}</p>
+                    <Link to={`/profile/${assignment.company_id}`} style={{...styles.link, fontSize: '0.9rem', marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem'}}>Vezi profil →</Link>
+                  </div>
+                )
+              ) : (
+                <p style={{color: '#9ca3af', fontStyle: 'italic'}}>⏳ În căutare de prestator...</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'details' && (
+        <>
+          <div style={styles.card}>
+            <h3 style={{...styles.sectionTitle, marginBottom: '1.5rem'}}>🎯 Milestones</h3>
+            {!milestones || milestones.length === 0 ? (
+              <div style={{textAlign: 'center', padding: '3rem', color: '#9ca3af'}}>
+                <span style={{fontSize: '3rem', display: 'block', marginBottom: '1rem'}}>📋</span>
+                <p>Nu există milestones pentru acest proiect.</p>
+              </div>
+            ) : (
+              <div>
+                {milestones.map((milestone, index) => {
+                  const progress = milestone.status === 'approved' ? 100 : 
+                                   milestone.status === 'delivered' ? 75 : 
+                                   milestone.status === 'in_progress' ? 50 : 0;
+                  return (
+                    <div 
+                      key={milestone.id} 
+                      style={{
+                        ...styles.milestoneCard, 
+                        backgroundColor: milestone.status === 'approved' ? '#f0fdf4' : 
+                                       milestone.status === 'delivered' ? '#eff6ff' : 
+                                       milestone.status === 'in_progress' ? '#fffbeb' : '#fafafa',
+                        borderColor: milestone.status === 'approved' ? '#bbf7d0' : 
+                                   milestone.status === 'delivered' ? '#bfdbfe' : 
+                                   milestone.status === 'in_progress' ? '#fef3c7' : '#f3f4f6'
+                      }}
+                    >
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem'}}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                          <div style={{
+                            width: '40px', 
+                            height: '40px', 
+                            borderRadius: '12px', 
+                            backgroundColor: milestone.status === 'approved' ? '#22c55e' : 
+                                           milestone.status === 'delivered' ? '#0ea5e9' : 
+                                           milestone.status === 'in_progress' ? '#f59e0b' : '#e5e7eb',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontWeight: '700',
+                            fontSize: '1rem'
+                          }}>
+                            {milestone.status === 'approved' ? '✓' : 
+                             milestone.status === 'delivered' ? '📤' : 
+                             milestone.status === 'in_progress' ? '🔄' : index + 1}
+                          </div>
+                          <div>
+                            <strong style={{fontSize: '1.1rem', color: '#1f2937', display: 'block'}}>{milestone.title}</strong>
+                            <span style={{fontSize: '0.85rem', color: '#6b7280'}}>{milestone.deliverable_description?.substring(0, 60) || 'Fără descriere'}...</span>
+                          </div>
+                        </div>
+                        <div style={{textAlign: 'right'}}>
+                          <span style={{fontWeight: '700', color: '#059669', fontSize: '1.25rem'}}>{milestone.amount_ron} RON</span>
+                          <div style={{fontSize: '0.8rem', color: '#9ca3af'}}>{milestone.percentage_of_budget}%</div>
+                        </div>
+                      </div>
+                      
+                      <div style={{marginBottom: '0.75rem'}}>
+                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem'}}>
+                          <span style={{fontSize: '0.85rem', color: '#6b7280', fontWeight: '500'}}>Progres</span>
+                          <span style={{fontSize: '0.85rem', color: '#6b7280', fontWeight: '600'}}>{progress}%</span>
+                        </div>
+                        <div style={styles.progressBar}>
+                          <div style={{...styles.progressFill, width: `${progress}%`, backgroundColor: milestone.status === 'approved' ? '#22c55e' : milestone.status === 'delivered' ? '#0ea5e9' : milestone.status === 'in_progress' ? '#f59e0b' : '#e5e7eb'}} />
+                        </div>
+                      </div>
+                      
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.35rem 0.75rem',
+                          borderRadius: '99px',
+                          fontWeight: '600',
+                          fontSize: '0.8rem',
+                          backgroundColor: milestone.status === 'approved' ? '#dcfce7' : 
+                                         milestone.status === 'delivered' ? '#dbeafe' : 
+                                         milestone.status === 'in_progress' ? '#fef3c7' : '#f3f4f6',
+                          color: milestone.status === 'approved' ? '#16a34a' : 
+                                milestone.status === 'delivered' ? '#1d4ed8' : 
+                                milestone.status === 'in_progress' ? '#d97706' : '#6b7280'
+                        }}>
+                          {milestone.status === 'approved' ? '✓ Aprobat' : 
+                           milestone.status === 'delivered' ? '📤 Livrat' : 
+                           milestone.status === 'in_progress' ? '🔄 În Lucru' : '⏳ În Așteptare'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {milestones.length > 0 && (
+                  <div style={styles.totalBox}>
+                    <div>
+                      <span style={{fontWeight: '700', fontSize: '1rem', color: '#374151'}}>Total Buget</span>
+                      <div style={{fontSize: '0.85rem', color: '#6b7280', marginTop: '0.25rem'}}>{milestones.length} milestone-uri</div>
+                    </div>
+                    <span style={{fontWeight: '700', fontSize: '1.5rem', color: '#059669'}}>
+                      {milestones.reduce((sum, m) => sum + (parseFloat(m.amount_ron) || 0), 0).toLocaleString()} RON
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === 'chat' && (
+        <div>
+          <h3 style={{...styles.sectionTitle, marginBottom: '1.5rem'}}>💬 Chat</h3>
+          <div style={styles.chatContainer}>
+            <div style={styles.chatMessages}>
+              {messages.length === 0 ? <p style={{textAlign: 'center', color: '#64748b', padding: '2rem'}}>Nu există mesaje.</p> : messages.map((msg, i) => (
+                <div key={i} style={{display: 'flex', flexDirection: 'column', alignItems: msg.sender_id === user?.id ? 'flex-end' : 'flex-start', marginBottom: '1rem'}}>
+                  <div style={{maxWidth: '70%', padding: '1rem 1.25rem', backgroundColor: msg.sender_id === user?.id ? '#3b82f6' : 'white', color: msg.sender_id === user?.id ? 'white' : '#1e293b', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: msg.sender_id === user?.id ? 'none' : '1px solid #e2e8f0'}}>{msg.content}</div>
+                  <small style={{color: '#94a3b8', marginTop: '0.4rem', fontSize: '0.8rem'}}>{formatMessageDate(msg.created_at)}</small>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+            <form onSubmit={handleSendMessage} style={styles.chatInput}>
+              <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Scrie un mesaj..." style={styles.chatInputField} />
+              <button type="submit" style={{...styles.button, ...styles.buttonPrimary}}>Trimite</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'contracts' && (
+        <div>
+          <h2 style={{...styles.sectionTitle, marginBottom: '1.5rem'}}>📜 Contracte</h2>
+          
+          {!workflowStatus?.projectContract ? (
+            <div style={{...styles.card, textAlign: 'center', padding: '3rem'}}>
+              <div style={{fontSize: '4rem', marginBottom: '1.5rem'}}>📄</div>
+              <h3 style={{margin: '0 0 1rem 0', fontSize: '1.25rem', color: '#374151'}}>Începe colaborarea</h3>
+              <p style={{color: '#6b7280', marginBottom: '1.5rem'}}>Pentru a începe colaborarea cu acest proiect, trebuie creat și semnat contractul.</p>
+              {user && (isParty1 || isParty2) && (
+                <button 
+                  onClick={async () => { 
+                    try { 
+                      await contractAPI.createProjectContract({project_id: assignmentId}); 
+                      setSuccess('Contract creat!'); 
+                      fetchContracts(); 
+                    } catch (err) { 
+                      setError(err.response?.data?.error || 'Eroare'); 
+                    }
+                  }} 
+                  style={{...styles.button, ...styles.buttonPrimary, padding: '1rem 2rem', fontSize: '1rem'}}
+                >
+                  ✅ Creează Contract
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div style={styles.card}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                    <div style={{width: '48px', height: '48px', borderRadius: '12px', backgroundColor: workflowStatus.projectContract.status === 'accepted' ? '#dcfce7' : '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                      <span style={{fontSize: '1.5rem'}}>{workflowStatus.projectContract.status === 'accepted' ? '✓' : '📄'}</span>
+                    </div>
+                    <div>
+                      <h3 style={{margin: 0, fontSize: '1.2rem', fontWeight: '700', color: '#1f2937'}}>Contract de Colaborare</h3>
+                      <p style={{margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#6b7280'}}>Nr. {workflowStatus.projectContract.contract_number || 'draft'}</p>
+                    </div>
+                  </div>
+                  <span style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: '99px',
+                    fontSize: '0.85rem',
+                    fontWeight: '600',
+                    backgroundColor: workflowStatus.projectContract.status === 'accepted' ? '#dcfce7' : '#fef3c7',
+                    color: workflowStatus.projectContract.status === 'accepted' ? '#16a34a' : '#d97706'
+                  }}>
+                    {workflowStatus.projectContract.status === 'accepted' ? '✓ Semnat de ambele părți' : '⏳ În așteptare'}
+                  </span>
+                </div>
+                
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem'}}>
+                  <div style={{padding: '1.25rem', backgroundColor: '#f0f9ff', borderRadius: '12px', border: '1px solid #bae6fd'}}>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem'}}>
+                      <div style={{width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>👤</div>
+                      <div>
+                        <p style={{margin: 0, fontSize: '0.75rem', color: '#0369a1', fontWeight: '600', textTransform: 'uppercase'}}>Prestator</p>
+                      </div>
+                    </div>
+                    <p style={{margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '600', color: '#1f2937'}}>{assignment?.expert_name || assignment?.company_name_full || 'N/A'}</p>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                      <span style={{width: '8px', height: '8px', borderRadius: '50%', backgroundColor: workflowStatus.projectContract.party1_accepted ? '#22c55e' : '#d1d5db'}}></span>
+                      <span style={{fontSize: '0.85rem', color: workflowStatus.projectContract.party1_accepted ? '#16a34a' : '#6b7280'}}>
+                        {workflowStatus.projectContract.party1_accepted ? '✓ Semnat' : '⏳ Așteptare semnătură'}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div style={{padding: '1.25rem', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0'}}>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem'}}>
+                      <div style={{width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>🏢</div>
+                      <div>
+                        <p style={{margin: 0, fontSize: '0.75rem', color: '#047857', fontWeight: '600', textTransform: 'uppercase'}}>Beneficiar</p>
+                      </div>
+                    </div>
+                    <p style={{margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '600', color: '#1f2937'}}>{assignment?.client_name || 'N/A'}</p>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                      <span style={{width: '8px', height: '8px', borderRadius: '50%', backgroundColor: workflowStatus.projectContract.party2_accepted ? '#22c55e' : '#d1d5db'}}></span>
+                      <span style={{fontSize: '0.85rem', color: workflowStatus.projectContract.party2_accepted ? '#16a34a' : '#6b7280'}}>
+                        {workflowStatus.projectContract.party2_accepted ? '✓ Semnat' : '⏳ Așteptare semnătură'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {workflowStatus.projectContract.status !== 'accepted' && (
+                  <div style={{padding: '1rem', backgroundColor: '#fffbeb', borderRadius: '12px', border: '1px solid #fef3c7', marginBottom: '1.5rem'}}>
+                    <p style={{margin: 0, fontSize: '0.9rem', color: '#92400e', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                      <span>⚠️</span> Ambele părți trebuie să semneze contractul pentru a continua cu milestone-urile.
+                    </p>
+                  </div>
+                )}
+
+                {user && (isParty1 || isParty2) && workflowStatus.projectContract.status !== 'accepted' && (
+                  <button 
+                    onClick={async () => { 
+                      try { 
+                        await contractAPI.acceptContract(workflowStatus.projectContract.id); 
+                        setSuccess('Ai semnat contractul!'); 
+                        fetchContracts(); 
+                      } catch (err) { 
+                        setError(err.response?.data?.error || 'Eroare'); 
+                      }
+                    }} 
+                    style={{...styles.button, ...styles.buttonPrimary, padding: '1rem 2rem', fontSize: '1rem'}}
+                  >
+                    ✍️ Semnează Contract
+                  </button>
+                )}
+
+                {workflowStatus.projectContract.status === 'accepted' && (
+                  <div style={{padding: '1rem', backgroundColor: '#dcfce7', borderRadius: '12px', border: '1px solid #bbf7d0'}}>
+                    <p style={{margin: 0, fontSize: '0.95rem', color: '#16a34a', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                      <span>✓</span> Contract semnat și activ! Toate milestone-urile pot fi gestionate.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+                        <div style={{ color: '#475569' }}><strong>Începere - Prestator:</strong> {m.party1_approved ? '✓ Semnat' : '⏳ Nesemnat'}</div>
+                        <div style={{ color: '#475569' }}><strong>Începere - Beneficiar:</strong> {m.party2_approved ? '✓ Semnat' : '⏳ Nesemnat'}</div>
+                      </div>
+                    )}
+
+                    {canSignStart && !hasUserSignedStart && user && (
+                      <div style={{ marginTop: '1rem' }}>
+                        <button onClick={async () => { 
+                          try { 
+                            await contractAPI.signMilestoneStart({ project_id: assignmentId, milestone_id: milestone.id }); 
+                            setSuccess('Ai semnat pentru începerea milestone-ului!'); 
+                            fetchContracts(); 
+                          } catch (err) { 
+                            setError(err.response?.data?.error || 'Eroare'); 
+                          } 
+                        }} style={{...styles.button, ...styles.buttonPrimary, padding: '0.75rem 1.25rem'}}>✍️ Semnează Începere</button>
+                      </div>
+                    )}
+
+                    {isInProgress && isParty1 && !isDelivered && (
+                      <div style={{ marginTop: '1.25rem', padding: '1.25rem', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                        <p style={{ margin: '0 0 1rem 0', fontWeight: '600', color: '#1e293b', fontSize: '1rem' }}>📤 Încarcă Materialele Livrabile</p>
+                        <input 
+                          type="text" 
+                          placeholder="Link către materiale (Google Drive, Dropbox, etc.)" 
+                          id={`deliverable-${milestone.id}`}
+                          style={{ width: '100%', padding: '0.875rem 1rem', borderRadius: '10px', border: '2px solid #e2e8f0', marginBottom: '0.75rem', fontSize: '1rem', outline: 'none' }}
+                        />
+                        <button onClick={async () => { 
+                          const link = document.getElementById(`deliverable-${milestone.id}`).value;
+                          if (!link) { setError('Introdu un link'); return; }
+                          try { 
+                            await contractAPI.deliverMilestone({ project_id: assignmentId, milestone_id: milestone.id, deliverable_url: link }); 
+                            setSuccess('Materiale încărcate!'); 
+                            fetchContracts(); 
+                          } catch (err) { setError(err.response?.data?.error || 'Eroare'); } 
+                        }} style={{...styles.button, ...styles.buttonPrimary, padding: '0.75rem 1.25rem', backgroundColor: '#0891b2'}}>📤 Încarcă Materiale</button>
+                      </div>
+                    )}
+
+                    {isDelivered && (
+                      <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#eff6ff', borderRadius: '10px', fontSize: '0.95rem', border: '1px solid #bfdbfe' }}>
+                        📤 Materiale încărcate, în așteptare pentru aprobare
+                      </div>
+                    )}
+
+                    {isDelivered && isParty2 && !isApproved && (
+                      <div style={{ marginTop: '1rem' }}>
+                        <button onClick={async () => { 
+                          try { 
+                            await contractAPI.approveMilestone({ project_id: assignmentId, milestone_id: milestone.id }); 
+                            setSuccess('Milestone aprobat!'); 
+                            fetchContracts(); 
+                          } catch (err) { setError(err.response?.data?.error || 'Eroare'); } 
+                        }} style={{...styles.button, ...styles.buttonSuccess, padding: '0.75rem 1.25rem'}}>✅ Aprobă și Eliberează Bani</button>
+                      </div>
+                    )}
+
+                    {isApproved && (
+                      <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#dcfce7', borderRadius: '10px', fontSize: '0.95rem', border: '1px solid #bbf7d0' }}>
+                        ✅ Aprobat - Banii au fost eliberați
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          </>
+          )}
+
+          {workflowStatus?.projectContract?.status === 'accepted' && workflowStatus?.milestones?.every(m => m.status === 'approved') && (
+            <div style={{...styles.card, marginBottom: '2rem'}}>
+              <h3 style={{...styles.sectionTitle, marginBottom: '1.25rem'}}>🏁 Finalizare Proiect</h3>
+              <div style={{ padding: '1.5rem', backgroundColor: '#dcfce7', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                <p style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', fontWeight: '600', color: '#166534' }}>🎉 Toate milestone-urile sunt finalizate!</p>
+                {!workflowStatus?.finalContract ? (
+                  <button onClick={async () => { try { await contractAPI.createFinalContract({ project_id: assignmentId }); setSuccess('Contract de finalizare creat!'); fetchContracts(); } catch (err) { setError(err.response?.data?.error || 'Eroare'); } }} style={{...styles.button, ...styles.buttonSuccess, padding: '0.875rem 1.5rem'}}>📝 Creează Contract de Finalizare</button>
+                ) : workflowStatus.finalContract.status !== 'accepted' ? (
+                  <div>
+                    <div style={{ display: 'flex', gap: '2rem', marginBottom: '1.25rem', fontSize: '0.95rem' }}>
+                      <div style={{ color: '#166534' }}><strong>Prestator:</strong> {workflowStatus.finalContract.party1_accepted ? '✓ Semnat' : '⏳ Nesemnat'}</div>
+                      <div style={{ color: '#166534' }}><strong>Beneficiar:</strong> {workflowStatus.finalContract.party2_accepted ? '✓ Semnat' : '⏳ Nesemnat'}</div>
+                    </div>
+                    {user && (isParty1 || isParty2) && (
+                      <button onClick={async () => { try { await contractAPI.acceptContract(workflowStatus.finalContract.id); setSuccess('Ai semnat contractul de finalizare!'); fetchContracts(); } catch (err) { setError(err.response?.data?.error || 'Eroare'); } }} style={{...styles.button, ...styles.buttonPrimary, padding: '0.875rem 1.5rem'}}>✍️ Semnează Contract de Finalizare</button>
+                    )}
+                  </div>
+                ) : <div style={{ padding: '1.25rem', backgroundColor: '#22c55e', color: 'white', borderRadius: '10px', fontWeight: '600', fontSize: '1.05rem' }}>✅ Proiect Complet Finalizat!</div>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

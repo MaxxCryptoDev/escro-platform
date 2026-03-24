@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claudiu Vladau — Omul de încredere</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #09090b;
+            --bg-alt: #18181b;
+            --bg-card: #27272a;
+            --text: #fafafa;
+            --text-muted: #a1a1aa;
+            --accent: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --border: #3f3f46;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 1.25rem 0;
+            background: rgba(9, 9, 11, 0.95);
+            backdrop-filter: blur(30px);
+            border-bottom: 1px solid transparent;
+            transition: all 0.3s;
+        }
+
+        nav.scrolled {
+            border-bottom-color: var(--border);
+        }
+
+        nav .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 1.5rem;
+            color: #ffffff;
+            text-decoration: none;
+            letter-spacing: -0.03em;
+        }
+
+        .logo span {
+            color: #3b82f6;
+            font-weight: 800;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2.5rem;
+        }
+
+        .nav-links a {
+            color: #d4d4d8;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+            position: relative;
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--accent);
+            transition: width 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 0 40px var(--accent-glow);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--text-muted);
+            background: rgba(255,255,255,0.05);
+        }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8rem 0 6rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 0;
+        }
+
+        .hero-bg::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1000px;
+            height: 1000px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.12) 0%, transparent 60%);
+            animation: pulse 8s ease-in-out infinite;
+        }
+
+        .hero-bg::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: 20%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, transparent 60%);
+            animation: pulse 10s ease-in-out infinite reverse;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+            50% { opacity: 1; transform: translateX(-50%) scale(1.1); }
+        }
+
+        .hero-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: clamp(3rem, 8vw, 5.5rem);
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.04em;
+            margin-bottom: 2rem;
+            color: #ffffff;
+        }
+
+        .hero h1 .line {
+            display: block;
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeUp 0.8s forwards;
+        }
+
+        .hero h1 .line:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+
+        .hero h1 .highlight {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        @keyframes fadeUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero p {
+            font-size: 1.35rem;
+            color: #d4d4d8;
+            max-width: 520px;
+            margin: 0 auto 2.5rem;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeUp 0.8s 0.3s forwards;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeUp 0.8s 0.45s forwards;
+        }
+
+        /* Sections */
+        .section {
+            padding: 7rem 0;
+            position: relative;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-header h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.02em;
+            color: #ffffff;
+        }
+
+        .section-header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        /* Cards */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.25rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .card:hover {
+            border-color: #333;
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .card-icon {
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            filter: grayscale(0);
+            transition: filter 0.3s;
+        }
+
+        .card:hover .card-icon {
+            filter: grayscale(0);
+        }
+
+        .card h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #ffffff;
+        }
+
+        .card p {
+            color: #d4d4d8;
+            font-size: 1rem;
+        }
+
+        /* Solution */
+        .solution {
+            background: var(--bg-alt);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .solution-box {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.15);
+            border-radius: 20px;
+            padding: 4rem;
+            text-align: center;
+            max-width: 750px;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .solution-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            animation: shine 3s infinite;
+        }
+
+        @keyframes shine {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .solution-box h3 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+            color: #ffffff;
+        }
+
+        .solution-box p {
+            color: #d4d4d8;
+            font-size: 1.15rem;
+            line-height: 1.8;
+        }
+
+        /* Services */
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.25rem;
+        }
+
+        .service-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.75rem;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .service-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent), #8b5cf6);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.4s;
+        }
+
+        .service-card:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+            transform: translateY(-6px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+        }
+
+        .service-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .service-card h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ffffff;
+        }
+
+        .service-card p {
+            color: #d4d4d8;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* Trust */
+        .trust-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.25rem;
+        }
+
+        .trust-item {
+            text-align: center;
+            padding: 2.5rem 1.25rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            transition: all 0.3s;
+        }
+
+        .trust-item:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+        }
+
+        .trust-item .icon {
+            font-size: 2.25rem;
+            margin-bottom: 1rem;
+            display: inline-block;
+        }
+
+        .trust-item h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #ffffff;
+        }
+
+        .trust-item p {
+            color: #d4d4d8;
+            font-size: 0.9rem;
+        }
+
+        /* CTA */
+        .cta {
+            background: var(--bg-alt);
+            text-align: center;
+            padding: 6rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .cta h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #ffffff;
+        }
+
+        .cta p {
+            color: #d4d4d8;
+            margin-bottom: 2.5rem;
+            font-size: 1.15rem;
+        }
+
+        .contact-flex a {
+            color: #d4d4d8;
+            text-decoration: none;
+            font-size: 1rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .cta p {
+            color: var(--text-muted);
+            margin-bottom: 2.5rem;
+            font-size: 1.1rem;
+        }
+
+        .cta .btn {
+            padding: 1rem 2.5rem;
+            font-size: 1rem;
+        }
+
+        .contact-flex {
+            display: flex;
+            justify-content: center;
+            gap: 2.5rem;
+            margin-top: 2.5rem;
+            flex-wrap: wrap;
+        }
+
+        .contact-flex a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .contact-flex a:hover {
+            color: var(--accent);
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2.5rem 0;
+            text-align: center;
+        }
+
+        footer p {
+            color: #a1a1aa;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .services-grid, .trust-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .hero {
+                padding: 7rem 0 4rem;
+            }
+
+            .hero p {
+                font-size: 1.1rem;
+            }
+
+            .grid-2, .services-grid, .trust-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .solution-box {
+                padding: 2.5rem 1.5rem;
+            }
+
+            .contact-flex {
+                flex-direction: column;
+                align-items: center;
+                gap: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar">
+        <div class="container">
+            <a href="#" class="logo">Claudiu <span>Vladau</span></a>
+            <div class="nav-links">
+                <a href="#problema">Problemă</a>
+                <a href="#servicii">Servicii</a>
+                <a href="#despre">Despre</a>
+                <a href="#contact" class="btn btn-primary">Să vorbim</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-bg"></div>
+        <div class="hero-grid"></div>
+        <div class="container hero-content">
+            <h1>
+                <span class="line">Omul în care</span>
+                <span class="line"><span class="highlight">ai încredere</span></span>
+            </h1>
+            <p>Te conectez cu profesioniști verificați. Îți protejez banii. Rezolv disputele. Fac lucrurile să se întâmple.</p>
+            <div class="hero-cta">
+                <a href="#contact" class="btn btn-primary">Spune-mi ce ai nevoie →</a>
+                <a href="#servicii" class="btn btn-ghost">Cum te ajut</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="problema">
+        <div class="container">
+            <div class="section-header">
+                <h2>Problema</h2>
+                <p>De ce e atât de greu să găsești oameni buni</p>
+            </div>
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-icon">💸</div>
+                    <h3>Plătești primul, livrează ultimul</h3>
+                    <p>Fără escrow. Fără protecție. Doar speranță că merge.</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🤷</div>
+                    <h3>"Disponibil" ≠ "Bun"</h3>
+                    <p>Angajezi pe cineva pentru că e liber. Nu pentru că e competent.</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">⚖️</div>
+                    <h3>Nimeni nu rezolvă disputele</h3>
+                    <p>Ceva nu merge. Nimeni nu arbitrează. Doar avocați scumpi.</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🚪</div>
+                    <h3>Dispare după plată</h3>
+                    <p>Ia banii. Te ignoră. Zero responsabilitate.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section solution">
+        <div class="container">
+            <div class="solution-box">
+                <h3>Cum rezolv asta</h3>
+                <p>Aleg oameni verificați din rețeaua mea. Îți protejez banii prin escrow. Clarific contractele. Ţin totul sub control. Dacă ceva nu merge, intervin și rezolv. Fără jocuri. Fără scuze.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="servicii">
+        <div class="container">
+            <div class="section-header">
+                <h2>Ce fac</h2>
+                <p>Patru moduri în care te ajut să câștigi</p>
+            </div>
+            <div class="services-grid">
+                <div class="service-card">
+                    <h3>🔗 Matching</h3>
+                    <p>Te conectez cu omul potrivit pentru proiectul tău. Nu "cine e disponibil". Cine chiar știe să facă treaba.</p>
+                </div>
+                <div class="service-card">
+                    <h3>🛡️ Escrow</h3>
+                    <p>Banii tăi rămân în siguranță până livrezi. Ambele părți protejate. Zero risc să fii păcălit.</p>
+                </div>
+                <div class="service-card">
+                    <h3>📊 Project Management</h3>
+                    <p>Termene, comunicare, coordonare — mă ocup eu de toate. Tu știi mereu ce se întâmplă.</p>
+                </div>
+                <div class="service-card">
+                    <h3>⚖️ Arbitraj</h3>
+                    <p>Ceva nu merge? Intervin și rezolv echitabil. Max 7 zile. Fără avocați.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="despre">
+        <div class="container">
+            <div class="section-header">
+                <h2>De ce eu</h2>
+                <p>Ce mă face diferit</p>
+            </div>
+            <div class="trust-grid">
+                <div class="trust-item">
+                    <div class="icon">✓</div>
+                    <h3>Rețea verificată</h3>
+                    <p>Lucrez doar cu oameni pe care îi cunosc personal. Nu aleatoriu.</p>
+                </div>
+                <div class="trust-item">
+                    <div class="icon">✓</div>
+                    <h3>Îți spun adevărul</h3>
+                    <p>Chiar dacă nu vrei să-l auzi. Fără marketing.</p>
+                </div>
+                <div class="trust-item">
+                    <div class="icon">✓</div>
+                    <h3>Eu rezolv problemele</h3>
+                    <p>Ceva nu merge? Devine problema mea. Nu dispar.</p>
+                </div>
+                <div class="trust-item">
+                    <div class="icon">✓</div>
+                    <h3>Disponibil 24/7</h3>
+                    <p>Weekend? Noapte târzie? Răspund când contează.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta" id="contact">
+        <div class="container">
+            <h2>Pregătit să începem?</h2>
+            <p>Nu mai paria pe "cine e disponibil". Începe cu cine e verificat.</p>
+            <a href="https://formspree.io/f/xnjzekql" target="_blank" class="btn btn-primary">Trimite-mi un mesaj</a>
+            <div class="contact-flex">
+                <a href="tel:+40764345782">📱 +40 764 345 782</a>
+                <a href="mailto:claudiu@vladau.com">📧 claudiu@vladau.com</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>© 2026 Claudiu Vladau. Construit pe încredere.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('navbar');
+            if (window.scrollY > 50) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+        });
+
+        // Scroll animations for cards
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry, index) => {
+                if (entry.isIntersecting) {
+                    setTimeout(() => {
+                        entry.target.classList.add('visible');
+                    }, index * 100);
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.card').forEach(card => {
+            observer.observe(card);
+        });
+    </script>
+</body>
+</html>

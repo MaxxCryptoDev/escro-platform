@@ -1,0 +1,1970 @@
+import React, { useState, useEffect } from 'react';
+import { adminAPI } from '../services/api';
+import AdminTools from './AdminTools';
+import axios from 'axios';
+
+export default function AdminDashboard() {
+  const [stats, setStats] = useState(null);
+  const [verifiedCompanies, setVerifiedCompanies] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [allProjects, setAllProjects] = useState([]);
+  const [verificationCalls, setVerificationCalls] = useState([]);
+  const [taskRequests, setTaskRequests] = useState([]);
+  const [expertPostedTasks, setExpertPostedTasks] = useState([]);
+  const [clientPostedTasks, setClientPostedTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('stats');
+  const [selectedExpertForProject, setSelectedExpertForProject] = useState({});
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [showExpertModal, setShowExpertModal] = useState(false);
+  const [selectedExpert, setSelectedExpert] = useState(null);
+  const [selectedProjectForAssignment, setSelectedProjectForAssignment] = useState(null);
+  const [selectedExpertForAssignment, setSelectedExpertForAssignment] = useState(null);
+
+  useEffect(() => {
+    loadDashboardData();
+    const interval = setInterval(loadDashboardData, 5000); // Refresh every 5 seconds
+    return () => clearInterval(interval);
+  }, [refreshKey]);
+
+  const getProjectStatusLabel = (status) => {
+    const labels = {
+      pending_assignment: 'Pending Assignment',
+      approved: 'Approved',
+      assigned: 'Assigned',
+      in_progress: 'In Progress',
+      delivered: 'Delivered',
+      completed: 'Completed',
+      disputed: 'Disputed'
+    };
+    return labels[status] || status;
+  };
+
+  const getProjectStatusColor = (status) => {
+    const colors = {
+      pending_assignment: '#ffc107',
+      approved: '#20c997',
+      assigned: '#28a745',
+      in_progress: '#17a2b8',
+      delivered: '#20c997',
+      completed: '#20c997',
+      disputed: '#dc3545'
+    };
+    return colors[status] || '#6c757d';
+  };
+
+  const loadDashboardData = async () => {
+    try {
+      const [statsRes, verCompRes, allUsersRes, allProjRes, verCallRes, taskReqRes, expertPostedRes, clientPostedRes] = await Promise.all([
+        adminAPI.getAdminDashboard().catch(() => ({ data: { stats: {} } })),
+        adminAPI.getVerifiedCompanies().catch(() => ({ data: { companies: [] } })),
+        adminAPI.getAllUsers().catch(() => ({ data: { users: [] } })),
+        adminAPI.getAllProjects().catch(() => ({ data: { projects: [] } })),
+        axios.get('http://localhost:5000/api/verification-calls', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        }).catch(() => ({ data: { data: [] } })),
+        adminAPI.getPendingTaskRequests().catch(() => ({ data: { data: [] } })),
+        adminAPI.getPendingExpertPostedTasks().catch(() => ({ data: { data: [] } })),
+        adminAPI.getPendingClientPostedTasks().catch(() => ({ data: { data: [] } }))
+      ]);
+
+      setStats(statsRes.data.stats || {});
+      setVerifiedCompanies(verCompRes.data.companies || []);
+      setAllUsers(allUsersRes.data.users || []);
+      setAllProjects(allProjRes.data.projects || []);
+      setVerificationCalls(verCallRes.data?.data || []);
+      setTaskRequests(taskReqRes.data?.data || []);
+      setExpertPostedTasks(expertPostedRes.data?.data || []);
+      setClientPostedTasks(clientPostedRes.data?.data || []);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+      setLoading(false);
+    }
+  };
+
+  const handleApproveUser = async (userId) => {
+    try {
+      await adminAPI.approveUser(userId);
+      setRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error('Error approving user:', error);
+      alert('Error approving user');
+    }
+  };
+
+  const handleRejectUser = async (userId) => {
+    try {
+      await adminAPI.rejectUser(userId);
+      setRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error('Error rejecting user:', error);
+      alert('Error rejecting user');
+    }
+  };
+
+  const handleVerifyExpert = async (expertId, status) => {
+    try {
+      await adminAPI.verifyExpert(expertId, { kyc_status: status });
+      setRefreshKey(prev => prev + 1);
+      alert(`Expert ${status === 'verified' ? 'approved' : 'rejected'} successfully`);
+    } catch (error) {
+      console.error('Error verifying expert:', error);
+      alert(`Error ${status === 'verified' ? 'approving' : 'rejecting'} expert: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    try {
+      await adminAPI.deleteUser(userId);
+      setRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Error deleting user');
+    }
+  };
+
+  const handleAssignExpert = async (projectId) => {
+    const expertId = selectedExpertForProject[projectId];
+    if (!expertId) {
+      alert('Please select an expert');
+      return;
+    }
+    try {
+      const response = await axios.put(
+        `http://localhost:5000/api/admin/projects/${projectId}/assign-expert`,
+        { expert_id: expertId },
+        { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }
+      );
+      console.log('Assign expert response:', response.data);
+      setSelectedExpertForProject(prev => ({ ...prev, [projectId]: '' }));
+      setRefreshKey(prev => prev + 1);
+      alert('Expert assigned successfully');
+    } catch (error) {
+      console.error('Error assigning expert:', error);
+      alert('Error assigning expert: ' + error.message);
+    }
+  };
+
+  const handleRemoveExpert = async (projectId) => {
+    if (!window.confirm('Remove expert from this project?')) return;
+    try {
+      const response = await adminAPI.removeExpertFromProject(projectId);
+      // Update local state immediately
+      setAllProjects(prev => prev.map(p => 
+        p.id === projectId 
+          ? { ...p, expert_id: null, expert_name: null, status: 'pending_assignment' }
+          : p
+      ));
+      setRefreshKey(prev => prev + 1);
+      alert('Expert removed successfully');
+    } catch (error) {
+      console.error('Error removing expert:', error);
+      alert('Error removing expert');
+    }
+  };
+
+  if (loading) return <div style={{...adminStyles.container, textAlign: 'center', padding: '4rem'}}>Se încarcă...</div>;
+
+  return (
+    <div style={adminStyles.container}>
+      {/* Header */}
+      <div style={adminStyles.header}>
+        <h1 style={adminStyles.headerTitle}>🎛️ Panou de Admin</h1>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '1rem' }}>
+          Gestionează toate operațiunile platformei
+        </p>
+      </div>
+
+      {/* Tab-uri simplificate */}
+      <div style={adminStyles.tabsRow}>
+        <button 
+          onClick={() => setActiveTab('stats')} 
+          style={activeTab === 'stats' ? { ...adminStyles.tab, ...adminStyles.tabActive } : adminStyles.tab}
+        >
+          📊 Statistici
+        </button>
+        <button 
+          onClick={() => setActiveTab('users')} 
+          style={activeTab === 'users' ? { ...adminStyles.tab, ...adminStyles.tabActive } : adminStyles.tab}
+        >
+          👥 Utilizatori ({allUsers.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('projects')} 
+          style={activeTab === 'projects' ? { ...adminStyles.tab, ...adminStyles.tabActive } : adminStyles.tab}
+        >
+          📋 Proiecte ({allProjects.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('verification')} 
+          style={activeTab === 'verification' ? { ...adminStyles.tab, ...adminStyles.tabActive } : adminStyles.tab}
+        >
+          ☎️ Verificări ({verificationCalls.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('tasks')} 
+          style={activeTab === 'tasks' ? { ...adminStyles.tab, ...adminStyles.tabActive } : adminStyles.tab}
+        >
+          📝 Task-uri Noi ({(expertPostedTasks.filter(t => t.expert_posting_status === 'pending').length) + (clientPostedTasks.filter(t => t.client_posting_status === 'pending').length)})
+        </button>
+      </div>
+
+      {/* STATS TAB */}
+      {activeTab === 'stats' && stats && (
+        <div style={adminStyles.statsGrid}>
+          <div style={adminStyles.statCard}>
+            <span style={{ fontSize: '1.5rem' }}>📦</span>
+            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>Total Proiecte</p>
+            <p style={adminStyles.statNumber}>{stats.total_projects || 0}</p>
+          </div>
+          <div style={adminStyles.statCard}>
+            <span style={{ fontSize: '1.5rem' }}>✅</span>
+            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>Experți Verificați</p>
+            <p style={adminStyles.statNumber}>{stats.verified_experts || 0}</p>
+          </div>
+          <div style={adminStyles.statCard}>
+            <span style={{ fontSize: '1.5rem' }}>🏢</span>
+            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>Companii Verificate</p>
+            <p style={adminStyles.statNumber}>{verifiedCompanies.length}</p>
+          </div>
+          <div style={adminStyles.statCard}>
+            <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>Dispute Active</p>
+            <p style={adminStyles.statNumber}>{stats.pending_disputes || 0}</p>
+          </div>
+        </div>
+      )}
+
+      {/* USERS TAB */}
+      {activeTab === 'users' && (
+        <div style={adminStyles.card}>
+          <div style={adminStyles.cardHeader}>
+            <h3 style={adminStyles.cardTitle}>👥 Toți Utilizatorii</h3>
+          </div>
+          <table style={adminStyles.table}>
+            <thead>
+              <tr style={adminStyles.tableHeaderRow}>
+                <th style={adminStyles.tableHeader}>Nume</th>
+                <th style={adminStyles.tableHeader}>Email</th>
+                <th style={adminStyles.tableHeader}>Rol</th>
+                <th style={adminStyles.tableHeader}>Status</th>
+                <th style={adminStyles.tableHeader}>Acțiuni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allUsers.slice(0, 20).map(user => (
+                <tr key={user.id} style={adminStyles.tableRow}>
+                  <td style={adminStyles.tableCell}>{user.name}</td>
+                  <td style={adminStyles.tableCell}>{user.email}</td>
+                  <td style={adminStyles.tableCell}>
+                    <span style={{ ...adminStyles.badge, backgroundColor: user.role === 'admin' ? '#dbeafe' : user.role === 'expert' ? '#d1fae5' : '#fce7f3', color: user.role === 'admin' ? '#1e40af' : user.role === 'expert' ? '#059669' : '#be185d' }}>
+                      {user.role}
+                    </span>
+                  </td>
+                  <td style={adminStyles.tableCell}>
+                    <span style={{ ...adminStyles.badge, backgroundColor: user.kyc_status === 'verified' ? '#d1fae5' : '#fef3c7', color: user.kyc_status === 'verified' ? '#059669' : '#d97706' }}>
+                      {user.kyc_status}
+                    </span>
+                  </td>
+                  <td style={adminStyles.tableCell}>
+                    {user.kyc_status !== 'verified' && (
+                      <button 
+                        onClick={() => handleApproveUser(user.id)}
+                        style={{ ...adminStyles.button, ...adminStyles.buttonSuccess, marginRight: '0.5rem' }}
+                      >
+                        Aprobă
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* PROJECTS TAB */}
+      {activeTab === 'projects' && (
+        <div style={adminStyles.card}>
+          <div style={adminStyles.cardHeader}>
+            <h3 style={adminStyles.cardTitle}>📋 Toate Proiectele</h3>
+          </div>
+          <table style={adminStyles.table}>
+            <thead>
+              <tr style={adminStyles.tableHeaderRow}>
+                <th style={adminStyles.tableHeader}>Titlu</th>
+                <th style={adminStyles.tableHeader}>Buget</th>
+                <th style={adminStyles.tableHeader}>Status</th>
+                <th style={adminStyles.tableHeader}>Creat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allProjects.slice(0, 20).map(project => (
+                <tr key={project.id} style={adminStyles.tableRow}>
+                  <td style={adminStyles.tableCell}>{project.title}</td>
+                  <td style={adminStyles.tableCell}>{project.budget_ron} RON</td>
+                  <td style={adminStyles.tableCell}>
+                    <span style={{ ...adminStyles.badge, backgroundColor: getProjectStatusColor(project.status) + '20', color: getProjectStatusColor(project.status) }}>
+                      {getProjectStatusLabel(project.status)}
+                    </span>
+                  </td>
+                  <td style={adminStyles.tableCell}>{new Date(project.created_at).toLocaleDateString('ro-RO')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* VERIFICATION TAB */}
+      {activeTab === 'verification' && (
+        <div style={adminStyles.card}>
+          <div style={adminStyles.cardHeader}>
+            <h3 style={adminStyles.cardTitle}>☎️ Apeluri de Verificare</h3>
+          </div>
+          {verificationCalls.length === 0 ? (
+            <div style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
+              <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>📭</span>
+              <p>Nu există apeluri în așteptare</p>
+            </div>
+          ) : (
+            <table style={adminStyles.table}>
+              <thead>
+                <tr style={adminStyles.tableHeaderRow}>
+                  <th style={adminStyles.tableHeader}>Utilizator</th>
+                  <th style={adminStyles.tableHeader}>Data</th>
+                  <th style={adminStyles.tableHeader}>Ora</th>
+                  <th style={adminStyles.tableHeader}>Status</th>
+                  <th style={adminStyles.tableHeader}>Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {verificationCalls.map(call => (
+                  <tr key={call.id} style={adminStyles.tableRow}>
+                    <td style={adminStyles.tableCell}>{call.user_name || 'N/A'}</td>
+                    <td style={adminStyles.tableCell}>{call.scheduled_date ? new Date(call.scheduled_date).toLocaleDateString('ro-RO') : 'N/A'}</td>
+                    <td style={adminStyles.tableCell}>{call.scheduled_time || 'N/A'}</td>
+                    <td style={adminStyles.tableCell}>
+                      <span style={{ ...adminStyles.badge, backgroundColor: call.status === 'completed' ? '#d1fae5' : '#fef3c7', color: call.status === 'completed' ? '#059669' : '#d97706' }}>
+                        {call.status}
+                      </span>
+                    </td>
+                    <td style={adminStyles.tableCell}>
+                      <button style={{ ...adminStyles.button, ...adminStyles.buttonPrimary }}>Detalii</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* TASKS TAB - Expert & Client Posted */}
+      {activeTab === 'tasks' && (
+        <div style={{ display: 'grid', gap: '2rem' }}>
+          {/* Expert Posted Tasks */}
+          <div style={adminStyles.card}>
+            <div style={adminStyles.cardHeader}>
+              <h3 style={adminStyles.cardTitle}>👨‍💼 Task-uri de la Experți ({expertPostedTasks.filter(t => t.expert_posting_status === 'pending').length})</h3>
+            </div>
+            {expertPostedTasks.filter(t => t.expert_posting_status === 'pending').length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nu există task-uri în așteptare</div>
+            ) : (
+              <table style={adminStyles.table}>
+                <thead>
+                  <tr style={adminStyles.tableHeaderRow}>
+                    <th style={adminStyles.tableHeader}>Titlu</th>
+                    <th style={adminStyles.tableHeader}>Buget</th>
+                    <th style={adminStyles.tableHeader}>Status</th>
+                    <th style={adminStyles.tableHeader}>Acțiuni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expertPostedTasks.filter(t => t.expert_posting_status === 'pending').slice(0, 10).map(task => (
+                    <tr key={task.id} style={adminStyles.tableRow}>
+                      <td style={adminStyles.tableCell}>{task.title}</td>
+                      <td style={adminStyles.tableCell}>{task.budget_ron} RON</td>
+                      <td style={adminStyles.tableCell}>
+                        <span style={{ ...adminStyles.badge, backgroundColor: '#fef3c7', color: '#d97706' }}>{task.expert_posting_status}</span>
+                      </td>
+                      <td style={adminStyles.tableCell}>
+                        <button 
+                          onClick={() => handleApproveExpertPostedTask(task.id)}
+                          style={{ ...adminStyles.button, ...adminStyles.buttonSuccess, marginRight: '0.5rem' }}
+                        >
+                          Aprobă
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Client Posted Tasks */}
+          <div style={adminStyles.card}>
+            <div style={adminStyles.cardHeader}>
+              <h3 style={adminStyles.cardTitle}>🏢 Task-uri de la Companii ({clientPostedTasks.filter(t => t.client_posting_status === 'pending').length})</h3>
+            </div>
+            {clientPostedTasks.filter(t => t.client_posting_status === 'pending').length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nu există task-uri în așteptare</div>
+            ) : (
+              <table style={adminStyles.table}>
+                <thead>
+                  <tr style={adminStyles.tableHeaderRow}>
+                    <th style={adminStyles.tableHeader}>Titlu</th>
+                    <th style={adminStyles.tableHeader}>Buget</th>
+                    <th style={adminStyles.tableHeader}>Status</th>
+                    <th style={adminStyles.tableHeader}>Acțiuni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientPostedTasks.filter(t => t.client_posting_status === 'pending').slice(0, 10).map(task => (
+                    <tr key={task.id} style={adminStyles.tableRow}>
+                      <td style={adminStyles.tableCell}>{task.title}</td>
+                      <td style={adminStyles.tableCell}>{task.budget_ron} RON</td>
+                      <td style={adminStyles.tableCell}>
+                        <span style={{ ...adminStyles.badge, backgroundColor: '#fef3c7', color: '#d97706' }}>{task.client_posting_status}</span>
+                      </td>
+                      <td style={adminStyles.tableCell}>
+                        <button 
+                          onClick={() => handleApproveClientPostedTask(task.id)}
+                          style={{ ...adminStyles.button, ...adminStyles.buttonSuccess, marginRight: '0.5rem' }}
+                        >
+                          Aprobă
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Spatii goale pentru celelalte tab-uri vechi - le ascundem */}
+      {activeTab === 'all-users' && setActiveTab('users')}
+      {activeTab === 'contacts' && setActiveTab('users')}
+      {activeTab === 'task-requests' && setActiveTab('tasks')}
+      {activeTab === 'expert-posted-tasks' && setActiveTab('tasks')}
+      {activeTab === 'client-posted-tasks' && setActiveTab('tasks')}
+    </div>
+  );
+}
+                    <th style={styles.tableHeader}>Registered</th>
+                    <th style={styles.tableHeader}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allUsers.map(user => (
+                    <tr key={user.id} style={styles.tableRow}>
+                      <td style={styles.tableCell}><strong>{user.name}</strong></td>
+                      <td style={styles.tableCell}>{user.email}</td>
+                      <td style={styles.tableCell}>{user.phone || '-'}</td>
+                      <td style={styles.tableCell}>{user.company || '-'}</td>
+                      <td style={styles.tableCell}>
+                        <span style={{
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '4px',
+                          backgroundColor: user.role === 'admin' ? '#dc3545' : user.role === 'expert' ? '#007bff' : '#17a2b8',
+                          color: 'white',
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}>
+                          {user.role.toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={styles.tableCell}>
+                        <span style={{
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '4px',
+                          backgroundColor: user.kyc_status === 'verified' ? '#28a745' : user.kyc_status === 'rejected' ? '#dc3545' : '#ffc107',
+                          color: 'white',
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}>
+                          {user.kyc_status || 'pending'}
+                        </span>
+                      </td>
+                      <td style={{...styles.tableCell, maxWidth: '250px', whiteSpace: 'normal'}}>
+                        {user.portfolio_description ? user.portfolio_description.substring(0, 100) + '...' : '-'}
+                      </td>
+                      <td style={styles.tableCell}>{new Date(user.created_at).toLocaleDateString()}</td>
+                      <td style={styles.tableCell}>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`Delete user ${user.name}? This cannot be undone.`)) {
+                              try {
+                                await adminAPI.deleteUser(user.id);
+                                setRefreshKey(prev => prev + 1);
+                              } catch (error) {
+                                console.error('Error deleting user:', error);
+                                alert('Error deleting user');
+                              }
+                            }
+                          }}
+                          style={{
+                            padding: '0.4rem 0.8rem',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* CONTACTS TAB */}
+      {activeTab === 'contacts' && (
+        <div style={styles.section}>
+          <h2>📇 Contact Directory</h2>
+          {allUsers.length === 0 ? (
+            <p style={styles.emptyMessage}>No contacts yet</p>
+          ) : (
+            <div style={styles.contactsGrid}>
+              {allUsers.map(user => (
+                <div key={user.id} style={styles.contactCard}>
+                  <div style={styles.contactCardHeader}>
+                    <h3 style={{margin: '0 0 0.5rem 0'}}>{user.name}</h3>
+                    <span style={{
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '4px',
+                      backgroundColor: user.role === 'admin' ? '#dc3545' : user.role === 'expert' ? '#007bff' : '#17a2b8',
+                      color: 'white',
+                      fontSize: '11px',
+                      fontWeight: 'bold'
+                    }}>
+                      {user.role.toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div style={styles.contactCardContent}>
+                    <div style={styles.contactItem}>
+                      <span style={styles.contactLabel}>📧 Email:</span>
+                      <a href={`mailto:${user.email}`} style={{color: '#007bff', textDecoration: 'none'}}>
+                        {user.email}
+                      </a>
+                    </div>
+
+                    {user.phone && (
+                      <div style={styles.contactItem}>
+                        <span style={styles.contactLabel}>📞 Phone:</span>
+                        <a href={`tel:${user.phone}`} style={{color: '#007bff', textDecoration: 'none'}}>
+                          {user.phone}
+                        </a>
+                      </div>
+                    )}
+
+                    {user.company && (
+                      <div style={styles.contactItem}>
+                        <span style={styles.contactLabel}>🏢 Company:</span>
+                        <span>{user.company}</span>
+                      </div>
+                    )}
+
+                    {user.expertise && (
+                      <div style={styles.contactItem}>
+                        <span style={styles.contactLabel}>💼 Expertise:</span>
+                        <span>{user.expertise}</span>
+                      </div>
+                    )}
+
+                    {user.industry && (
+                      <div style={styles.contactItem}>
+                        <span style={styles.contactLabel}>🏭 Industry:</span>
+                        <span>{user.industry}</span>
+                      </div>
+                    )}
+
+                    {user.experience && (
+                      <div style={styles.contactItem}>
+                        <span style={styles.contactLabel}>⭐ Experience Level:</span>
+                        <span style={{
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '3px',
+                          backgroundColor: user.experience === 'senior' ? '#ffc107' : user.experience === 'middle' ? '#17a2b8' : '#6c757d',
+                          color: 'white',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          display: 'inline-block'
+                        }}>
+                          {user.experience.toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+
+                    {user.bio && (
+                      <div style={styles.contactItem}>
+                        <span style={styles.contactLabel}>📄 Bio:</span>
+                        <p style={{margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#666'}}>
+                          {user.bio.substring(0, 100)}
+                          {user.bio.length > 100 ? '...' : ''}
+                        </p>
+                      </div>
+                    )}
+
+                    {user.portfolio_description && (
+                      <div style={styles.contactItem}>
+                        <span style={styles.contactLabel}>📝 Portfolio:</span>
+                        <p style={{margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#666'}}>
+                          {user.portfolio_description.substring(0, 150)}
+                          {user.portfolio_description.length > 150 ? '...' : ''}
+                        </p>
+                      </div>
+                    )}
+
+                    <div style={styles.contactItem}>
+                      <span style={styles.contactLabel}>📅 Registered:</span>
+                      <span>{new Date(user.created_at).toLocaleDateString()} {new Date(user.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+
+                    <div style={styles.contactItem}>
+                      <span style={styles.contactLabel}>Status:</span>
+                      <span style={{
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        backgroundColor: user.kyc_status === 'verified' ? '#28a745' : user.kyc_status === 'rejected' ? '#dc3545' : '#ffc107',
+                        color: 'white',
+                        fontSize: '11px',
+                        fontWeight: 'bold'
+                      }}>
+                        {user.kyc_status || 'pending'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* PROJECTS/TASKS TAB - PENDING APPROVAL */}
+      {activeTab === 'projects' && (
+        <div style={styles.section}>
+          <h2>📋 Projects Pending Approval</h2>
+          {allProjects.filter(p => p.status === 'pending_admin_approval').length === 0 ? (
+            <p style={styles.emptyMessage}>No pending projects</p>
+          ) : (
+            allProjects.filter(p => p.status === 'pending_admin_approval').map(project => (
+              <div key={project.id} style={styles.card}>
+                <div style={styles.cardContent}>
+                  <h3>{project.title}</h3>
+                  <p><strong>Client:</strong> {project.client_name || 'Unknown'}</p>
+                  <p><strong>Budget:</strong> {project.budget_ron} RON</p>
+                  <p><strong>Status:</strong> <span style={{ ...styles.statusBadge, backgroundColor: getProjectStatusColor(project.status) }}>{getProjectStatusLabel(project.status)}</span></p>
+                  <p><strong>Timeline:</strong> {project.timeline_days} days</p>
+                  <p><strong>Description:</strong> {project.description}</p>
+                  <p style={styles.timestamp}>Created: {new Date(project.created_at).toLocaleString()}</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                  <button
+                    onClick={async () => {
+                      if (window.confirm(`Approve project "${project.title}"?`)) {
+                        try {
+                          await adminAPI.approveProject(project.id);
+                          setRefreshKey(prev => prev + 1);
+                          alert('Project approved! Experts can now see it.');
+                        } catch (error) {
+                          console.error('Error approving project:', error);
+                          alert('Error approving project');
+                        }
+                      }
+                    }}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    ✓ Approve
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (window.confirm(`Reject project "${project.title}"?`)) {
+                        try {
+                          await adminAPI.rejectProject(project.id);
+                          setRefreshKey(prev => prev + 1);
+                          alert('Project rejected.');
+                        } catch (error) {
+                          console.error('Error rejecting project:', error);
+                          alert('Error rejecting project');
+                        }
+                      }
+                    }}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    ✗ Reject
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+
+          <hr style={{ margin: '2rem 0', borderColor: '#ddd' }} />
+
+          <h2>📊 All Projects</h2>
+          {allProjects.length === 0 ? (
+            <p style={styles.emptyMessage}>No projects</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.tableHeaderRow}>
+                  <th style={styles.tableHeader}>Title</th>
+                  <th style={styles.tableHeader}>Client</th>
+                  <th style={styles.tableHeader}>Budget (RON)</th>
+                  <th style={styles.tableHeader}>Status</th>
+                  <th style={styles.tableHeader}>Expert</th>
+                  <th style={styles.tableHeader}>Created</th>
+                  <th style={styles.tableHeader}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allProjects.map(project => (
+                  <tr key={project.id} style={styles.tableRow}>
+                    <td style={styles.tableCell}>{project.title}</td>
+                    <td style={styles.tableCell}>{project.client_name || 'Unknown'}</td>
+                    <td style={styles.tableCell}>{project.budget_ron}</td>
+                    <td style={styles.tableCell}>
+                      <span style={{ ...styles.statusBadge, backgroundColor: getProjectStatusColor(project.status) }}>
+                        {getProjectStatusLabel(project.status)}
+                      </span>
+                    </td>
+                    <td style={styles.tableCell}>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <select
+                          value={selectedExpertForProject[project.id] || ''}
+                          onChange={(e) => setSelectedExpertForProject(prev => ({
+                            ...prev,
+                            [project.id]: e.target.value
+                          }))}
+                          style={{
+                            padding: '0.3rem 0.5rem',
+                            borderRadius: '4px',
+                            border: '1px solid #ddd',
+                            fontSize: '12px'
+                          }}
+                        >
+                          <option value="">Select Expert/Company</option>
+                          {allUsers
+                            .filter(u => (u.role === 'expert' || u.role === 'client') && u.kyc_status === 'verified')
+                            .map(resource => (
+                              <option key={resource.id} value={resource.id}>
+                                {resource.role === 'expert' ? '👤' : '🏢'} {resource.name}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          onClick={async () => {
+                            const expertId = selectedExpertForProject[project.id];
+                            if (!expertId) {
+                              alert('Please select an expert');
+                              return;
+                            }
+                            try {
+                              await adminAPI.assignExpertToProject(project.id, { expert_id: expertId });
+                              setRefreshKey(prev => prev + 1);
+                              alert('Expert assigned successfully.');
+                            } catch (error) {
+                              console.error('Error assigning expert:', error);
+                              alert('Error assigning expert');
+                            }
+                          }}
+                          style={{
+                            padding: '0.3rem 0.6rem',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          Assign
+                        </button>
+                      </div>
+                    </td>
+                    <td style={styles.tableCell}>{new Date(project.created_at).toLocaleDateString()}</td>
+                    <td style={styles.tableCell}>
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`Delete project "${project.title}"? This action cannot be undone.`)) {
+                            try {
+                              await adminAPI.deleteProject(project.id);
+                              setRefreshKey(prev => prev + 1);
+                              alert('Project deleted successfully.');
+                            } catch (error) {
+                              console.error('Error deleting project:', error);
+                              alert('Error deleting project');
+                            }
+                          }
+                        }}
+                        style={{
+                          padding: '0.4rem 0.8rem',
+                          backgroundColor: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* VERIFICATION CALLS TAB */}
+      {activeTab === 'verification' && (
+        <div style={styles.section}>
+          <h2>☎️ Verification Calls Scheduled</h2>
+          {verificationCalls.length === 0 ? (
+            <p style={{ color: '#666' }}>No verification calls scheduled yet</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.tableHeaderRow}>
+                  <th style={styles.tableHeader}>User Name</th>
+                  <th style={styles.tableHeader}>Email</th>
+                  <th style={styles.tableHeader}>Company</th>
+                  <th style={styles.tableHeader}>Scheduled Date</th>
+                  <th style={styles.tableHeader}>Scheduled Time</th>
+                  <th style={styles.tableHeader}>Status</th>
+                  <th style={styles.tableHeader}>Notes</th>
+                  <th style={styles.tableHeader}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {verificationCalls.map(call => (
+                  <tr key={call.id} style={styles.tableRow}>
+                    <td style={styles.tableCell}>{call.name}</td>
+                    <td style={styles.tableCell}>{call.email}</td>
+                    <td style={styles.tableCell}>{call.company || '-'}</td>
+                    <td style={styles.tableCell}>{new Date(call.scheduled_date).toLocaleDateString()}</td>
+                    <td style={styles.tableCell}>{call.scheduled_time}</td>
+                    <td style={styles.tableCell}>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '4px',
+                        backgroundColor: call.status === 'completed' ? '#28a745' : call.status === 'cancelled' ? '#dc3545' : '#ffc107',
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        {call.status}
+                      </span>
+                    </td>
+                    <td style={styles.tableCell}>{call.notes || '-'}</td>
+                    <td style={{...styles.tableCell, display: 'flex', gap: '0.5rem'}}>
+                      <button
+                        onClick={() => {
+                          console.log('[DEBUG] Call object:', call);
+                          console.log('[DEBUG] call.user_id:', call.user_id);
+                          if (window.confirm(`Approve verification for ${call.name}?`)) {
+                            handleVerifyExpert(call.user_id, 'verified');
+                          }
+                        }}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        ✓ Approve
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Reject verification for ${call.name}?`)) {
+                            handleVerifyExpert(call.user_id, 'rejected');
+                          }
+                        }}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          backgroundColor: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        ✗ Reject
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* TASK REQUESTS TAB */}
+      {activeTab === 'task-requests' && (
+        <div style={styles.section}>
+          <h2>📝 Task Participation Requests</h2>
+          {taskRequests.length === 0 ? (
+            <p style={{ color: '#666' }}>No task requests yet</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.tableHeaderRow}>
+                  <th style={styles.tableHeader}>Expert/Company</th>
+                  <th style={styles.tableHeader}>Email</th>
+                  <th style={styles.tableHeader}>Project</th>
+                  <th style={styles.tableHeader}>Client</th>
+                  <th style={styles.tableHeader}>Message</th>
+                  <th style={styles.tableHeader}>Status</th>
+                  <th style={styles.tableHeader}>Requested Date</th>
+                  <th style={styles.tableHeader}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {taskRequests.map(request => (
+                  <tr key={request.id} style={styles.tableRow}>
+                    <td style={styles.tableCell}>
+                      <strong>{request.user_name}</strong>
+                      <br />
+                      <small style={{ color: '#666' }}>{request.role}</small>
+                    </td>
+                    <td style={styles.tableCell}>{request.user_email}</td>
+                    <td style={styles.tableCell}>
+                      <strong>{request.project_title}</strong>
+                      <br />
+                      <small style={{ color: '#666' }}>{request.project_description?.substring(0, 50)}...</small>
+                    </td>
+                    <td style={styles.tableCell}>{request.client_name}</td>
+                    <td style={styles.tableCell}>
+                      {request.message ? (
+                        <div style={{ maxWidth: '200px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px' }}>
+                          {request.message}
+                        </div>
+                      ) : (
+                        <em style={{ color: '#999' }}>No message</em>
+                      )}
+                    </td>
+                    <td style={styles.tableCell}>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '4px',
+                        backgroundColor: 
+                          request.status === 'approved' ? '#28a745' :
+                          request.status === 'rejected' ? '#dc3545' :
+                          request.status === 'cancelled' ? '#6c757d' :
+                          '#ffc107',
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        {request.status}
+                      </span>
+                    </td>
+                    <td style={styles.tableCell}>{new Date(request.created_at).toLocaleDateString()}</td>
+                    <td style={styles.tableCell}>
+                      {request.status === 'pending' && (
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Approve request from ${request.user_name}?`)) {
+                                try {
+                                  await adminAPI.approveTaskRequest(request.id);
+                                  setRefreshKey(prev => prev + 1);
+                                  alert('Task request approved!');
+                                } catch (error) {
+                                  console.error('Error approving request:', error);
+                                  alert('Error approving request');
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            ✓ Approve
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Reject request from ${request.user_name}?`)) {
+                                try {
+                                  await adminAPI.rejectTaskRequest(request.id);
+                                  setRefreshKey(prev => prev + 1);
+                                  alert('Task request rejected');
+                                } catch (error) {
+                                  console.error('Error rejecting request:', error);
+                                  alert('Error rejecting request');
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            ✕ Reject
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* EXPERT POSTED TASKS TAB */}
+      {activeTab === 'expert-posted-tasks' && (
+        <div style={styles.section}>
+          <h2>📤 Expert Posted Tasks (Pending Approval)</h2>
+          {expertPostedTasks.length === 0 ? (
+            <p style={{ color: '#666' }}>No expert posted tasks pending approval</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.tableHeaderRow}>
+                  <th style={styles.tableHeader}>Expert Name</th>
+                  <th style={styles.tableHeader}>Email</th>
+                  <th style={styles.tableHeader}>Task Title</th>
+                  <th style={styles.tableHeader}>Description</th>
+                  <th style={styles.tableHeader}>Budget</th>
+                  <th style={styles.tableHeader}>Timeline</th>
+                  <th style={styles.tableHeader}>Status</th>
+                  <th style={styles.tableHeader}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expertPostedTasks.map(task => (
+                  <tr key={task.id} style={styles.tableRow}>
+                    <td style={styles.tableCell}>
+                      <strong>{task.expert_name}</strong>
+                    </td>
+                    <td style={styles.tableCell}>{task.expert_email}</td>
+                    <td style={styles.tableCell}>
+                      <strong>{task.title}</strong>
+                    </td>
+                    <td style={styles.tableCell}>
+                      {task.description.substring(0, 50)}...
+                    </td>
+                    <td style={styles.tableCell}>{task.budget_ron} RON</td>
+                    <td style={styles.tableCell}>{task.timeline_days} days</td>
+                    <td style={styles.tableCell}>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '4px',
+                        backgroundColor: 
+                          task.expert_posting_status === 'pending' ? '#ffc107' :
+                          task.expert_posting_status === 'approved' ? '#28a745' :
+                          '#dc3545',
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        {task.expert_posting_status === 'pending' ? '⏳ Pending' : task.expert_posting_status === 'approved' ? '✓ Approved' : '✗ Rejected'}
+                      </span>
+                    </td>
+                    <td style={styles.tableCell}>
+                      {task.expert_posting_status === 'pending' && (
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Approve this task from ${task.expert_name}?`)) {
+                                try {
+                                  await adminAPI.approveExpertPostedTask(task.id);
+                                  setRefreshKey(prev => prev + 1);
+                                  alert('Expert posted task approved!');
+                                } catch (error) {
+                                  console.error('Error approving task:', error);
+                                  alert('Error approving task');
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            ✓ Approve
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Reject this task from ${task.expert_name}?`)) {
+                                try {
+                                  await adminAPI.rejectExpertPostedTask(task.id, { reason: 'Rejected by admin' });
+                                  setRefreshKey(prev => prev + 1);
+                                  alert('Expert posted task rejected');
+                                } catch (error) {
+                                  console.error('Error rejecting task:', error);
+                                  alert('Error rejecting task');
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            ✗ Reject
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* CLIENT POSTED TASKS TAB */}
+      {activeTab === 'client-posted-tasks' && (
+        <div style={styles.section}>
+          <h2>🏢 Company Posted Tasks (Pending Approval)</h2>
+          {clientPostedTasks.length === 0 ? (
+            <p style={{ color: '#666' }}>No company posted tasks pending approval</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.tableHeaderRow}>
+                  <th style={styles.tableHeader}>Company Name</th>
+                  <th style={styles.tableHeader}>Email</th>
+                  <th style={styles.tableHeader}>Task Title</th>
+                  <th style={styles.tableHeader}>Description</th>
+                  <th style={styles.tableHeader}>Budget</th>
+                  <th style={styles.tableHeader}>Timeline</th>
+                  <th style={styles.tableHeader}>Status</th>
+                  <th style={styles.tableHeader}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientPostedTasks.map(task => (
+                  <tr key={task.id} style={styles.tableRow}>
+                    <td style={styles.tableCell}>
+                      <strong>{task.company_name}</strong>
+                    </td>
+                    <td style={styles.tableCell}>{task.company_email}</td>
+                    <td style={styles.tableCell}>
+                      <strong>{task.title}</strong>
+                    </td>
+                    <td style={styles.tableCell}>
+                      {task.description.substring(0, 50)}...
+                    </td>
+                    <td style={styles.tableCell}>{task.budget_ron} RON</td>
+                    <td style={styles.tableCell}>{task.timeline_days} days</td>
+                    <td style={styles.tableCell}>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '4px',
+                        backgroundColor: 
+                          task.client_posting_status === 'pending' ? '#ffc107' :
+                          task.client_posting_status === 'approved' ? '#28a745' :
+                          '#dc3545',
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        {task.client_posting_status === 'pending' ? '⏳ Pending' : task.client_posting_status === 'approved' ? '✓ Approved' : '✗ Rejected'}
+                      </span>
+                    </td>
+                    <td style={styles.tableCell}>
+                      {task.client_posting_status === 'pending' && (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Approve this task from ${task.company_name}?`)) {
+                                try {
+                                  await adminAPI.approveClientPostedTask(task.id);
+                                  setRefreshKey(prev => prev + 1);
+                                  alert('Company posted task approved!');
+                                } catch (error) {
+                                  console.error('Error approving task:', error);
+                                  alert('Error approving task');
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            ✓ Approve
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Reject this task from ${task.company_name}?`)) {
+                                try {
+                                  await adminAPI.rejectClientPostedTask(task.id, { reason: 'Rejected by admin' });
+                                  setRefreshKey(prev => prev + 1);
+                                  alert('Company posted task rejected');
+                                } catch (error) {
+                                  console.error('Error rejecting task:', error);
+                                  alert('Error rejecting task');
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            ✗ Reject
+                          </button>
+                        </div>
+                      )}
+                      {task.client_posting_status === 'approved' && (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => {
+                              const companyId = prompt('Enter Company/Expert ID to assign:');
+                              if (companyId) {
+                                adminAPI.assignCompanyToClientTask(task.id, { assigned_to_user_id: companyId })
+                                  .then(() => {
+                                    alert('Task assigned successfully!');
+                                    setRefreshKey(prev => prev + 1);
+                                  })
+                                  .catch(error => {
+                                    console.error('Error assigning task:', error);
+                                    alert('Error assigning task: ' + (error.response?.data?.message || error.message));
+                                  });
+                              }
+                            }}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              backgroundColor: '#0056b3',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            👤 Assign Company
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ASSIGN EXPERT TAB */}
+      {activeTab === 'assign-expert' && (
+        <div style={styles.section}>
+          <h2>✨ Manually Assign Expert/Company to Project</h2>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+            {/* Projects without expert */}
+            <div>
+              <h3>Projects Needing Assignment</h3>
+              <div style={{ border: '1px solid #ddd', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
+                {allProjects.filter(p => !p.expert_id).length === 0 ? (
+                  <p style={{ padding: '1rem', color: '#666' }}>All projects have experts/companies assigned</p>
+                ) : (
+                  allProjects.filter(p => !p.expert_id).map(project => (
+                    <div
+                      key={project.id}
+                      onClick={() => setSelectedProjectForAssignment(project)}
+                      style={{
+                        padding: '1rem',
+                        borderBottom: '1px solid #eee',
+                        cursor: 'pointer',
+                        backgroundColor: selectedProjectForAssignment?.id === project.id ? '#e7f3ff' : 'white',
+                        transition: 'background-color 0.2s'
+                      }}
+                    >
+                      <strong>{project.title}</strong>
+                      <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#666' }}>
+                        Budget: {project.budget_ron} RON
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Available experts and companies */}
+            <div>
+              <h3>Available Resources (Experts & Companies)</h3>
+              <div style={{ border: '1px solid #ddd', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
+                {allUsers.filter(u => (u.role === 'expert' || u.role === 'client') && u.kyc_status === 'verified').length === 0 ? (
+                  <p style={{ padding: '1rem', color: '#666' }}>No verified experts or companies available</p>
+                ) : (
+                  allUsers.filter(u => (u.role === 'expert' || u.role === 'client') && u.kyc_status === 'verified').map(resource => (
+                    <div
+                      key={resource.id}
+                      onClick={() => setSelectedExpertForAssignment(resource)}
+                      style={{
+                        padding: '1rem',
+                        borderBottom: '1px solid #eee',
+                        cursor: 'pointer',
+                        backgroundColor: selectedExpertForAssignment?.id === resource.id ? '#e7f3ff' : 'white',
+                        transition: 'background-color 0.2s'
+                      }}
+                    >
+                      <strong>{resource.name}</strong>
+                      <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#666' }}>
+                        {resource.role === 'expert' ? '👤 Expert' : '🏢 Company'} {resource.company && `- ${resource.company}`}
+                      </p>
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#666' }}>
+                        {resource.email}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Assignment Info */}
+          {selectedProjectForAssignment && selectedExpertForAssignment && (
+            <div style={{ backgroundColor: '#f0f8ff', padding: '1.5rem', borderRadius: '4px', marginBottom: '1.5rem', border: '2px solid #007bff' }}>
+              <p style={{ margin: '0 0 1rem 0' }}>
+                <strong>Project:</strong> {selectedProjectForAssignment.title}
+              </p>
+              <p style={{ margin: '0 0 1rem 0' }}>
+                <strong>Assigning to:</strong> {selectedExpertForAssignment.name} ({selectedExpertForAssignment.role === 'expert' ? '👤 Expert' : '🏢 Company'}) - {selectedExpertForAssignment.email}
+              </p>
+              <button
+                onClick={async () => {
+                  try {
+                    await axios.put(
+                      `http://localhost:5000/api/admin/projects/${selectedProjectForAssignment.id}/assign-expert`,
+                      { expert_id: selectedExpertForAssignment.id },
+                      { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }
+                    );
+                    alert(`${selectedExpertForAssignment.role === 'expert' ? 'Expert' : 'Company'} assigned successfully!`);
+                    setSelectedProjectForAssignment(null);
+                    setSelectedExpertForAssignment(null);
+                    setRefreshKey(prev => prev + 1);
+                  } catch (error) {
+                    console.error('Error assigning resource:', error);
+                    alert('Error assigning resource: ' + error.message);
+                  }
+                }}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem'
+                }}
+              >
+                ✓ Assign {selectedExpertForAssignment?.role === 'expert' ? 'Expert' : 'Company'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Expert Profile Modal */}
+      {showExpertModal && selectedExpert && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: '24px'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <h2 style={{ margin: 0 }}>Expert Profile</h2>
+              <button
+                onClick={() => {
+                  setShowExpertModal(false);
+                  setSelectedExpert(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 10px 0' }}>{selectedExpert.user_name}</h3>
+              <p style={{ margin: '5px 0', color: '#666' }}>
+                <strong>Email:</strong> {selectedExpert.user_email}
+              </p>
+              <p style={{ margin: '5px 0', color: '#666' }}>
+                <strong>Role:</strong> {selectedExpert.role}
+              </p>
+              {selectedExpert.company && (
+                <p style={{ margin: '5px 0', color: '#666' }}>
+                  <strong>Company:</strong> {selectedExpert.company}
+                </p>
+              )}
+            </div>
+
+            <div style={{
+              backgroundColor: '#f8f9fa',
+              padding: '16px',
+              borderRadius: '8px',
+              marginBottom: '20px'
+            }}>
+              <h4 style={{ margin: '0 0 10px 0' }}>Project Details</h4>
+              <p style={{ margin: '5px 0', color: '#333' }}>
+                <strong>{selectedExpert.project_title}</strong>
+              </p>
+              <p style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
+                {selectedExpert.project_description}
+              </p>
+              <p style={{ margin: '10px 0 0 0', color: '#666' }}>
+                <strong>Client:</strong> {selectedExpert.client_name}
+              </p>
+            </div>
+
+            {selectedExpert.message && (
+              <div style={{
+                backgroundColor: '#e7f3ff',
+                padding: '16px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                borderLeft: '4px solid #007bff'
+              }}>
+                <h4 style={{ margin: '0 0 10px 0' }}>Expert's Message</h4>
+                <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {selectedExpert.message}
+                </p>
+              </div>
+            )}
+
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => {
+                  setShowExpertModal(false);
+                  setSelectedExpert(null);
+                }}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await axios.put(`http://localhost:5000/api/task-requests/${selectedExpert.id}/status`, 
+                      { status: 'approved' },
+                      { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }
+                    );
+                    setShowExpertModal(false);
+                    setSelectedExpert(null);
+                    setRefreshKey(prev => prev + 1);
+                  } catch (error) {
+                    console.error('Error approving request:', error);
+                    alert('Error approving request: ' + error.message);
+                  }
+                }}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                ✓ Approve & Assign
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    padding: '2rem',
+    maxWidth: '1400px',
+    margin: '0 auto',
+    fontFamily: 'Arial, sans-serif',
+    backgroundColor: '#f5f5f5',
+    minHeight: '100vh'
+  },
+  contactsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+    gap: '1.5rem',
+    marginTop: '1.5rem'
+  },
+  contactCard: {
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    overflow: 'hidden',
+    transition: 'transform 0.2s, box-shadow 0.2s',
+    cursor: 'default'
+  },
+  contactCardHeader: {
+    backgroundColor: '#007bff',
+    color: 'white',
+    padding: '1rem',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  contactCardContent: {
+    padding: '1rem'
+  },
+  contactItem: {
+    marginBottom: '0.75rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.25rem'
+  },
+  contactLabel: {
+    fontWeight: 'bold',
+    color: '#333',
+    fontSize: '0.9rem'
+  },
+  loadingContainer: {
+    padding: '2rem',
+    textAlign: 'center',
+    fontSize: '18px'
+  },
+  subtitle: {
+    color: '#666',
+    marginBottom: '2rem'
+  },
+  tabs: {
+    display: 'flex',
+    gap: '1rem',
+    marginBottom: '2rem',
+    flexWrap: 'wrap'
+  },
+  tab: {
+    padding: '0.75rem 1.5rem',
+    backgroundColor: '#e0e0e0',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500'
+  },
+  activeTab: {
+    padding: '0.75rem 1.5rem',
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600'
+  },
+  section: {
+    marginBottom: '2rem'
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '1.5rem',
+    marginBottom: '2rem'
+  },
+  statCard: {
+    backgroundColor: 'white',
+    padding: '1.5rem',
+    borderRadius: '8px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    textAlign: 'center'
+  },
+  statNumber: {
+    fontSize: '2.5rem',
+    fontWeight: 'bold',
+    color: '#007bff',
+    margin: '0.5rem 0 0 0'
+  },
+  card: {
+    backgroundColor: 'white',
+    padding: '1.5rem',
+    borderRadius: '8px',
+    marginBottom: '1.5rem',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    border: '1px solid #e0e0e0'
+  },
+  cardContent: {
+    marginBottom: '1.5rem'
+  },
+  expertSection: {
+    backgroundColor: '#f9f9f9',
+    padding: '1rem',
+    borderRadius: '4px',
+    marginBottom: '1rem',
+    borderLeft: '4px solid #ffc107'
+  },
+  actionButtons: {
+    display: 'flex',
+    gap: '0.75rem',
+    flexWrap: 'wrap'
+  },
+  approveButton: {
+    padding: '0.5rem 1rem',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px'
+  },
+  rejectButton: {
+    padding: '0.5rem 1rem',
+    backgroundColor: '#dc3545',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px'
+  },
+  deleteButton: {
+    padding: '0.5rem 1rem',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px'
+  },
+  removeButton: {
+    padding: '0.5rem 1rem',
+    backgroundColor: '#dc3545',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    marginBottom: '0.5rem'
+  },
+  assignButton: {
+    padding: '0.5rem 1rem',
+    backgroundColor: '#ffc107',
+    color: 'black',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    marginTop: '0.5rem'
+  },
+  select: {
+    width: '100%',
+    padding: '0.5rem',
+    marginBottom: '0.75rem',
+    borderRadius: '4px',
+    border: '1px solid #ddd'
+  },
+  timestamp: {
+    fontSize: '12px',
+    color: '#999',
+    marginTop: '0.5rem'
+  },
+  emptyMessage: {
+    textAlign: 'center',
+    color: '#999',
+    padding: '2rem'
+  },
+  statusBadge: {
+    padding: '0.25rem 0.75rem',
+    backgroundColor: '#e0e0e0',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: 'bold'
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    backgroundColor: 'white'
+  },
+  tableWrapper: {
+    overflowX: 'auto',
+    backgroundColor: 'white',
+    borderRadius: '8px'
+  },
+  tableHeaderRow: {
+    backgroundColor: '#007bff',
+    color: 'white'
+  },
+  tableHeader: {
+    padding: '1rem',
+    textAlign: 'left',
+    fontWeight: 'bold',
+    borderBottom: '2px solid #0056b3'
+  },
+  tableRow: {
+    borderBottom: '1px solid #e0e0e0',
+    transition: 'background-color 0.2s'
+  },
+  tableCell: {
+    padding: '1rem',
+    textAlign: 'left',
+    color: '#333'
+  }
+};
+
+// Admin Dashboard Styles
+const adminStyles = {
+  container: {
+    padding: '2rem',
+    maxWidth: '1400px',
+    margin: '0 auto',
+    backgroundColor: '#f8fafc',
+    minHeight: 'calc(100vh - 65px)'
+  },
+  header: {
+    marginBottom: '2rem',
+    backgroundColor: 'white',
+    padding: '1.5rem 2rem',
+    borderRadius: '16px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+  },
+  headerTitle: {
+    fontSize: '1.75rem',
+    fontWeight: '700',
+    color: '#111827',
+    margin: '0 0 0.5rem 0'
+  },
+  tabsRow: {
+    display: 'flex',
+    gap: '0.5rem',
+    marginBottom: '2rem',
+    backgroundColor: 'white',
+    padding: '0.5rem',
+    borderRadius: '12px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    overflowX: 'auto'
+  },
+  tab: {
+    padding: '0.75rem 1.25rem',
+    backgroundColor: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '0.9375rem',
+    fontWeight: '500',
+    color: '#6b7280',
+    borderRadius: '8px',
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem'
+  },
+  tabActive: {
+    backgroundColor: '#2563eb',
+    color: 'white'
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '1.5rem',
+    marginBottom: '2rem'
+  },
+  statCard: {
+    backgroundColor: 'white',
+    padding: '1.5rem',
+    borderRadius: '16px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    border: '1px solid #e5e7eb'
+  },
+  statNumber: {
+    fontSize: '2rem',
+    fontWeight: '700',
+    color: '#2563eb',
+    margin: '0.5rem 0 0 0'
+  },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: '16px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    border: '1px solid #e5e7eb',
+    overflow: 'hidden'
+  },
+  cardHeader: {
+    padding: '1rem 1.5rem',
+    borderBottom: '1px solid #e5e7eb',
+    backgroundColor: '#f9fafb'
+  },
+  cardTitle: {
+    fontSize: '1.125rem',
+    fontWeight: '600',
+    color: '#111827',
+    margin: 0
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse'
+  },
+  tableHeaderRow: {
+    backgroundColor: '#f9fafb'
+  },
+  tableHeader: {
+    padding: '0.875rem 1rem',
+    textAlign: 'left',
+    fontWeight: '600',
+    fontSize: '0.8125rem',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    borderBottom: '1px solid #e5e7eb'
+  },
+  tableRow: {
+    borderBottom: '1px solid #f3f4f6',
+    transition: 'background-color 0.2s'
+  },
+  tableCell: {
+    padding: '1rem',
+    fontSize: '0.9375rem',
+    color: '#374151'
+  },
+  badge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '0.25rem 0.75rem',
+    borderRadius: '9999px',
+    fontSize: '0.75rem',
+    fontWeight: '500'
+  },
+  button: {
+    padding: '0.5rem 1rem',
+    borderRadius: '8px',
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    border: 'none',
+    transition: 'all 0.2s ease'
+  },
+  buttonPrimary: {
+    backgroundColor: '#2563eb',
+    color: 'white'
+  },
+  buttonSuccess: {
+    backgroundColor: '#10b981',
+    color: 'white'
+  },
+  buttonDanger: {
+    backgroundColor: '#ef4444',
+    color: 'white'
+  }
+};

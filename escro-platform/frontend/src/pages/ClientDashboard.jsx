@@ -1,0 +1,1528 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import Header from '../components/Header';
+import VerificationModal from '../components/VerificationModal';
+import PostTaskModal from '../components/PostTaskModal';
+import axios from 'axios';
+
+const getFirstName = (name) => {
+  if (!name) return '?';
+  return name.split(' ')[0];
+};
+
+export default function ClientDashboard() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const { user, logout } = useAuth();
+  
+  console.log('[DEBUG ClientDashboard] Current user from context:', user);
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'projects');
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedMilestone, setSelectedMilestone] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [myProjects, setMyProjects] = useState([]);
+  const [myPostedTasks, setMyPostedTasks] = useState([]);
+  const [showPostTaskModal, setShowPostTaskModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [userVerificationStatus, setUserVerificationStatus] = useState('verified');
+  const [profileData, setProfileData] = useState({
+    firstName: '',
+    lastName: '',
+    email: user?.email || '',
+    phone: '',
+    company: '',
+    profile_image_url: '',
+    expertise: '',
+    bio: '',
+    portfolio_description: '',
+    industry: '',
+    experience: '',
+    role: 'client'
+  });
+  const [profileImagePreview, setProfileImagePreview] = useState(null);
+  const isModalOpenRef = useRef(false);
+  const isFirstLoadRef = useRef(true);
+  const containerRef = useRef(null);
+
+  // Track when modal is open to prevent unnecessary resets
+  useEffect(() => {
+    isModalOpenRef.current = showVerificationModal;
+  }, [showVerificationModal]);
+
+  // Auto-refresh verification status every 60 seconds to catch admin approvals
+  useEffect(() => {
+    const checkVerification = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get('/api/users/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        const kyc_status = response.data.user?.kyc_status || 'pending';
+        console.log('[DEBUG] KYC Status:', kyc_status);
+        setUserVerificationStatus(kyc_status);
+        
+        // Only show modal if not already verified and modal is not already open
+        if (kyc_status !== 'verified' && !isModalOpenRef.current) {
+          console.log('[DEBUG] User not verified, checking for existing call...');
+          try {
+            const callResponse = await axios.get('/api/verification-calls/my-call', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            console.log('[DEBUG] Verification call response:', callResponse.data.data);
+            if (!callResponse.data.data) {
+              console.log('[DEBUG] No verification call found, showing modal');
+              setShowVerificationModal(true);
+            } else {
+              console.log('[DEBUG] Verification call already exists');
+            }
+          } catch (err) {
+            console.error('[DEBUG] Error checking verification calls:', err.message);
+            console.log('[DEBUG] Showing modal due to error');
+            setShowVerificationModal(true);
+          }
+        } else if (kyc_status === 'verified') {
+          console.log('[DEBUG] User already verified, no modal needed');
+        }
+      } catch (err) {
+        console.error('[DEBUG] Failed to check verification status:', err.message);
+      }
+    };
+
+    // Check immediately on mount
+    console.log('[DEBUG] ClientDashboard mounted, checking verification...');
+    checkVerification();
+    
+    // Then check every 60 seconds to give users time to complete forms
+    const verificationInterval = setInterval(checkVerification, 60000);
+    return () => clearInterval(verificationInterval);
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+    fetchMyProjects();
+    fetchMyPostedTasks();
+    loadProfileFromBackend();
+    
+    // Refresh my projects every 5 seconds to reflect admin changes
+    const myProjectsInterval = setInterval(fetchMyProjects, 5000);
+    // Refresh posted tasks every 10 seconds
+    const postedTasksInterval = setInterval(fetchMyPostedTasks, 10000);
+    // Refresh available projects every 10 seconds
+    const projectsInterval = setInterval(fetchProjects, 10000);
+    
+    return () => {
+      clearInterval(myProjectsInterval);
+      clearInterval(postedTasksInterval);
+      clearInterval(projectsInterval);
+    };
+  }, []);
+
+  // Sync activeTab with URL query params from Header dropdown navigation
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['projects', 'myprojects', 'post-task', 'profile', 'pending-approval'].includes(tab)) {
+      setActiveTab(tab);
+    } else {
+      // If no tab param, default to projects
+      setActiveTab('projects');
+    }
+  }, [searchParams]);
+
+  const loadProfileFromBackend = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/users/profile', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.data.user) {
+        const fullName = response.data.user.name || '';
+        const nameParts = fullName.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        setProfileData(prev => ({
+          ...prev,
+          firstName: firstName,
+          lastName: lastName,
+          email: response.data.user.email || '',
+          phone: response.data.user.phone || '',
+          company: response.data.user.company || '',
+          profile_image_url: response.data.user.profile_image_url || '',
+          expertise: response.data.user.expertise || '',
+          bio: response.data.user.bio || '',
+          portfolio_description: response.data.user.portfolio_description || '',
+          industry: response.data.user.industry || '',
+          experience: response.data.user.experience || '',
+          role: response.data.user.role || 'client'
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      // Only set loading on first load
+      if (isFirstLoadRef.current) {
+        setLoading(true);
+      }
+      
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/projects', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      const projectsData = response.data.projects || response.data;
+      const projectsArray = Array.isArray(projectsData) ? projectsData : [];
+      
+      console.log('[DEBUG] ClientDashboard.fetchProjects - projectsArray length:', projectsArray.length);
+      console.log('[DEBUG] ClientDashboard.fetchProjects - user role:', user?.role, 'user id:', user?.id);
+      if (projectsArray.length > 0) {
+        console.log('[DEBUG] First 3 projects:', JSON.stringify(projectsArray.slice(0, 3), null, 2));
+      }
+      // Log assigned_experts for PM tasks
+      projectsArray.filter(p => p.is_pm_task).forEach((p, i) => {
+        console.log(`[DEBUG] PM Task ${i}: assigned_experts =`, JSON.stringify(p.assigned_experts));
+      });
+      
+      // Backend already filters based on role, just display what we get
+      setProjects(projectsArray);
+      setError('');
+      
+      // Mark first load as done
+      if (isFirstLoadRef.current) {
+        isFirstLoadRef.current = false;
+        setLoading(false);
+      }
+    } catch (err) {
+      setError('Failed to fetch projects');
+      console.error(err);
+      if (isFirstLoadRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const fetchMyProjects = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/projects', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      const projectsData = response.data.projects || response.data;
+      const projectsArray = Array.isArray(projectsData) ? projectsData : [];
+      
+      console.log('[DEBUG] ClientDashboard.fetchMyProjects - ALL projects from API:', projectsArray.length);
+      console.log('[DEBUG] ClientDashboard.fetchMyProjects - user.id:', user?.id);
+      
+      // Filter to show projects where user is either client OR assigned company (prestator)
+      const myProjectsOnly = projectsArray.filter(p => 
+        String(p.client_id) === String(user?.id) || 
+        String(p.company_id) === String(user?.id)
+      );
+      console.log('[DEBUG] ClientDashboard.fetchMyProjects - filtered myProjectsOnly:', myProjectsOnly.length);
+      
+      setMyProjects(myProjectsOnly);
+      setError('');
+    } catch (err) {
+      console.error('Failed to fetch my projects:', err);
+      setMyProjects([]);
+    }
+  };
+
+  const fetchMyPostedTasks = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/companies/posted-tasks/my-tasks', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      console.log('[DEBUG] fetchMyPostedTasks:', response.data.data.length, 'tasks');
+      setMyPostedTasks(response.data.data || []);
+    } catch (err) {
+      console.error('Failed to fetch my posted tasks:', err);
+      setMyPostedTasks([]);
+    }
+  };
+
+  const handleProfileChange = (field, value) => {
+    setProfileData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleProfileImageChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Show preview immediately
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfileImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      const formData = new FormData();
+      formData.append('profile_image', file);
+
+      const response = await axios.post('/api/users/profile-image', formData, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+
+      if (response.data.profile_image_url) {
+        setProfileData(prev => ({
+          ...prev,
+          profile_image_url: response.data.profile_image_url
+        }));
+        setSuccess('✓ Profile picture updated successfully!');
+        setProfileImagePreview(null); // Only clear on success
+        setTimeout(() => setSuccess(''), 3000);
+      }
+    } catch (err) {
+      setError('Failed to upload profile picture: ' + err.message);
+      // Keep preview visible on error so user can retry
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setLoading(true);
+      const submitData = {
+        ...profileData,
+        name: `${profileData.firstName} ${profileData.lastName}`.trim()
+      };
+      delete submitData.firstName;
+      delete submitData.lastName;
+      delete submitData.role;
+      const response = await axios.put('/api/users/profile', submitData, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      setSuccess('✓ Profile saved successfully!');
+      // Scroll to top
+      if (containerRef.current) {
+        containerRef.current.scrollTop = 0;
+      }
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError('Failed to save profile: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerificationSubmit = async (data) => {
+    // VerificationModal already posted the data, we just need to close modal and show success
+    try {
+      setSuccess('✓ Verification call scheduled successfully! You will receive a call from our team.');
+      setShowVerificationModal(false);
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err) {
+      setError('Failed to schedule verification call');
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    const labels = {
+      pending: 'Pending',
+      in_progress: 'In Progress',
+      delivered: 'Delivered',
+      approved: 'Approved',
+      disputed: 'Disputed',
+      completed: 'Completed'
+    };
+    return labels[status] || status;
+  };
+
+  const getProjectStatusLabel = (status) => {
+    const labels = {
+      pending_approval: 'Pending Approval',
+      approved: 'Approved',
+      pending_assignment: 'Pending Assignment',
+      assigned: 'Assigned',
+      in_progress: 'In Progress',
+      delivered: 'Delivered',
+      completed: 'Completed',
+      disputed: 'Disputed'
+    };
+    return labels[status] || status;
+  };
+
+  const getProjectStatusColor = (status) => {
+    const colors = {
+      pending_approval: '#ffc107',
+      approved: '#17a2b8',
+      pending_assignment: '#ffc107',
+      assigned: '#28a745',
+      in_progress: '#17a2b8',
+      delivered: '#20c997',
+      completed: '#20c997',
+      disputed: '#dc3545'
+    };
+    return colors[status] || '#6c757d';
+  };
+
+  const handleSelectProject = (project) => {
+    console.log('Navigating to project:', project.id, 'task_id:', project.task_id, 'is_pm_task:', project.is_pm_task);
+    // For PM tasks, navigate to TaskDashboard, otherwise go to project detail
+    if (project.is_pm_task && project.task_id) {
+      navigate(`/task/${project.task_id}`);
+    } else {
+      navigate(`/client/project/${project.id}`);
+    }
+  };
+
+  const handleMilestoneSelect = (milestone) => {
+    setSelectedMilestone(milestone);
+  };
+
+  if (loading && projects.length === 0) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <h2>Loading projects...</h2>
+      </div>
+    );
+  }
+
+  // Professional Enterprise Design System (Unified with ExpertDashboard)
+  const createUnifiedStyles = () => ({
+  container: {
+    padding: '2rem',
+    maxWidth: '1400px',
+    margin: '0 auto',
+    backgroundColor: '#f5f7fa',
+    minHeight: '100vh'
+  },
+  header: {
+    marginBottom: '2.5rem'
+  },
+  headerTitle: {
+    fontSize: '2rem',
+    fontWeight: '700',
+    color: '#1a202c',
+    margin: '0 0 0.5rem 0',
+    letterSpacing: '-0.5px'
+  },
+  headerSubtitle: {
+    fontSize: '1rem',
+    color: '#718096',
+    margin: 0
+  },
+  messageBox: {
+    padding: '1rem',
+    borderRadius: '8px',
+    marginBottom: '1.5rem',
+    borderLeft: '4px solid',
+    fontSize: '0.95rem'
+  },
+  errorBox: {
+    backgroundColor: '#fee',
+    borderLeftColor: '#dc3545',
+    color: '#721c24'
+  },
+  successBox: {
+    backgroundColor: '#efe',
+    borderLeftColor: '#28a745',
+    color: '#155724'
+  },
+  infoBox: {
+    backgroundColor: '#fff3cd',
+    borderLeftColor: '#ffc107',
+    color: '#856404'
+  },
+  projectsList: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+    gap: '1.5rem'
+  },
+  projectCard: {
+    backgroundColor: 'white',
+    padding: '1.5rem',
+    borderRadius: '12px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+    border: '1px solid #e2e8f0',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease'
+  },
+  projectTitle: {
+    fontSize: '1.1rem',
+    fontWeight: '700',
+    color: '#1a202c',
+    marginBottom: '0.75rem'
+  },
+  projectMeta: {
+    fontSize: '0.9rem',
+    color: '#718096',
+    marginBottom: '0.5rem'
+  },
+  projectBudget: {
+    fontSize: '1rem',
+    fontWeight: '700'
+  },
+  projectDetail: {
+    backgroundColor: '#f7fafc',
+    padding: '2rem',
+    borderRadius: '12px',
+    marginTop: '2rem',
+    border: '1px solid #e2e8f0'
+  },
+  detailGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '1.5rem',
+    marginTop: '1rem'
+  },
+  detailItem: {
+    padding: '1rem',
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0'
+  },
+  detailLabel: {
+    fontSize: '0.85rem',
+    fontWeight: '700',
+    color: '#718096',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: '0.5rem'
+  },
+  detailValue: {
+    fontSize: '1.25rem',
+    fontWeight: '700',
+    color: '#1a202c'
+  },
+  button: {
+    padding: '0.75rem 1.5rem',
+    backgroundColor: '#2563eb',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '0.95rem',
+    fontWeight: '600',
+    transition: 'all 0.2s ease'
+  },
+  statusBadge: {
+    display: 'inline-block',
+    padding: '0.25rem 0.75rem',
+    borderRadius: '20px',
+    fontSize: '0.85rem',
+    fontWeight: '600'
+  },
+  card: {
+    backgroundColor: 'white',
+    padding: '1.5rem',
+    borderRadius: '12px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+    border: '1px solid #e2e8f0',
+    transition: 'all 0.3s ease'
+  },
+  formGroup: {
+    marginBottom: '1.25rem'
+  },
+  label: {
+    fontWeight: '600',
+    display: 'block',
+    marginBottom: '0.5rem',
+    color: '#1a202c',
+    fontSize: '0.95rem'
+  },
+  input: {
+    width: '100%',
+    padding: '0.75rem',
+    border: '1px solid #cbd5e0',
+    borderRadius: '6px',
+    fontSize: '1rem',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit'
+  },
+  textarea: {
+    width: '100%',
+    padding: '0.75rem',
+    border: '1px solid #cbd5e0',
+    borderRadius: '6px',
+    fontSize: '1rem',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box'
+  },
+  section: {
+    marginBottom: '2rem'
+  },
+  sectionTitle: {
+    fontSize: '1.3rem',
+    fontWeight: '700',
+    color: '#1a202c',
+    marginBottom: '1.5rem',
+    paddingBottom: '0.75rem',
+    borderBottom: '2px solid #e2e8f0'
+  },
+  twoColumn: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '1rem'
+  }
+  });
+
+  const styles = createUnifiedStyles();
+
+  return (
+    <>
+      <Header currentPage="dashboard" />
+      <div style={styles.container} ref={containerRef}>
+        {/* Messages */}
+        {error && (
+          <div style={{ ...styles.messageBox, ...styles.errorBox }}>
+            <strong>Error:</strong> {error}
+          </div>
+        )}
+        {success && (
+          <div style={{ ...styles.messageBox, ...styles.successBox }}>
+            <strong>Success!</strong> {success}
+          </div>
+        )}
+
+        {/* Header Section */}
+        <div style={styles.header}>
+        </div>
+
+        {/* Projects Tab */}
+        {activeTab === 'projects' && (
+          <>
+            {userVerificationStatus !== 'verified' && (
+              <div style={{ ...styles.messageBox, ...styles.infoBox }}>
+                ⏳ <strong>Your account is pending verification.</strong> You can view your projects but cannot create new ones until your verification call is completed.
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: selectedProject ? '1fr 450px' : '1fr', gap: '2rem', alignItems: 'flex-start' }}>
+              <div style={styles.section}>
+                <div style={styles.projectsList}>
+                  {projects.length === 0 ? (
+                    <p style={{ color: '#718096' }}>No projects available at the moment.</p>
+                  ) : (
+                    projects.map(project => (
+                      <div 
+                        key={project.id} 
+                        style={{
+                          ...styles.projectCard,
+                          cursor: 'pointer',
+                          backgroundColor: selectedProject?.id === project.id ? '#f0f8ff' : 'white',
+                          borderLeft: selectedProject?.id === project.id ? '4px solid #007bff' : '4px solid transparent'
+                        }}
+                        onClick={() => handleSelectProject(project)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-4px)';
+                          e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.12)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                          <h3 style={{ ...styles.projectTitle, marginBottom: 0 }}>
+                            {project.assignment_type === 'task_assignment' ? project.title : (project.task_id ? project.task_title : project.title)}
+                          </h3>
+                          <span style={{
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            backgroundColor: project.is_pm_task ? '#e7f5ff' : project.service_type === 'direct' ? '#fef3c7' : '#d4edda',
+                            color: project.is_pm_task ? '#1971c2' : project.service_type === 'direct' ? '#d97706' : '#155724',
+                            border: `1px solid ${project.is_pm_task ? '#90caf9' : project.service_type === 'direct' ? '#fcd34d' : '#c3e6cb'}`
+                          }}>
+                            {project.is_pm_task ? '📋 PM Task' : project.service_type === 'direct' ? '🎯 Direct' : '🔗 Matching'}
+                          </span>
+                        </div>
+                        <p style={styles.projectMeta}>{project.description?.substring(0, 100)}...</p>
+                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#888' }}>
+                          📅 {project.created_at ? new Date(project.created_at).toLocaleDateString('ro-RO') : ''}
+                        </div>
+                        {project.is_pm_task && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
+                            {project.assigned_experts && project.assigned_experts.length > 0 ? (
+                              <>👨‍💼 Prestatori: <strong>{project.assigned_experts.map(e => getFirstName(e?.name || '?')).join(', ')}</strong></>
+                            ) : (
+                              <span style={{ color: '#999' }}>👨‍💼 Prestatori: Nu sunt prestatori asignați</span>
+                            )}
+                          </div>
+                        )}
+                        {!project.is_pm_task && project.expert_name && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
+                            👨‍💼 Prestator: <strong>{getFirstName(project.expert_name)}</strong>
+                          </div>
+                        )}
+                        {project.company_name && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
+                            🏢 Prestator: <strong>{getFirstName(project.company_name)}</strong>
+                          </div>
+                        )}
+                        {project.client_name && (
+                          <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#555' }}>
+                            👤 Beneficiar: <strong>{getFirstName(project.client_name)}</strong>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                          <span style={{ ...styles.projectBudget, color: '#007bff' }}>
+                            {project.budget_ron ? `${project.budget_ron} RON` : 'Budget negotiable'}
+                          </span>
+                          {project.timeline_days && (
+                            <span style={{ fontSize: '0.85rem', color: '#888' }}>
+                              ⏱️ {project.timeline_days} zile
+                            </span>
+                          )}
+                          <span style={{
+                            ...styles.statusBadge,
+                            backgroundColor: getProjectStatusColor(project.status) + '20',
+                            color: getProjectStatusColor(project.status)
+                          }}>
+                            {getProjectStatusLabel(project.status)}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {selectedProject && (
+                <div style={{
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  padding: '2rem',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  maxHeight: 'calc(100vh - 200px)',
+                  overflowY: 'auto',
+                  position: 'sticky',
+                  top: '100px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#1a202c', fontWeight: '700' }}>Project Details</h3>
+                    <button
+                      onClick={() => setSelectedProject(null)}
+                      style={{
+                        backgroundColor: '#f0f0f0',
+                        border: 'none',
+                        fontSize: '1.5rem',
+                        cursor: 'pointer',
+                        color: '#666',
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#e0e0e0';
+                        e.currentTarget.style.color = '#333';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f0f0f0';
+                        e.currentTarget.style.color = '#666';
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: '2rem' }}>
+                    <h4 style={{ margin: '0 0 0.75rem 0', color: '#666', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Title</h4>
+                    <p style={{ margin: 0, fontWeight: '600', color: '#1a202c', fontSize: '1.1rem', lineHeight: '1.4' }}>{selectedProject.title}</p>
+                  </div>
+
+                  <div style={{ marginBottom: '2rem' }}>
+                    <h4 style={{ margin: '0 0 0.75rem 0', color: '#666', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</h4>
+                    <p style={{ margin: 0, color: '#4a5568', fontSize: '0.95rem', lineHeight: '1.6' }}>
+                      {selectedProject.description}
+                    </p>
+                  </div>
+
+                  <div style={{ marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '2px solid #f0f4f8' }}>
+                    <h4 style={{ margin: '0 0 1.2rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      💰 Escrow & Milestones
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
+                      <div style={{ 
+                        backgroundColor: 'linear-gradient(135deg, #e7f5ff 0%, #f0f8ff 100%)',
+                        padding: '1.2rem',
+                        borderRadius: '8px',
+                        border: '1px solid #b3d9ff',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <div style={{ fontSize: '0.8rem', color: '#1971c2', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Total Budget</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0b7285' }}>
+                          {selectedProject.budget_ron} RON
+                        </div>
+                      </div>
+                      <div style={{ 
+                        backgroundColor: 'linear-gradient(135deg, #fff9e6 0%, #fffbf0 100%)',
+                        padding: '1.2rem',
+                        borderRadius: '8px',
+                        border: '1px solid #ffd666',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <div style={{ fontSize: '0.8rem', color: '#b8860b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Milestones</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#d48806' }}>
+                          {selectedProject.milestones?.length || 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '0', paddingTop: '0' }}>
+                    <h4 style={{ margin: '0 0 1.2rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      📋 Timeline
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
+                      <div style={{ 
+                        backgroundColor: '#f8f9fa',
+                        padding: '1.2rem',
+                        borderRadius: '8px',
+                        border: '1px solid #dee2e6',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <div style={{ fontSize: '0.8rem', color: '#6c757d', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Duration</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#495057' }}>
+                          {selectedProject.timeline_days} days
+                        </div>
+                      </div>
+                      <div style={{ 
+                        backgroundColor: '#f8f9fa',
+                        padding: '1.2rem',
+                        borderRadius: '8px',
+                        border: '1px solid #dee2e6',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <div style={{ fontSize: '0.8rem', color: '#6c757d', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Status</div>
+                        <div style={{ 
+                          fontSize: '0.95rem', 
+                          fontWeight: '700', 
+                          color: getProjectStatusColor(selectedProject.status),
+                          textTransform: 'capitalize',
+                          padding: '0.4rem 0.8rem',
+                          backgroundColor: getProjectStatusColor(selectedProject.status) + '15',
+                          borderRadius: '4px',
+                          display: 'inline-block'
+                        }}>
+                          {getProjectStatusLabel(selectedProject.status)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => navigate(`/client/project/${selectedProject.id}`)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      marginTop: '1.5rem',
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.95rem',
+                      fontWeight: '600',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#0056b3';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#007bff';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    💬 View Full Details & Chat
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* My Projects Tab */}
+        {activeTab === 'myprojects' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: selectedProject ? '1fr 450px' : '1fr', gap: '2rem', alignItems: 'flex-start' }}>
+              <div style={styles.section}>
+                <div style={styles.projectsList}>
+                  {myProjects.length === 0 ? (
+                    <p style={{ color: '#718096' }}>No projects created yet.</p>
+                  ) : (
+                    myProjects.map(project => (
+                      <div 
+                        key={project.id} 
+                        style={{
+                          ...styles.projectCard,
+                          cursor: 'pointer',
+                          backgroundColor: selectedProject?.id === project.id ? '#f0f8ff' : 'white',
+                          borderLeft: selectedProject?.id === project.id ? '4px solid #007bff' : '4px solid transparent'
+                        }}
+                        onClick={() => handleSelectProject(project)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-4px)';
+                          e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.12)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                          <h3 style={{ ...styles.projectTitle, marginBottom: 0 }}>
+                            {project.assignment_type === 'task_assignment' ? project.title : (project.task_id ? project.task_title : project.title)}
+                          </h3>
+                          <span style={{
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            backgroundColor: project.is_pm_task ? '#e7f5ff' : project.service_type === 'direct' ? '#fef3c7' : '#d4edda',
+                            color: project.is_pm_task ? '#1971c2' : project.service_type === 'direct' ? '#d97706' : '#155724',
+                            border: `1px solid ${project.is_pm_task ? '#90caf9' : project.service_type === 'direct' ? '#fcd34d' : '#c3e6cb'}`
+                          }}>
+                            {project.is_pm_task ? '📋 PM Task' : project.service_type === 'direct' ? '🎯 Direct' : '🔗 Matching'}
+                          </span>
+                        </div>
+                        <p style={styles.projectMeta}>{project.description?.substring(0, 100)}...</p>
+                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#888' }}>
+                          📅 {project.created_at ? new Date(project.created_at).toLocaleDateString('ro-RO') : ''}
+                        </div>
+                        {project.is_pm_task && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
+                            {project.assigned_experts && project.assigned_experts.length > 0 ? (
+                              <>👨‍💼 Prestatori: <strong>{project.assigned_experts.map(e => getFirstName(e?.name || '?')).join(', ')}</strong></>
+                            ) : (
+                              <span style={{ color: '#999' }}>👨‍💼 Prestatori: Nu sunt prestatori asignați</span>
+                            )}
+                          </div>
+                        )}
+                        {!project.is_pm_task && project.expert_name && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
+                            👨‍💼 Prestator: <strong>{getFirstName(project.expert_name)}</strong>
+                          </div>
+                        )}
+                        {project.company_name && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
+                            🏢 Prestator: <strong>{getFirstName(project.company_name)}</strong>
+                          </div>
+                        )}
+                        {project.client_name && (
+                          <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#555' }}>
+                            👤 Beneficiar: <strong>{getFirstName(project.client_name)}</strong>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                          <span style={{ ...styles.projectBudget, color: '#007bff' }}>
+                            {project.budget_ron ? `${project.budget_ron} RON` : 'Budget negotiable'}
+                          </span>
+                          {project.timeline_days && (
+                            <span style={{ fontSize: '0.85rem', color: '#888' }}>
+                              ⏱️ {project.timeline_days} zile
+                            </span>
+                          )}
+                          <span style={{
+                            ...styles.statusBadge,
+                            backgroundColor: getProjectStatusColor(project.status) + '20',
+                            color: getProjectStatusColor(project.status)
+                          }}>
+                            {getProjectStatusLabel(project.status)}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {selectedProject && (
+                <div style={{
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  padding: '2rem',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  maxHeight: 'calc(100vh - 200px)',
+                  overflowY: 'auto',
+                  position: 'sticky',
+                  top: '100px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#1a202c', fontWeight: '700' }}>Project Details</h3>
+                    <button
+                      onClick={() => setSelectedProject(null)}
+                      style={{
+                        backgroundColor: '#f0f0f0',
+                        border: 'none',
+                        fontSize: '1.5rem',
+                        cursor: 'pointer',
+                        color: '#666',
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#e0e0e0';
+                        e.currentTarget.style.color = '#333';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f0f0f0';
+                        e.currentTarget.style.color = '#666';
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: '2rem' }}>
+                    <h4 style={{ margin: '0 0 0.75rem 0', color: '#666', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Title</h4>
+                    <p style={{ margin: 0, fontWeight: '600', color: '#1a202c', fontSize: '1.1rem', lineHeight: '1.4' }}>{selectedProject.title}</p>
+                  </div>
+
+                  <div style={{ marginBottom: '2rem' }}>
+                    <h4 style={{ margin: '0 0 0.75rem 0', color: '#666', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</h4>
+                    <p style={{ margin: 0, color: '#4a5568', fontSize: '0.95rem', lineHeight: '1.6' }}>
+                      {selectedProject.description}
+                    </p>
+                  </div>
+
+                  <div style={{ marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '2px solid #f0f4f8' }}>
+                    <h4 style={{ margin: '0 0 1.2rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      💰 Escrow & Milestones
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
+                      <div style={{ 
+                        backgroundColor: 'linear-gradient(135deg, #e7f5ff 0%, #f0f8ff 100%)',
+                        padding: '1.2rem',
+                        borderRadius: '8px',
+                        border: '1px solid #b3d9ff',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <div style={{ fontSize: '0.8rem', color: '#1971c2', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Total Budget</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0b7285' }}>
+                          {selectedProject.budget_ron} RON
+                        </div>
+                      </div>
+                      <div style={{ 
+                        backgroundColor: 'linear-gradient(135deg, #fff9e6 0%, #fffbf0 100%)',
+                        padding: '1.2rem',
+                        borderRadius: '8px',
+                        border: '1px solid #ffd666',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <div style={{ fontSize: '0.8rem', color: '#b8860b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Milestones</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#d48806' }}>
+                          {selectedProject.milestones?.length || 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '0', paddingTop: '0' }}>
+                    <h4 style={{ margin: '0 0 1.2rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      📋 Timeline
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
+                      <div style={{ 
+                        backgroundColor: '#f8f9fa',
+                        padding: '1.2rem',
+                        borderRadius: '8px',
+                        border: '1px solid #dee2e6',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <div style={{ fontSize: '0.8rem', color: '#6c757d', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Duration</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#495057' }}>
+                          {selectedProject.timeline_days} days
+                        </div>
+                      </div>
+                      <div style={{ 
+                        backgroundColor: '#f8f9fa',
+                        padding: '1.2rem',
+                        borderRadius: '8px',
+                        border: '1px solid #dee2e6',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <div style={{ fontSize: '0.8rem', color: '#6c757d', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Status</div>
+                        <div style={{ 
+                          fontSize: '0.95rem', 
+                          fontWeight: '700', 
+                          color: getProjectStatusColor(selectedProject.status),
+                          textTransform: 'capitalize',
+                          padding: '0.4rem 0.8rem',
+                          backgroundColor: getProjectStatusColor(selectedProject.status) + '15',
+                          borderRadius: '4px',
+                          display: 'inline-block'
+                        }}>
+                          {getProjectStatusLabel(selectedProject.status)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => navigate(`/client/project/${selectedProject.id}`)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      marginTop: '1.5rem',
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.95rem',
+                      fontWeight: '600',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#0056b3';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#007bff';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    💬 View Full Details & Chat
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Post Task Tab */}
+        {activeTab === 'post-task' && (
+          <>
+            <div style={styles.section}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h2 style={{ ...styles.sectionTitle, marginBottom: 0 }}>📝 Post a New Task</h2>
+                <button
+                  onClick={() => setShowPostTaskModal(true)}
+                  disabled={userVerificationStatus !== 'verified'}
+                  title={userVerificationStatus !== 'verified' ? 'Complete verification to post tasks' : 'Post a new task'}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: userVerificationStatus === 'verified' ? '#007bff' : '#ccc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: userVerificationStatus === 'verified' ? 'pointer' : 'not-allowed',
+                    fontSize: '0.95rem',
+                    fontWeight: '600',
+                    transition: 'all 0.2s',
+                    opacity: userVerificationStatus === 'verified' ? 1 : 0.6
+                  }}
+                  onMouseEnter={(e) => {
+                    if (userVerificationStatus === 'verified') {
+                      e.currentTarget.style.backgroundColor = '#0056b3';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (userVerificationStatus === 'verified') {
+                      e.currentTarget.style.backgroundColor = '#007bff';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }
+                  }}
+                >
+                  ➕ New Task
+                </button>
+              </div>
+
+              {userVerificationStatus !== 'verified' && (
+                <div style={{ ...styles.messageBox, ...styles.infoBox, marginBottom: '1.5rem' }}>
+                  ⏳ <strong>Your account is pending verification.</strong> You can view your posted tasks but cannot post new ones until your verification call is completed.
+                </div>
+              )}
+
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '1rem', marginTop: '2rem' }}>📋 Your Posted Tasks</h3>
+              <div style={styles.projectsList}>
+                {myPostedTasks.length === 0 ? (
+                  <p style={{ color: '#718096' }}>No tasks posted yet. Click "New Task" to get started!</p>
+                ) : (
+                  myPostedTasks.map(task => (
+                    <div 
+                      key={task.id}
+                      style={{
+                        ...styles.projectCard,
+                        backgroundColor: task.client_posting_status === 'pending' ? '#fffbf0' : 'white'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                        <div>
+                          <h3 style={styles.projectTitle}>{task.title}</h3>
+                          <p style={styles.projectMeta}>{task.description?.substring(0, 100)}...</p>
+                        </div>
+                        <span style={{
+                          padding: '0.4rem 0.8rem',
+                          borderRadius: '4px',
+                          fontSize: '0.85rem',
+                          fontWeight: '600',
+                          backgroundColor: task.client_posting_status === 'pending' ? '#ffc10720' : 
+                                           task.client_posting_status === 'approved' ? '#28a74520' : '#dc354520',
+                          color: task.client_posting_status === 'pending' ? '#ffc107' : 
+                                 task.client_posting_status === 'approved' ? '#28a745' : '#dc3545'
+                        }}>
+                          {task.client_posting_status === 'pending' ? '⏳ Pending Approval' :
+                           task.client_posting_status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                        <div>
+                          <span style={styles.projectMeta}>💰 Budget:</span>
+                          <strong style={{ color: '#2563eb', display: 'block', fontSize: '1.1rem' }}>{task.budget_ron} RON</strong>
+                        </div>
+                        <div>
+                          <span style={styles.projectMeta}>⏱️ Timeline:</span>
+                          <strong style={{ color: '#2563eb', display: 'block', fontSize: '1.1rem' }}>{task.timeline_days} days</strong>
+                        </div>
+                        <div>
+                          <span style={styles.projectMeta}>🎯 Milestones:</span>
+                          <strong style={{ color: '#2563eb', display: 'block', fontSize: '1.1rem' }}>{task.milestone_count} milestones</strong>
+                        </div>
+                        <div>
+                          <span style={styles.projectMeta}>📅 Posted:</span>
+                          <strong style={{ color: '#2563eb', display: 'block', fontSize: '0.95rem' }}>
+                            {new Date(task.created_at).toLocaleDateString()}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {task.client_posting_message && (
+                        <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f7fafc', borderRadius: '6px', borderLeft: '3px solid #007bff' }}>
+                          <p style={{ margin: 0, color: '#4a5568', fontSize: '0.9rem' }}><strong>Your message:</strong> {task.client_posting_message}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Profile Tab */}
+        {activeTab === 'profile' && (
+          <>
+            <div style={styles.section}>
+              <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                <div style={{ ...styles.card, marginBottom: '2rem' }}>
+                  {(profileImagePreview || profileData.profile_image_url) && (
+                    <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                      <img
+                        src={profileImagePreview || profileData.profile_image_url}
+                        alt="Profile"
+                        style={{
+                          width: '120px',
+                          height: '120px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: '3px solid #2563eb',
+                          opacity: profileImagePreview ? 0.7 : 1
+                        }}
+                      />
+                      {profileImagePreview && <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>Preview</p>}
+                    </div>
+                  )}
+                  
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Profile Picture</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfileImageChange}
+                      style={{ ...styles.input, padding: '0.5rem' }}
+                    />
+                    <p style={{ fontSize: '0.85rem', color: '#666', margin: '0.5rem 0 0 0' }}>
+                      Format: JPG, PNG. Max 5MB
+                    </p>
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Company Bio</label>
+                    <textarea
+                      value={profileData.bio || ''}
+                      onChange={(e) => handleProfileChange('bio', e.target.value)}
+                      placeholder="Brief company bio"
+                      style={{ ...styles.textarea, minHeight: '100px' }}
+                    />
+                  </div>
+
+                  <div style={styles.twoColumn}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>First Name</label>
+                      <input
+                        type="text"
+                        value={profileData.firstName}
+                        onChange={(e) => handleProfileChange('firstName', e.target.value)}
+                        style={styles.input}
+                      />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Last Name</label>
+                      <input
+                        type="text"
+                        value={profileData.lastName}
+                        onChange={(e) => handleProfileChange('lastName', e.target.value)}
+                        style={styles.input}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Email</label>
+                    <input
+                      type="email"
+                      value={profileData.email}
+                      onChange={(e) => handleProfileChange('email', e.target.value)}
+                      style={styles.input}
+                      disabled
+                    />
+                  </div>
+
+                  <div style={styles.twoColumn}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Phone</label>
+                      <input
+                        type="tel"
+                        value={profileData.phone}
+                        onChange={(e) => handleProfileChange('phone', e.target.value)}
+                        placeholder="+40 7xx xxx xxx"
+                        style={styles.input}
+                      />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.label}>Role</label>
+                      <select
+                        value={profileData.role || 'client'}
+                        onChange={(e) => handleProfileChange('role', e.target.value)}
+                        style={styles.input}
+                        disabled
+                      >
+                        <option value="expert">Expert</option>
+                        <option value="client">Client</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Company (Optional)</label>
+                    <input
+                      type="text"
+                      value={profileData.company}
+                      onChange={(e) => handleProfileChange('company', e.target.value)}
+                      placeholder="Company name"
+                      style={styles.input}
+                    />
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Industry</label>
+                    <input
+                      type="text"
+                      value={profileData.industry || ''}
+                      onChange={(e) => handleProfileChange('industry', e.target.value)}
+                      placeholder="Your industry"
+                      style={styles.input}
+                    />
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Years of Experience</label>
+                    <input
+                      type="number"
+                      value={profileData.experience || ''}
+                      onChange={(e) => handleProfileChange('experience', parseInt(e.target.value) || '')}
+                      placeholder="Years of experience"
+                      min="0"
+                      style={styles.input}
+                    />
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Main Expertise / Specialization</label>
+                    <input
+                      type="text"
+                      value={profileData.expertise || ''}
+                      onChange={(e) => handleProfileChange('expertise', e.target.value)}
+                      placeholder="Your main area of expertise"
+                      style={styles.input}
+                    />
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Portfolio / Company Description</label>
+                    <textarea
+                      value={profileData.portfolio_description}
+                      onChange={(e) => handleProfileChange('portfolio_description', e.target.value)}
+                      placeholder="Describe your company, services offered, achievements..."
+                      style={{ ...styles.textarea, minHeight: '150px' }}
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={loading}
+                    style={{
+                      ...styles.button,
+                      backgroundColor: '#28a745',
+                      width: '100%'
+                    }}
+                  >
+                    {loading ? 'Saving...' : '💾 Save Profile'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Pending Approval Tab */}
+        {activeTab === 'pending-approval' && (
+          <>
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>⏳ Pending Approval</h2>
+              <div style={styles.projectsList}>
+                {myProjects.filter(p => p.status === 'pending_admin_approval').length === 0 ? (
+                  <p style={{ color: '#718096' }}>No projects pending approval.</p>
+                ) : (
+                  myProjects
+                    .filter(p => p.status === 'pending_admin_approval')
+                    .map(project => (
+                      <div 
+                        key={project.id} 
+                        style={styles.projectCard}
+                        onClick={() => handleSelectProject(project)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-4px)';
+                          e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.12)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                        }}
+                      >
+                        <h3 style={styles.projectTitle}>{project.title}</h3>
+                        <p style={styles.projectMeta}>{project.description?.substring(0, 80)}...</p>
+                        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span style={styles.projectMeta}>💰 Budget:</span>
+                            <strong style={{ color: '#2563eb', fontSize: '1.1rem' }}>{project.budget_ron} RON</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={styles.projectMeta}>Status:</span>
+                            <span style={{ 
+                              ...styles.statusBadge,
+                              backgroundColor: '#ffc107' + '20',
+                              color: '#ffc107'
+                            }}>
+                              Pending Approval
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
+        {showPostTaskModal && (
+          <PostTaskModal 
+            userType="client"
+            onClose={() => {
+              setShowPostTaskModal(false);
+              // Refresh posted tasks after modal closes
+              setTimeout(() => {
+                fetchMyPostedTasks();
+              }, 500);
+            }}
+            onSubmit={(response) => {
+              setSuccess('Task posted successfully! Admin will review it shortly.');
+              setTimeout(() => {
+                setSuccess('');
+              }, 3000);
+              fetchMyPostedTasks();
+            }}
+          />
+        )}
+
+        {showVerificationModal && (
+          <VerificationModal 
+            user={user} 
+            onClose={() => {
+              setShowVerificationModal(false);
+              // Check verification status when modal closes to catch any admin updates
+              setTimeout(() => {
+                const token = localStorage.getItem('token');
+                axios.get('/api/users/profile', {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                }).then(response => {
+                  const kyc_status = response.data.user?.kyc_status;
+                  setUserVerificationStatus(kyc_status);
+                }).catch(err => console.error('Error checking status on close:', err));
+              }, 500);
+            }}
+            onSubmit={handleVerificationSubmit}
+          />
+        )}
+      </div>
+    </>
+  );
+}
