@@ -1,8 +1,0 @@
-                  id                  |      name      |       email        |  role  |  industry   | experience 
---------------------------------------+----------------+--------------------+--------+-------------+------------
- 9a6a8c08-9e02-42ab-a2cf-cc88b4c39dd5 | Admin          | admin@escro.ro     | admin  |             | 
- 3d2dbc7a-cb45-436c-aa32-f359e0d6f9a4 | Andrei Popescu | companie@escro.ro  | client | IT          | senior
- 7d77091f-622a-4dff-8758-ccdedcf8f94d | Matei Dumitru  | expert@escro.ro    | expert | Arhitectura | middle
- b4bf418d-fad6-4a86-8db9-06c21de45239 | c c            | companie2@escro.ro | client | ads         | junior
-(4 rows)
-

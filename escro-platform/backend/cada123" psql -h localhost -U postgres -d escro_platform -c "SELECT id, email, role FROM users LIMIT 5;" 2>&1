@@ -1,9 +1,0 @@
-                  id                  |           email            |  role  
---------------------------------------+----------------------------+--------
- a1803c96-025a-4bff-b380-dd0f52331b92 | vladau.claudiu96@gmail.com | client
- 9a6a8c08-9e02-42ab-a2cf-cc88b4c39dd5 | admin@escro.ro             | admin
- 4e726d45-bf80-4464-b76d-6c33a92168a2 | vladau.claudiu97@gmail.com | expert
- 0fddba64-8a9d-4c25-bb3f-39c353542726 | vladau.claudiu98@gmail.com | expert
- c760152e-4d0d-4035-b655-edea37149a46 | newtest@example.com        | expert
-(5 rows)
-
