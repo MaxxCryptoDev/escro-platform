@@ -1,1405 +1,2464 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { contractAPI, modificationAPI } from '../services/api';
+import { useSocket } from '../context/SocketContext';
+import { contractAPI, modificationAPI, projectAPI, escrowAPI } from '../services/api';
 import ContractModal from '../components/ContractModal';
 import SignatureModal from '../components/SignatureModal';
 import AnnexModal from '../components/AnnexModal';
+import ReviewModal from '../components/ReviewModal';
+import { Icon, Avatar, StatusBadge, EscrowBar, Spinner, EmptyState } from '../components/ui';
+import { fmtRON, fmtDate, getInitials, withAuthToken } from '../utils/format';
 
-const getFirstName = (name) => {
-  if (!name) return '?';
-  return name.split(' ')[0];
-};
-
-const formatMessageDate = (dateString) => {
-  const date = new Date(dateString);
+const fmtMsgDate = (s) => {
+  const d = new Date(s);
   const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  const isYesterday = new Date(now - 86400000).toDateString() === date.toDateString();
-  
-  if (isToday) return date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
-  if (isYesterday) return 'Ieri ' + date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
-  return date.toLocaleDateString('ro-RO', { day: '2-digit', month: '2-digit' }) + ' ' + date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  const today = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now - 86400000).toDateString() === d.toDateString();
+  const time = d.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  if (today) return time;
+  if (yesterday) return `Ieri ${time}`;
+  return d.toLocaleDateString('ro-RO', { day: '2-digit', month: '2-digit' }) + ' ' + time;
 };
 
 export default function ProjectDetail() {
   const { projectId } = useParams();
   const { user: authUser } = useAuth();
+  const { socket } = useSocket();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const messagesEndRef = useRef(null);
+
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [messages, setMessages] = useState([]);
+  const [chatHasMore, setChatHasMore] = useState(false);
+  const [chatCursor, setChatCursor] = useState(null);
+  const [chatLoadingMore, setChatLoadingMore] = useState(false);
   const [newMessage, setNewMessage] = useState('');
-  const [activeTab, setActiveTab] = useState('details');
-  const [uploadingFile, setUploadingFile] = useState(false);
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'details');
   const [contracts, setContracts] = useState([]);
   const [workflowStatus, setWorkflowStatus] = useState(null);
   const [modifications, setModifications] = useState([]);
-  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    title: '',
-    description: '',
-    budget_ron: '',
-    timeline_days: '',
-    milestones: []
-  });
-  const messagesEndRef = useRef(null);
-  const [currentUser, setCurrentUser] = useState(authUser);
+  const [user, setUser] = useState(authUser);
   const [selectedContract, setSelectedContract] = useState(null);
-  const [signingContract, setSigningContract] = useState(false);
   const [signingMilestone, setSigningMilestone] = useState(null);
   const [selectedAnnex, setSelectedAnnex] = useState(null);
+  const [deliverFiles, setDeliverFiles] = useState({});
+  const [deliverDescriptions, setDeliverDescriptions] = useState({});
+  const [disputeReasons, setDisputeReasons] = useState({});
+  const [showDisputeInput, setShowDisputeInput] = useState({});
+  const [showRevisionInput, setShowRevisionInput] = useState({});
+  const [revisionFeedbacks, setRevisionFeedbacks] = useState({});
+  const [revisionBusy, setRevisionBusy] = useState({});
+  const [deliverBusy, setDeliverBusy] = useState({});
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [addTaskForm, setAddTaskForm] = useState({ title: '', description: '', budget_ron: '', timeline_days: 30, service_type: 'matching', expert_id: '', company_id: '', milestones: [{ title: '', deliverable_description: '', percentage_of_budget: 100 }] });
+  const [allUsers, setAllUsers] = useState([]);
+  const [showProposeModal, setShowProposeModal] = useState(false);
+  const [proposeMsId, setProposeMsId] = useState(null);
+  const [proposeForm, setProposeForm] = useState({});
+  const [proposeSubmitting, setProposeSubmitting] = useState(false);
+  const [escrowAccount, setEscrowAccount] = useState(null);
+  const [escrowLoading, setEscrowLoading] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState(null); // null | { can_review, reviewable_user, reason }
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [pendingApproveSignature, setPendingApproveSignature] = useState(null); // legacy, unused now
+  const [deliveryFlow, setDeliveryFlow] = useState(null); // { milestoneId, predContract, finalContract, step }
+  const [approvalFlow, setApprovalFlow] = useState(null); // same shape — client-side
+  const [pmFinalizeContract, setPmFinalizeContract] = useState(null);
+  const [deliverableHistories, setDeliverableHistories] = useState({}); // { [milestoneId]: [...] }
+  const [historyExpanded, setHistoryExpanded] = useState({});
+  const [adminReleaseForm, setAdminReleaseForm] = useState(null); // { milestoneId, direction, amount, reason }
+  const [adminReleaseLoading, setAdminReleaseLoading] = useState(false);
 
-  const user = currentUser;
+  const token = localStorage.getItem('token');
+  const headers = { Authorization: `Bearer ${token}` };
 
-  const calculateTotals = (milestones, budget) => {
-    const totalAmount = milestones.reduce((sum, m) => sum + (parseFloat(m.amount_ron) || 0), 0);
-    const totalPercentage = milestones.reduce((sum, m) => sum + (parseFloat(m.percentage_of_budget) || 0), 0);
-    return { totalAmount, totalPercentage };
-  };
-
-  const handleBudgetChange = (newBudget) => {
-    const oldBudget = parseFloat(editFormData.budget_ron) || 0;
-    if (oldBudget === 0) {
-      setEditFormData({ ...editFormData, budget_ron: newBudget });
-      return;
-    }
-    
-    const ratio = parseFloat(newBudget) / oldBudget;
-    const newMilestones = editFormData.milestones.map(m => ({
-      ...m,
-      amount_ron: String(Math.round((parseFloat(m.amount_ron) || 0) * ratio * 100) / 100)
-    }));
-    setEditFormData({ ...editFormData, budget_ron: newBudget, milestones: newMilestones });
-  };
-
-  const handleMilestoneAmountChange = (index, newAmount) => {
-    const newMilestones = [...editFormData.milestones];
-    const budget = parseFloat(editFormData.budget_ron) || 1;
-    const amount = parseFloat(newAmount) || 0;
-    newMilestones[index] = {
-      ...newMilestones[index],
-      amount_ron: newAmount,
-      percentage_of_budget: String(Math.round((amount / budget) * 10000) / 100)
-    };
-    setEditFormData({ ...editFormData, milestones: newMilestones });
-  };
-
-  const handleMilestonePercentageChange = (index, newPercentage) => {
-    const newMilestones = [...editFormData.milestones];
-    const budget = parseFloat(editFormData.budget_ron) || 1;
-    const percentage = parseFloat(newPercentage) || 0;
-    newMilestones[index] = {
-      ...newMilestones[index],
-      percentage_of_budget: newPercentage,
-      amount_ron: String(Math.round((percentage / 100) * budget * 100) / 100)
-    };
-    setEditFormData({ ...editFormData, milestones: newMilestones });
-  };
-
-  const fetchModifications = async () => {
+  const fetchProject = useCallback(async () => {
     try {
-      const response = await axios.get(`/api/projects/${projectId}/modifications`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      setModifications(response.data.modifications || []);
-    } catch (err) {
-      console.error('Failed to fetch modifications:', err);
+      setLoading(true);
+      const res = await axios.get(`/api/projects/${projectId}`, { headers });
+      setProject({ ...res.data.project, milestones: res.data.milestones, assignments: res.data.assignments || [] });
+    } catch { setError('Nu s-a putut încărca proiectul.'); }
+    finally { setLoading(false); }
+  }, [projectId]);
+
+  const fetchModifications = useCallback(async () => {
+    try {
+      const res = await axios.get(`/api/projects/${projectId}/modifications`, { headers });
+      setModifications(res.data.modifications || []);
+    } catch { /* silent */ }
+  }, [projectId]);
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await axios.get(`/api/projects/${projectId}/messages?limit=50`, { headers });
+      const data = res.data;
+      setMessages(data.messages || data || []);
+      setChatHasMore(data.has_more || false);
+      setChatCursor(data.next_cursor || null);
+    } catch { /* silent */ }
+  }, [projectId]);
+
+  const loadMoreMessages = async () => {
+    if (!chatCursor || chatLoadingMore) return;
+    setChatLoadingMore(true);
+    try {
+      const res = await axios.get(`/api/projects/${projectId}/messages?limit=50&before=${encodeURIComponent(chatCursor)}`, { headers });
+      const data = res.data;
+      setMessages(prev => [...(data.messages || []), ...prev]);
+      setChatHasMore(data.has_more || false);
+      setChatCursor(data.next_cursor || null);
+    } catch { /* silent */ } finally {
+      setChatLoadingMore(false);
     }
   };
+
+  const fetchContracts = useCallback(async () => {
+    try {
+      const [cRes, wRes] = await Promise.all([
+        contractAPI.getProjectContracts(projectId),
+        contractAPI.getWorkflowStatus(projectId),
+      ]);
+      setContracts(cRes.data.contracts || []);
+      setWorkflowStatus(wRes.data.workflow);
+    } catch { /* silent */ }
+  }, [projectId]);
 
   useEffect(() => {
     if (!authUser) {
-      const fetchUser = async () => {
-        try {
-          const response = await axios.get('/api/auth/me', {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-          });
-          setCurrentUser(response.data.user);
-          fetchModifications();
-        } catch (err) {
-          console.error('Failed to fetch user:', err);
-        }
-      };
-      fetchUser();
+      axios.get('/api/auth/me', { headers }).then(r => setUser(r.data.user)).catch(() => {});
     } else {
-      setCurrentUser(authUser);
-      fetchModifications();
+      setUser(authUser);
     }
   }, [authUser]);
 
-  useEffect(() => {
-    fetchProjectDetails();
+  const fetchEscrow = useCallback(async () => {
+    try {
+      const res = await axios.get(`/api/escrow/project/${projectId}`, { headers }).catch(() => null);
+      setEscrowAccount(res?.data?.escrow || null);
+    } catch { /* silent */ }
   }, [projectId]);
 
+  const fetchReviewStatus = useCallback(async () => {
+    try {
+      const res = await axios.get(`/api/reviews/can-review/${projectId}`, { headers });
+      setReviewStatus(res.data);
+    } catch { /* silent */ }
+  }, [projectId]);
+
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [depositMilestone, setDepositMilestone] = useState(null);
+
+  const openDepositModal = (ms) => { setDepositMilestone(ms); setShowDepositModal(true); };
+
+  const handleActivateEscrow = async () => {
+    if (escrowLoading || !depositMilestone) return;
+    setEscrowLoading(true);
+    try {
+      const amount = parseFloat(depositMilestone.amount_ron) || 0;
+      const isFirst = !escrowAccount;
+
+      if (isFirst) {
+        const escRes = await axios.post('/api/escrow', { project_id: projectId, total_amount_ron: amount }, { headers });
+        const escrowId = escRes.data.escrow?.id;
+        if (escrowId) {
+          await axios.post('/api/escrow/confirm-payment', { escrow_id: escrowId, payment_intent_id: `stub_${escrowId}` }, { headers });
+        }
+      } else {
+        await axios.post(`/api/escrow/project/${projectId}/topup`, { amount_ron: amount, milestone_id: depositMilestone.id }, { headers });
+      }
+
+      const updated = await axios.get(`/api/escrow/project/${projectId}`, { headers }).catch(() => null);
+      setEscrowAccount(updated?.data?.escrow || null);
+      setShowDepositModal(false);
+      setSuccess(`${fmtRON(amount)} blocați în escrow. Prestatorul a fost notificat.`);
+      fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Eroare la depunerea fondurilor.');
+    } finally {
+      setEscrowLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchProject(); fetchModifications(); fetchContracts(); }, [fetchProject, fetchModifications, fetchContracts]);
+
   useEffect(() => {
-    if (activeTab === 'chat') {
-      fetchMessages();
-    }
-    if (activeTab === 'contracts') {
-      fetchContracts();
-    }
+    if (activeTab === 'chat') fetchMessages();
+    if (activeTab === 'contracts') { fetchContracts(); fetchEscrow(); }
   }, [activeTab]);
 
+  useEffect(() => { fetchEscrow(); }, [fetchEscrow]);
+
+  // Fetch review status after project loads (only matters when completed)
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (project?.status === 'completed') fetchReviewStatus();
+  }, [project?.status, fetchReviewStatus]);
+
+  // Real-time: join project room, receive messages and milestone updates
+  useEffect(() => {
+    if (!socket || !projectId) return;
+    socket.emit('join_project', projectId);
+
+    const msgHandler = (msg) => {
+      setMessages(prev => {
+        if (prev.find(m => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    };
+
+    const updateHandler = ({ type, milestone }) => {
+      if (milestone) {
+        setProject(prev => {
+          if (!prev) return prev;
+          const updatedMilestones = prev.milestones.map(m =>
+            m.id === milestone.id ? { ...m, ...milestone } : m
+          );
+          return { ...prev, milestones: updatedMilestones };
+        });
+      }
+      if (type === 'milestone_approved' || type === 'milestone_disputed') {
+        fetchProject();
+      }
+    };
+
+    socket.on('new_message', msgHandler);
+    socket.on('project_update', updateHandler);
+    return () => {
+      socket.off('new_message', msgHandler);
+      socket.off('project_update', updateHandler);
+      socket.emit('leave_project', projectId);
+    };
+  }, [socket, projectId, fetchProject]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  const fetchMessages = async () => {
-    try {
-      const response = await axios.get(`/api/projects/${projectId}/messages`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      setMessages(response.data.messages || response.data || []);
-    } catch (err) {
-      console.error('Failed to fetch messages:', err);
-    }
-  };
-
-  const fetchProjectDetails = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`/api/projects/${projectId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      setProject({
-        ...response.data.project,
-        milestones: response.data.milestones
-      });
-      setError('');
-    } catch (err) {
-      setError('Failed to load project details');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchContracts = async () => {
-    try {
-      const response = await contractAPI.getProjectContracts(projectId);
-      setContracts(response.data.contracts || []);
-      const workflowResponse = await contractAPI.getWorkflowStatus(projectId);
-      setWorkflowStatus(workflowResponse.data.workflow);
-    } catch (err) {
-      console.error('Failed to fetch contracts:', err);
-    }
-  };
-
-  useEffect(() => {
-    if (projectId) {
-      fetchContracts();
-      fetchModifications();
-    }
-  }, [projectId]);
-
-  const handleAcceptContract = async (contractId) => {
-    try {
-      await contractAPI.acceptContract(contractId);
-      setSuccess('Ai acceptat contractul!');
-      fetchContracts();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to accept contract');
-    }
-  };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !project) return;
-    let recipientId = project.expert_id || project.company_id || project.client_id;
-    if (!recipientId) {
-      setError('Nu există destinatar pentru acest mesaj');
+    // Admin can write but isn't a party — pick any party as recipient (everyone sees the message)
+    const myId = user?.id;
+    const partyIds = [project.client_id, project.expert_id, project.company_id].filter(Boolean);
+    const recipientId = partyIds.find(p => String(p) !== String(myId)) || partyIds[0];
+    if (!recipientId) { setError('Nu există destinatar.'); return; }
+    try {
+      await axios.post('/api/messages', { project_id: projectId, content: newMessage, recipient_id: recipientId }, { headers });
+      setNewMessage('');
+    } catch { setError('Eroare la trimiterea mesajului.'); }
+  };
+
+  const handleAcceptContract = async (contractId, signature) => {
+    try {
+      await contractAPI.acceptContract(contractId, signature ? { signature } : {});
+      setSuccess('Ai acceptat contractul!');
+      setSelectedContract(null);
+      fetchContracts();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare acceptare contract.'); }
+  };
+
+  const handleGenerateProjectContract = async () => {
+    try {
+      const res = await contractAPI.createProjectContract({ project_id: projectId });
+      setSuccess(res.data?.pdf_warning ? `Contract generat. Atenție: ${res.data.pdf_warning}` : 'Contract de proiect generat!');
+      fetchContracts();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare la generarea contractului.'); }
+  };
+
+  const handleGenerateMilestoneContracts = async () => {
+    try {
+      await contractAPI.createAllMilestoneContracts({ project_id: projectId });
+      setSuccess('Contracte milestone generate!');
+      fetchContracts();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare la generarea contractelor.'); }
+  };
+
+  const handleDeliverMilestone = async (milestoneId) => {
+    const file = deliverFiles[milestoneId];
+    if (!file) { setError('Selectează un fișier pentru livrare.'); return; }
+    setDeliverBusy(b => ({ ...b, [milestoneId]: true }));
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('project_id', projectId);
+      formData.append('description', deliverDescriptions[milestoneId] || '');
+      await axios.post(`/api/milestones/${milestoneId}/deliverable`, formData, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+      });
+      setDeliverFiles(f => { const n = { ...f }; delete n[milestoneId]; return n; });
+      setDeliverDescriptions(d => { const n = { ...d }; delete n[milestoneId]; return n; });
+      setSuccess('Livrabil trimis! Beneficiarul va revizui documentele.');
+      fetchContracts(); fetchProject();
+    } catch (err) { setError(err.response?.data?.error || err.response?.data?.message || 'Eroare la livrare.'); }
+    finally { setDeliverBusy(b => ({ ...b, [milestoneId]: false })); }
+  };
+
+  const handleStartDelivery = async (milestoneId) => {
+    const file = deliverFiles[milestoneId];
+    if (!file) { setError('Selectează un fișier pentru livrare.'); return; }
+    try {
+      const res = await axios.post(
+        `/api/contracts/milestone/${milestoneId}/prepare-delivery`,
+        { project_id: projectId },
+        { headers }
+      );
+      const { predContract, finalContract } = res.data;
+      // If pred already fully signed, skip directly to final (or upload)
+      const predFullySigned = predContract?.party1_accepted && predContract?.party2_accepted;
+      const finalFullySigned = finalContract?.party1_accepted && finalContract?.party2_accepted;
+      if (predFullySigned && (!finalContract || finalFullySigned)) {
+        await handleDeliverMilestone(milestoneId);
+        return;
+      }
+      // Skip pred if expert already signed party1 (only client side left); start at final if needed
+      const startStep = (predContract?.party1_accepted) ? (finalContract && !finalContract.party1_accepted ? 'final' : 'upload') : 'pred';
+      if (startStep === 'upload') {
+        await handleDeliverMilestone(milestoneId);
+        return;
+      }
+      setDeliveryFlow({ milestoneId, predContract, finalContract, step: startStep });
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || 'Eroare la pregătirea livrării.');
+    }
+  };
+
+  const handleDeliverySign = async (signature) => {
+    if (!deliveryFlow) return;
+    const { step, predContract, finalContract, milestoneId } = deliveryFlow;
+    const target = step === 'pred' ? predContract : finalContract;
+    try {
+      await contractAPI.acceptContract(target.id, { signature });
+    } catch (err) {
+      setError(err.response?.data?.error || 'Eroare la semnarea contractului.');
       return;
     }
-    try {
-      await axios.post('/api/messages', {
-        project_id: projectId,
-        content: newMessage,
-        recipient_id: recipientId
-      }, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
-      setNewMessage('');
-      fetchMessages();
-    } catch (err) {
-      setError('Failed to send message');
-      console.error(err);
+    if (step === 'pred' && finalContract && !finalContract.party1_accepted) {
+      setDeliveryFlow(d => ({ ...d, step: 'final' }));
+    } else {
+      setDeliveryFlow(null);
+      await handleDeliverMilestone(milestoneId);
     }
   };
 
-  const getMilestoneStatus = (status) => {
-    const colors = { pending: '#ffc107', in_progress: '#17a2b8', delivered: '#28a745', approved: '#20c997', disputed: '#dc3545', released: '#6f42c1' };
-    return colors[status] || '#6c757d';
+  const handleApproveMilestone = async (milestoneId, signature) => {
+    try {
+      const res = await axios.put(`/api/milestones/${milestoneId}/approve`, { project_id: projectId, signature }, { headers });
+      const m = res.data?.milestone;
+      const commissionPct = parseFloat(project?.commission_percent) || 10;
+      const gross = parseFloat(m?.amount_ron) || 0;
+      const commission = Math.round(gross * commissionPct) / 100;
+      const net = Math.round(gross - commission);
+      const msg = gross > 0
+        ? `Milestone aprobat! ${fmtRON(net)} eliberați prestatorului (comision platformă: ${fmtRON(commission)}).`
+        : 'Milestone aprobat! Fondurile au fost eliberate.';
+      setSuccess(msg);
+      fetchContracts(); fetchProject();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare la aprobare.'); }
   };
 
-  const getStatusBgColor = (status) => {
-    const bgColors = { pending: '#fff3cd', in_progress: '#cfe2ff', delivered: '#d1e7dd', approved: '#a8e6cf', disputed: '#f8d7da', released: '#e2d9f3' };
-    return bgColors[status] || '#f8f9fa';
+  const handleStartApproval = async (milestoneId) => {
+    try {
+      const res = await axios.post(
+        `/api/contracts/milestone/${milestoneId}/prepare-delivery`,
+        { project_id: projectId },
+        { headers }
+      );
+      const { predContract, finalContract } = res.data;
+      // Determine which contract still needs party2 (client) signature
+      const predNeedsParty2 = predContract && !predContract.party2_accepted;
+      const finalNeedsParty2 = finalContract && !finalContract.party2_accepted;
+      if (!predNeedsParty2 && !finalNeedsParty2) {
+        // Nothing left to sign — just release funds
+        await handleApproveMilestone(milestoneId);
+        return;
+      }
+      const startStep = predNeedsParty2 ? 'pred' : 'final';
+      setApprovalFlow({ milestoneId, predContract, finalContract, step: startStep });
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || 'Eroare la încărcarea contractelor.');
+    }
   };
 
-  const getStatusLabel = (status) => {
-    const labels = { pending: 'În așteptare', in_progress: 'În Lucru', delivered: 'Livrat', approved: 'Aprobat', disputed: 'Dispută', released: 'Eliberat' };
-    return labels[status] || status;
+  const fetchDeliverableHistory = async (milestoneId) => {
+    try {
+      const res = await axios.get(`/api/milestones/${milestoneId}/history`, { headers });
+      setDeliverableHistories(prev => ({ ...prev, [milestoneId]: res.data.history || [] }));
+    } catch { /* silent */ }
   };
 
-  const getStatusIcon = (status) => {
-    const icons = { pending: '⏳', in_progress: '🔄', delivered: '📤', approved: '✅', disputed: '⚠️', released: '💰' };
-    return icons[status] || '❓';
+  const toggleHistory = (milestoneId) => {
+    setHistoryExpanded(prev => {
+      const next = { ...prev, [milestoneId]: !prev[milestoneId] };
+      if (next[milestoneId] && !deliverableHistories[milestoneId]) fetchDeliverableHistory(milestoneId);
+      return next;
+    });
   };
 
-const styles = {
-  container: {
-    padding: '2rem',
-    maxWidth: '1400px',
-    margin: '0 auto',
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    backgroundColor: '#f5f7fa',
-    minHeight: '100vh',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '2rem',
-    flexWrap: 'wrap',
-    gap: '1rem',
-  },
-  backButton: {
-    padding: '0.75rem 1.5rem',
-    backgroundColor: 'white',
-    color: '#4a5568',
-    border: '2px solid #e2e8f0',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '0.95rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-  },
-  alert: {
-    padding: '1rem 1.25rem',
-    borderRadius: '12px',
-    marginBottom: '1.5rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    fontSize: '0.95rem',
-  },
-  alertError: {
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    border: '1px solid #fecaca',
-  },
-  alertSuccess: {
-    backgroundColor: '#dcfce7',
-    color: '#16a34a',
-    border: '1px solid #bbf7d0',
-  },
-  tabs: {
-    display: 'flex',
-    borderBottom: '3px solid #e2e8f0',
-    marginBottom: '2rem',
-    backgroundColor: 'white',
-    borderRadius: '12px 12px 0 0',
-    padding: '0.5rem',
-    gap: '0.25rem',
-  },
-  tab: {
-    padding: '1rem 1.75rem',
-    backgroundColor: 'transparent',
-    color: '#64748b',
-    border: 'none',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '0.95rem',
-    borderRadius: '8px',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  tabActive: {
-    backgroundColor: '#3b82f6',
-    color: 'white',
-    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: '16px',
-    padding: '2rem',
-    marginBottom: '1.5rem',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-    border: '1px solid #e2e8f0',
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '1.5rem',
-    borderBottom: '2px solid #f1f5f9',
-    paddingBottom: '1rem',
-  },
-  cardTitle: {
-    margin: 0,
-    fontSize: '1.35rem',
-    fontWeight: '700',
-    color: '#1e293b',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  button: {
-    padding: '0.7rem 1.25rem',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '0.9rem',
-    border: 'none',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-  },
-  buttonPrimary: {
-    backgroundColor: '#3b82f6',
-    color: 'white',
-    boxShadow: '0 2px 8px rgba(59, 130, 246, 0.25)',
-  },
-  buttonSecondary: {
-    backgroundColor: '#f1f5f9',
-    color: '#475569',
-    border: '1px solid #e2e8f0',
-  },
-  buttonSuccess: {
-    backgroundColor: '#22c55e',
-    color: 'white',
-    boxShadow: '0 2px 8px rgba(34, 197, 94, 0.25)',
-  },
-  buttonDanger: {
-    backgroundColor: '#ef4444',
-    color: 'white',
-    boxShadow: '0 2px 8px rgba(239, 68, 68, 0.25)',
-  },
-  input: {
-    width: '100%',
-    padding: '0.875rem 1rem',
-    borderRadius: '10px',
-    border: '2px solid #e2e8f0',
-    fontSize: '1rem',
-    transition: 'all 0.2s ease',
-    backgroundColor: '#f8fafc',
-    color: '#1e293b',
-    outline: 'none',
-  },
-  inputFocus: {
-    borderColor: '#3b82f6',
-    backgroundColor: 'white',
-    boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)',
-  },
-  textarea: {
-    width: '100%',
-    padding: '0.875rem 1rem',
-    borderRadius: '10px',
-    border: '2px solid #e2e8f0',
-    fontSize: '1rem',
-    transition: 'all 0.2s ease',
-    backgroundColor: '#f8fafc',
-    color: '#1e293b',
-    outline: 'none',
-    resize: 'vertical',
-    fontFamily: 'inherit',
-    minHeight: '100px',
-  },
-  label: {
-    display: 'block',
-    marginBottom: '0.5rem',
-    fontWeight: '600',
-    color: '#374151',
-    fontSize: '0.95rem',
-  },
-  labelSmall: {
-    display: 'block',
-    marginBottom: '0.35rem',
-    fontWeight: '600',
-    color: '#64748b',
-    fontSize: '0.8rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  grid2: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '1.5rem',
-  },
-  grid3: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '1.5rem',
-  },
-  infoBox: {
-    padding: '1.25rem 1.5rem',
-    borderRadius: '12px',
-    marginBottom: '1.5rem',
-    border: '1px solid',
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '1rem',
-  },
-  infoBoxBlue: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
-    color: '#1e40af',
-  },
-  infoBoxYellow: {
-    backgroundColor: '#fefce8',
-    borderColor: '#fef08a',
-    color: '#854d0e',
-  },
-  statCard: {
-    backgroundColor: 'white',
-    padding: '1.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-    border: '1px solid #e2e8f0',
-  },
-  statValue: {
-    fontSize: '1.75rem',
-    fontWeight: '700',
-    margin: '0.25rem 0',
-  },
-  statLabel: {
-    fontSize: '0.85rem',
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  badge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.35rem',
-    padding: '0.4rem 0.85rem',
-    borderRadius: '20px',
-    fontWeight: '600',
-    fontSize: '0.85rem',
-  },
-  milestoneCard: {
-    padding: '1.5rem',
-    borderRadius: '12px',
-    marginBottom: '1rem',
-    borderLeft: '4px solid',
-  },
-  chatContainer: {
-    border: '2px solid #e2e8f0',
-    borderRadius: '16px',
-    height: '500px',
-    display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: 'white',
-    overflow: 'hidden',
-  },
-  chatMessages: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '1.5rem',
-    backgroundColor: '#f8fafc',
-  },
-  chatInput: {
-    display: 'flex',
-    padding: '1rem',
-    borderTop: '2px solid #e2e8f0',
-    backgroundColor: 'white',
-    gap: '0.75rem',
-  },
-  chatInputField: {
-    flex: 1,
-    padding: '0.875rem 1rem',
-    borderRadius: '10px',
-    border: '2px solid #e2e8f0',
-    fontSize: '1rem',
-    outline: 'none',
-    transition: 'all 0.2s ease',
-  },
-  partyCard: {
-    padding: '1.75rem',
-    borderRadius: '12px',
-    boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-    borderTop: '4px solid',
-    height: '100%',
-  },
-  modal: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    backdropFilter: 'blur(4px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-    overflowY: 'auto',
-    padding: '2rem',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    padding: '2.5rem',
-    borderRadius: '20px',
-    maxWidth: '750px',
-    width: '100%',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-  },
-  sectionTitle: {
-    fontSize: '1.25rem',
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: '1rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  text: {
-    fontSize: '1rem',
-    color: '#475569',
-    lineHeight: '1.6',
-  },
-  textSmall: {
-    fontSize: '0.875rem',
-    color: '#64748b',
-  },
-  link: {
-    color: '#3b82f6',
-    textDecoration: 'none',
-    fontWeight: '600',
-    transition: 'color 0.2s ease',
-  },
-  totalBox: {
-    marginTop: '1.5rem',
-    padding: '1.25rem',
-    backgroundColor: '#f8fafc',
-    borderRadius: '10px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    border: '1px solid #e2e8f0',
-  },
-};
-
-const getInputStyle = (isFocused) => ({
-  ...styles.input,
-  ...(isFocused ? styles.inputFocus : {}),
-});
-
-  const getProjectStatusColor = (status) => {
-    const colors = { pending_admin_approval: '#eab308', open: '#0891b2', in_progress: '#3b82f6', completed: '#22c55e', cancelled: '#ef4444' };
-    return colors[status] || '#6b7280';
+  const handleAdminRelease = async () => {
+    if (!adminReleaseForm) return;
+    const { milestoneId, direction, amount, reason } = adminReleaseForm;
+    const amt = parseFloat(amount);
+    if (!(amt > 0)) { setError('Suma trebuie să fie > 0'); return; }
+    setAdminReleaseLoading(true);
+    try {
+      await axios.post(`/api/admin/milestones/${milestoneId}/release`,
+        { direction, amount: amt, reason: reason || null }, { headers });
+      setSuccess(`Fonduri eliberate (${amt} RON) către ${direction === 'client' ? 'beneficiar' : 'prestator'}.`);
+      setAdminReleaseForm(null);
+      fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Eroare la eliberarea fondurilor.');
+    } finally {
+      setAdminReleaseLoading(false);
+    }
   };
 
-  const getProjectStatusLabel = (status) => {
-    const labels = { pending_admin_approval: 'In asteptare aprobare', open: 'Deschis', in_progress: 'In Lucru', completed: 'Finalizat', cancelled: 'Anulat' };
-    return labels[status] || status;
+  const handleStartPmFinalize = async (taskId) => {
+    try {
+      const res = await axios.post(`/api/contracts/task/${taskId}/prepare-finalize`, {}, { headers });
+      setPmFinalizeContract(res.data.contract);
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || 'Eroare la pregătirea finalizării.');
+    }
   };
 
-  if (loading) return <div style={{...styles.container, display: 'flex', justifyContent: 'center', alignItems: 'center'}}><div style={{textAlign: 'center'}}><h2 style={{color: '#3b82f6', fontSize: '1.5rem'}}>Se încarcă...</h2><p style={{color: '#64748b'}}>Te rugăm să aștepți</p></div></div>;
-  if (!project) return <div style={{...styles.container, padding: '4rem 2rem', textAlign: 'center'}}><div style={{...styles.card, textAlign: 'center'}}><h2 style={{color: '#ef4444', marginBottom: '1rem'}}>Proiect negăsit</h2><button onClick={() => navigate(-1)} style={{...styles.button, ...styles.buttonPrimary, margin: '0 auto'}}>← Înapoi</button></div></div>;
+  const handlePmFinalizeSign = async (signature) => {
+    if (!pmFinalizeContract) return;
+    try {
+      await contractAPI.acceptContract(pmFinalizeContract.id, { signature });
+      const taskId = pmFinalizeContract.task_id;
+      if (taskId) {
+        try {
+          await axios.post(`/api/tasks/${taskId}/request-finalization`, {}, { headers });
+        } catch (reqErr) {
+          if (reqErr.response?.status !== 409) {
+            console.warn('[pm finalize request]', reqErr.response?.data?.error || reqErr.message);
+          }
+        }
+      }
+      setPmFinalizeContract(null);
+      setSuccess('Contractul a fost semnat. Adminul va aproba închiderea proiectului.');
+      fetchProject();
+      fetchContracts();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Eroare la semnarea contractului.');
+    }
+  };
 
-  const userRole = user?.role;
-  const isCompany = userRole === 'company';
-  const isExpertUser = userRole === 'expert';
-  const isProjectExpert = user?.id === project?.expert_id;
-  const isProjectCompany = user?.id === project?.company_id;
-  const isParty1 = user?.id === (project?.expert_id || project?.company_id) || (isExpertUser && project?.company_id);
-  const isParty2 = user?.id === (project?.client_id);
+  const handleApprovalSign = async (signature) => {
+    if (!approvalFlow) return;
+    const { step, predContract, finalContract, milestoneId } = approvalFlow;
+    const target = step === 'pred' ? predContract : finalContract;
+    try {
+      await contractAPI.acceptContract(target.id, { signature });
+    } catch (err) {
+      setError(err.response?.data?.error || 'Eroare la semnarea contractului.');
+      return;
+    }
+    if (step === 'pred' && finalContract && !finalContract.party2_accepted) {
+      setApprovalFlow(d => ({ ...d, step: 'final' }));
+    } else {
+      setApprovalFlow(null);
+      await handleApproveMilestone(milestoneId);
+    }
+  };
+
+  const handleDisputeMilestone = async (milestoneId) => {
+    const reason = disputeReasons[milestoneId]?.trim();
+    if (!reason) { setError('Descrie motivul disputei.'); return; }
+    try {
+      await axios.post(`/api/milestones/${milestoneId}/dispute`, { project_id: projectId, reason }, { headers });
+      setSuccess('Dispută deschisă. Adminul va arbitra.');
+      setShowDisputeInput(s => ({ ...s, [milestoneId]: false }));
+      fetchContracts(); fetchProject();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare la disputare.'); }
+  };
+
+  const handleRequestRevision = async (milestoneId) => {
+    const feedback = revisionFeedbacks[milestoneId]?.trim();
+    if (!feedback) { setError('Descrie ce trebuie revizuit.'); return; }
+    setRevisionBusy(b => ({ ...b, [milestoneId]: true }));
+    try {
+      await axios.put(`/api/milestones/${milestoneId}/request-revision`, { project_id: projectId, feedback }, { headers });
+      setSuccess('Revizuire solicitată. Prestatorul va fi notificat.');
+      setShowRevisionInput(s => ({ ...s, [milestoneId]: false }));
+      setRevisionFeedbacks(f => { const n = { ...f }; delete n[milestoneId]; return n; });
+      fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Eroare la solicitarea revizuirii.');
+    } finally {
+      setRevisionBusy(b => ({ ...b, [milestoneId]: false }));
+    }
+  };
+
+  const handleGenerateFinalContract = async () => {
+    try {
+      const res = await contractAPI.createFinalContract({ project_id: projectId });
+      setSuccess(res.data?.pdf_warning ? `Contract final generat. Atenție: ${res.data.pdf_warning}` : 'Contract final generat!');
+      fetchContracts();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare la generarea contractului final.'); }
+  };
+
+  const handleCompleteProject = async () => {
+    try {
+      await axios.post(`/api/projects/${projectId}/complete`, {}, { headers });
+      setSuccess('Proiect finalizat cu succes!');
+      fetchProject();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare la finalizarea proiectului.'); }
+  };
+
+  const handleExpertAcceptAssignment = async () => {
+    if (!window.confirm('Accepți să prelucrezi acest proiect? Confirmarea va activa proiectul.')) return;
+    try {
+      await projectAPI.expertAcceptAssignment(projectId);
+      setSuccess('Asignare acceptată! Proiectul e activ.');
+      fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Eroare la acceptare.');
+    }
+  };
+
+  const handleExpertRejectAssignment = async () => {
+    const reason = window.prompt('Motivul refuzului (opțional):');
+    if (reason === null) return;
+    try {
+      await projectAPI.expertRejectAssignment(projectId, reason || null);
+      setSuccess('Asignare respinsă. Adminul va re-asigna.');
+      fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Eroare la respingere.');
+    }
+  };
+
+  const handleAcceptAdminEdit = async () => {
+    if (!window.confirm('Confirmi modificările admin? Proiectul va deveni activ.')) return;
+    try {
+      await projectAPI.acceptAdminEdit(projectId);
+      setSuccess('Modificări acceptate! Proiectul e activ.');
+      fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Eroare la confirmare.');
+    }
+  };
+
+  const handleRejectAdminEdit = async () => {
+    const reason = window.prompt('Motivul respingerii (opțional):');
+    if (reason === null) return;
+    try {
+      await projectAPI.rejectAdminEdit(projectId, reason || null);
+      setSuccess('Modificările au fost respinse. Adminul va revizui.');
+      fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Eroare la respingere.');
+    }
+  };
+
+  const handleCancelProject = async () => {
+    const reason = window.prompt('Motivul anulării (opțional, dar recomandat):');
+    if (reason === null) return;
+    if (!window.confirm('Sigur vrei să anulezi proiectul? Acțiunea nu poate fi reversată. Vei putea solicita refund pentru suma din escrow.')) return;
+    try {
+      const res = await projectAPI.cancelProject(projectId, reason || null);
+      setSuccess(res.data?.message || 'Proiect anulat.');
+      fetchProject();
+    } catch (err) { setError(err.response?.data?.message || 'Eroare la anulare.'); }
+  };
+
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundEscrowAmount, setRefundEscrowAmount] = useState(0);
+  const [refundLoading, setRefundLoading] = useState(false);
+
+  const openRefundModal = async () => {
+    setRefundLoading(false);
+    setRefundEscrowAmount(0);
+    try {
+      const r = await escrowAPI.getEscrowByProject(projectId);
+      setRefundEscrowAmount(parseFloat(r.data?.escrow?.held_balance_ron) || 0);
+    } catch { setRefundEscrowAmount(0); }
+    setShowRefundModal(true);
+  };
+
+  const confirmRefund = async () => {
+    setRefundLoading(true);
+    try {
+      const res = await escrowAPI.refundEscrow(projectId);
+      setSuccess(`Refund procesat: ${res.data?.refunded_amount || 0} RON returnați în wallet.`);
+      setShowRefundModal(false);
+      fetchProject();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Eroare la refund.');
+    } finally {
+      setRefundLoading(false);
+    }
+  };
+
+  const handleApproveAllMods = async (mods) => {
+    try {
+      for (const m of mods) await modificationAPI.approveModification(m.id);
+      setSuccess('Modificări aprobate!');
+      fetchModifications(); fetchProject();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare'); }
+  };
+
+  const handleRejectAllMods = async (mods) => {
+    try {
+      for (const m of mods) await modificationAPI.rejectModification(m.id);
+      setSuccess('Modificări respinse!');
+      fetchModifications();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare'); }
+  };
+
+  const handleOpenProposeProject = () => {
+    setProposeMsId(null);
+    setProposeForm({
+      title: project.title || '',
+      description: project.description || '',
+      budget_ron: project.budget_ron || '',
+      timeline_days: project.timeline_days || '',
+    });
+    setShowProposeModal(true);
+  };
+
+  const handleOpenProposeMilestone = (ms) => {
+    setProposeMsId(ms.id);
+    setProposeForm({
+      title: ms.title || '',
+      deliverable_description: ms.deliverable_description || '',
+      amount_ron: ms.amount_ron || '',
+      percentage_of_budget: ms.percentage_of_budget || '',
+    });
+    setShowProposeModal(true);
+  };
+
+  const handleSubmitPropose = async () => {
+    setProposeSubmitting(true);
+    try {
+      if (!proposeMsId) {
+        const fields = ['title', 'description', 'budget_ron', 'timeline_days'];
+        const original = { title: project.title, description: project.description, budget_ron: project.budget_ron, timeline_days: project.timeline_days };
+        let count = 0;
+        for (const field of fields) {
+          if (String(proposeForm[field]) !== String(original[field] || '')) {
+            await modificationAPI.proposeProjectModification({ project_id: projectId, field_name: field, new_value: proposeForm[field] });
+            count++;
+          }
+        }
+        if (count === 0) { setError('Nicio modificare detectată.'); return; }
+        setSuccess(`${count} modificare${count > 1 ? 'i' : ''} propusă. Cealaltă parte trebuie să accepte.`);
+      } else {
+        const ms = project.milestones.find(m => m.id === proposeMsId);
+        const fields = ['title', 'deliverable_description', 'amount_ron', 'percentage_of_budget'];
+        const original = { title: ms.title, deliverable_description: ms.deliverable_description, amount_ron: ms.amount_ron, percentage_of_budget: ms.percentage_of_budget };
+        let count = 0;
+        for (const field of fields) {
+          if (String(proposeForm[field]) !== String(original[field] || '')) {
+            await modificationAPI.proposeMilestoneModification({ project_id: projectId, milestone_id: proposeMsId, field_name: field, new_value: proposeForm[field] });
+            count++;
+          }
+        }
+        if (count === 0) { setError('Nicio modificare detectată.'); return; }
+        setSuccess(`Modificare milestone propusă. Cealaltă parte trebuie să accepte.`);
+      }
+      setShowProposeModal(false);
+      fetchModifications();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare la propunere.'); }
+    finally { setProposeSubmitting(false); }
+  };
+
+  const handleOpenAddTask = async () => {
+    setAddTaskForm({ title: '', description: '', budget_ron: project.budget_ron || '', timeline_days: project.timeline_days || 30, service_type: 'matching', expert_id: '', company_id: '', milestones: [{ title: '', deliverable_description: '', percentage_of_budget: 100 }] });
+    if (allUsers.length === 0) {
+      try {
+        const res = await axios.get('/api/users/', { headers });
+        setAllUsers(res.data.users || []);
+      } catch { /* silent — user list optional for direct */ }
+    }
+    setShowAddTaskModal(true);
+  };
+
+  const handleSubmitAddTask = async () => {
+    const validMilestones = addTaskForm.milestones.filter(m => m.title.trim());
+    if (!addTaskForm.title || !addTaskForm.description) { setError('Titlul și descrierea sunt obligatorii.'); return; }
+    if (validMilestones.length === 0) { setError('Adaugă cel puțin un milestone cu titlu.'); return; }
+    if (validMilestones.some(m => !m.percentage_of_budget || parseFloat(m.percentage_of_budget) <= 0)) { setError('Toate milestone-urile trebuie să aibă un procent valid (> 0%).'); return; }
+    const totalPct = validMilestones.reduce((s, m) => s + parseFloat(m.percentage_of_budget), 0);
+    if (Math.abs(totalPct - 100) > 0.5) { setError(`Suma procentelor trebuie să fie 100%. Acum: ${totalPct}%.`); return; }
+    try {
+      await axios.post(`/api/tasks/${projectId}/assignments`, {
+        ...addTaskForm,
+        expert_id: addTaskForm.expert_id || undefined,
+        company_id: addTaskForm.company_id || undefined,
+        milestones: validMilestones,
+      }, { headers });
+      setSuccess('Task adăugat cu succes!');
+      setShowAddTaskModal(false);
+      fetchProject();
+    } catch (err) { setError(err.response?.data?.error || 'Eroare la adăugarea task-ului.'); }
+  };
+
+  const updateAtf = (idx, field, value) => setAddTaskForm(p => ({ ...p, milestones: p.milestones.map((m, i) => i === idx ? { ...m, [field]: value } : m) }));
+  const addAtfMs = () => setAddTaskForm(p => ({ ...p, milestones: [...p.milestones, { title: '', deliverable_description: '', percentage_of_budget: '' }] }));
+  const removeAtfMs = (idx) => setAddTaskForm(p => ({ ...p, milestones: p.milestones.filter((_, i) => i !== idx) }));
+
+  if (loading) return <div className="escro-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}><Spinner /></div>;
+  if (!project) return (
+    <div className="escro-page" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+      <EmptyState icon="folder" title="Proiect negăsit" description="Proiectul nu a putut fi găsit." />
+      <button className="btn btn-secondary" style={{ marginTop: '1rem' }} onClick={() => navigate(-1)}>← Înapoi</button>
+    </div>
+  );
+
+  const assignedPartyId = project.expert_id || project.company_id;
+  const isAssigned = !!assignedPartyId;
+  const isParty1 = String(user?.id || '') === String(assignedPartyId || '');
+  // Beneficiar = client_id (sau posted_by_client pe matching) — acceptăm ambele
+  const isParty2 = (
+    String(user?.id || '') === String(project.client_id || '')
+    || String(user?.id || '') === String(project.posted_by_client || '')
+  );
+  const isAdminUser = user?.role === 'admin';
+  const isInvolved = isParty1 || isParty2 || isAdminUser;
+  const canChat = isAdminUser || (isAssigned && (isParty1 || isParty2) && project.status !== 'completed');
+  const budget = project.budget_ron || project.budget || 0;
+  const totalReleased = (project.milestones || []).filter(m => m.status === 'released' || m.status === 'approved').reduce((s, m) => s + (parseFloat(m.amount_ron) || 0), 0);
+  const progress = budget > 0 ? Math.round((totalReleased / budget) * 100) : 0;
+  const contractSigned = workflowStatus?.projectContract?.status === 'accepted';
+  const canPropose = (isParty1 || isParty2) && isAssigned && !contractSigned;
+
+  const pendingMods = modifications.filter(m => m.status === 'pending');
+  const groupedMods = pendingMods.reduce((acc, mod) => {
+    if (!acc[mod.proposed_by]) acc[mod.proposed_by] = { name: mod.proposed_by_name, mods: [] };
+    acc[mod.proposed_by].mods.push(mod);
+    return acc;
+  }, {});
+
+  const pendingSignatureCount = (() => {
+    if (!isParty1 && !isParty2) return 0;
+    let n = 0;
+    const projectContractDone = workflowStatus?.projectContract?.status === 'accepted';
+    if (workflowStatus?.projectContract && !projectContractDone) {
+      const mine = isParty1 ? workflowStatus.projectContract.party1_accepted : workflowStatus.projectContract.party2_accepted;
+      if (!mine) n++;
+    }
+    (project?.milestones || []).forEach((ms, idx) => {
+      const prevMsDone = idx === 0 || ['approved', 'released'].includes((project?.milestones || [])[idx - 1]?.status);
+      if (!projectContractDone || !prevMsDone) return;
+      if (['pending', 'in_progress', 'revision_requested'].includes(ms.status) && isParty1) n++;
+      if (ms.status === 'delivered' && isParty2) n++;
+    });
+    return n;
+  })();
+
+  const tabs = [
+    { id: 'details', label: 'Detalii', icon: 'folder' },
+    ...(canChat ? [{ id: 'chat', label: 'Chat', icon: 'message' }] : []),
+    // Tab Contracte ascuns pentru PM tasks — acestea folosesc flux dedicat de finalizare (Solicită finalizare → admin).
+    ...(!project.is_pm_task && isInvolved ? [{ id: 'contracts', label: 'Contracte', icon: 'file', badge: pendingSignatureCount }] : []),
+  ];
+
+  const msStatusColor = { pending: 'var(--fg-3)', in_progress: 'var(--accent)', delivered: 'var(--success)', revision_requested: 'var(--warning)', approved: 'var(--success)', disputed: 'var(--danger)', released: 'var(--violet)' };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <button onClick={() => navigate(-1)} style={styles.backButton}>
-          ← Înapoi
+    <div className="escro-page fade-up">
+      {/* Back */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)}>
+          <Icon name="arrow-left" size={12} /> Înapoi
         </button>
       </div>
 
-      {error && (
-        <div style={{...styles.alert, ...styles.alertError}}>
-          <span style={{flex: 1}}>{error}</span>
-          <button onClick={() => setError('')} style={{border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '1.2rem'}}>✕</button>
+      {/* Header */}
+      <div className="page-head" style={{ alignItems: 'flex-start', borderBottom: '1px solid var(--border-1)', paddingBottom: '1.5rem', marginBottom: '1.25rem' }}>
+        <div style={{ flex: 1 }}>
+          <div className="h-eyebrow">
+            <Icon name="hash" size={11} /> #{project.id} · contractat {fmtDate(project.created_at)}
+          </div>
+          <h1 className="h-title" style={{ fontSize: 34 }}>{project.title}</h1>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <StatusBadge status={project.status} />
+            {(project.client_name || project.company_name) && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--fg-2)' }}>
+                <Icon name="building" size={13} />
+                {project.client_name || project.company_name}
+              </span>
+            )}
+            {(project.expert_name) && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--fg-2)' }}>
+                <Icon name="user" size={13} />
+                {project.expert_name}
+              </span>
+            )}
+            {project.timeline_days && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--fg-2)' }}>
+                <Icon name="clock" size={13} />
+                {project.timeline_days} zile
+              </span>
+            )}
+          </div>
         </div>
-      )}
-      {success && (
-        <div style={{...styles.alert, ...styles.alertSuccess}}>
-          <span style={{flex: 1}}>{success}</span>
-          <button onClick={() => setSuccess('')} style={{border: 'none', background: 'none', cursor: 'pointer', color: '#16a34a', fontSize: '1.2rem'}}>✕</button>
+        <div className="page-actions">
+          {project.is_pm_task && project.is_creator && (
+            <button className="btn btn-primary btn-sm" onClick={handleOpenAddTask}>
+              <Icon name="plus" size={13} /> Adaugă task
+            </button>
+          )}
+          {/* PM tasks: cancel only if no assignments AND no contract started yet */}
+          {project.is_creator && project.is_pm_task && (project.assignments || []).length === 0
+            && !['completed', 'cancelled', 'rejected'].includes(project.status)
+            && !workflowStatus?.projectContract && (
+            <button
+              className="btn btn-sm"
+              style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }}
+              onClick={handleCancelProject}
+            >
+              <Icon name="x" size={13} /> Anulează proiect
+            </button>
+          )}
+          {project.is_creator && project.is_pm_task && (project.assignments || []).length > 0
+            && !['completed', 'cancelled', 'rejected'].includes(project.status) && (
+            project.pm_finalization_requested_at ? (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 12, padding: '6px 12px',
+                background: 'var(--accent-bg)', color: 'var(--accent-hi)',
+                border: '1px solid var(--accent-border)', borderRadius: 'var(--r-sm)',
+              }}>
+                <Icon name="clock" size={12} /> Finalizare cerută — așteaptă admin
+              </span>
+            ) : (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => handleStartPmFinalize(project.id)}
+              >
+                <Icon name="check" size={13} /> Solicită finalizare proiect
+              </button>
+            )
+          )}
+          {/* Non-PM projects: cancel allowed only before contract signing begins */}
+          {project.is_creator && !project.is_pm_task && !['completed', 'cancelled', 'rejected'].includes(project.status)
+            && !workflowStatus?.projectContract && (
+            <button
+              className="btn btn-sm"
+              style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }}
+              onClick={handleCancelProject}
+            >
+              <Icon name="x" size={13} /> Anulează proiect
+            </button>
+          )}
+          {project.is_creator && !project.is_pm_task && ['cancelled', 'rejected', 'disputed'].includes(project.status) && (
+            <button className="btn btn-primary btn-sm" onClick={openRefundModal}>
+              <Icon name="reload" size={13} /> Solicită refund
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Expert/Company accept assignment banner */}
+      {project.status === 'pending_expert_approval' && (project.is_assigned_expert || project.is_assigned_company) && (
+        <div style={{
+          padding: '1rem 1.25rem',
+          background: 'var(--accent-bg)',
+          border: '1px solid var(--accent-border)',
+          borderRadius: 'var(--r-md)',
+          marginBottom: '1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+          flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--accent-hi)' }}>
+              <Icon name="user-plus" size={14} /> Ai fost asignat la acest proiect
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-1)', marginTop: 4 }}>
+              Verifică detaliile (buget, milestones, deadline) și acceptă pentru a începe colaborarea, sau refuză dacă nu poți onora.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '.5rem' }}>
+            <button className="btn btn-ghost btn-sm" onClick={handleExpertRejectAssignment}>
+              Refuză
+            </button>
+            <button className="btn btn-success btn-sm" onClick={handleExpertAcceptAssignment}>
+              <Icon name="check" size={13} /> Accept asignare
+            </button>
+          </div>
         </div>
       )}
 
-      {modifications.length > 0 && modifications.some(m => m.status === 'pending') && user && (() => {
-        const pendingMods = modifications.filter(m => m.status === 'pending');
-        const groupedMods = pendingMods.reduce((acc, mod) => {
-          const key = mod.proposed_by;
-          if (!acc[key]) {
-            acc[key] = { proposed_by_name: mod.proposed_by_name, modifications: [] };
-          }
-          acc[key].modifications.push(mod);
-          return acc;
-        }, {});
-        
-        return (
-          <div style={{...styles.card, backgroundColor: '#fefce8', border: '1px solid #fef08a', marginBottom: '2rem'}}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              <span style={{ fontSize: '1.75rem' }}>⚠️</span>
-              <h3 style={{ margin: 0, color: '#854d0e', fontSize: '1.25rem', fontWeight: '700' }}>Modificări Propuse</h3>
+      {/* Admin edit banner — user must accept/reject admin's proposed changes */}
+      {project.status === 'pending_client_approval' && (project.is_owner || project.is_creator) && (
+        <div style={{
+          padding: '1rem 1.25rem',
+          background: 'var(--warning-bg)',
+          border: '1px solid var(--warning-border)',
+          borderRadius: 'var(--r-md)',
+          marginBottom: '1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+          flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--warning)' }}>
+              <Icon name="alert-triangle" size={14} /> Adminul a propus modificări
             </div>
-            {Object.entries(groupedMods).map(([proposedBy, group]) => (
-              <div key={proposedBy} style={{ padding: '1.25rem', backgroundColor: 'white', borderRadius: '12px', marginBottom: '1rem', border: '1px solid #e2e8f0' }}>
-                <p style={{ margin: '0 0 1rem 0', fontWeight: '600', color: '#374151' }}><strong>{group.proposed_by_name}</strong> a propus {group.modifications.length} modificări:</p>
-                <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                  {group.modifications.map(mod => (
-                    <div key={mod.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 1rem', backgroundColor: '#f8fafc', borderRadius: '8px', fontSize: '0.95rem', border: '1px solid #e2e8f0' }}>
-                      <span><strong style={{color: '#475569'}}>{mod.field_name}:</strong></span>
-                      <span><span style={{ color: '#dc2626', textDecoration: 'line-through', marginRight: '0.5rem', fontSize: '0.9rem' }}>{mod.old_value || '-'}</span>→ <span style={{ color: '#16a34a', fontWeight: 'bold' }}>{mod.new_value}</span></span>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-1)', marginTop: 4 }}>
+              Verifică detaliile proiectului (titlu, descriere, buget, milestones) și confirmă pentru a activa proiectul, sau respinge pentru ca adminul să revizuiască.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '.5rem' }}>
+            <button className="btn btn-ghost btn-sm" onClick={handleRejectAdminEdit}>
+              Respinge
+            </button>
+            <button className="btn btn-success btn-sm" onClick={handleAcceptAdminEdit}>
+              <Icon name="check" size={13} /> Confirmă modificările
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Admin banner: PM finalization request pending approval */}
+      {isAdminUser && project.is_pm_task && project.pm_finalization_requested_at && !project.pm_finalization_approved_at && project.status !== 'completed' && (
+        <div style={{
+          padding: '1rem 1.25rem',
+          background: 'var(--accent-bg)', border: '1px solid var(--accent-border)',
+          borderRadius: 'var(--r-md)', marginBottom: '1.25rem',
+          display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--accent-hi)' }}>
+              <Icon name="check" size={14} /> Beneficiarul a solicitat finalizarea proiectului
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-1)', marginTop: 4 }}>
+              Verifică toate sub-asignările și confirmă închiderea task-ului PM. Cererea a fost trimisă pe {new Date(project.pm_finalization_requested_at).toLocaleString('ro-RO')}.
+            </div>
+          </div>
+          <button
+            className="btn btn-success btn-sm"
+            onClick={async () => {
+              if (!window.confirm('Confirmi închiderea task-ului PM? Acțiunea e finală.')) return;
+              try {
+                await axios.post(`/api/tasks/${projectId}/approve-finalization`, {}, { headers });
+                setSuccess('Finalizare aprobată. Beneficiarul a fost notificat.');
+                fetchProject();
+              } catch (e) {
+                setError(e.response?.data?.error || 'Eroare la aprobare.');
+              }
+            }}
+          >
+            <Icon name="check" size={13} /> Aprobă finalizarea
+          </button>
+        </div>
+      )}
+
+      {/* Alerts */}
+      {error && (
+        <div style={{ padding: '.75rem 1rem', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--r-sm)', color: 'var(--danger)', fontSize: 13, marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {error}
+          <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: 16 }} onClick={() => setError('')}>✕</button>
+        </div>
+      )}
+      {success && (
+        <div style={{ padding: '.75rem 1rem', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 'var(--r-sm)', color: 'var(--success)', fontSize: 13, marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {success}
+          <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--success)', fontSize: 16 }} onClick={() => setSuccess('')}>✕</button>
+        </div>
+      )}
+
+      {/* Pending modifications banner */}
+      {pendingMods.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--warning-border)', background: 'var(--warning-bg)', marginBottom: '1.5rem' }}>
+          <div className="card-head">
+            <div className="row" style={{ gap: '.5rem' }}>
+              <Icon name="flag" size={14} style={{ color: 'var(--warning)' }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--warning)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Modificări propuse</span>
+            </div>
+          </div>
+          <div className="card-body col" style={{ gap: '.75rem' }}>
+            {Object.entries(groupedMods).map(([pid, g]) => (
+              <div key={pid} style={{ background: 'var(--bg-card)', borderRadius: 'var(--r-sm)', padding: '1rem', border: '1px solid var(--border-1)' }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: '.75rem' }}>{g.name} a propus {g.mods.length} modificare{g.mods.length > 1 ? 'i' : ''}:</div>
+                <div className="col" style={{ gap: '.5rem', marginBottom: '.75rem' }}>
+                  {g.mods.map(m => (
+                    <div key={m.id} className="row-between" style={{ fontSize: 12.5, padding: '.5rem .75rem', background: 'var(--bg-1)', borderRadius: 'var(--r-sm)' }}>
+                      <span style={{ color: 'var(--fg-2)' }}>{m.field_name}</span>
+                      <span><span style={{ color: 'var(--danger)', textDecoration: 'line-through', marginRight: 6 }}>{m.old_value || '—'}</span>→ <strong style={{ color: 'var(--success)' }}>{m.new_value}</strong></span>
                     </div>
                   ))}
                 </div>
-                {proposedBy !== String(user?.id) && user && (
-                  <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button onClick={async () => { 
-                      try { 
-                        for (const mod of group.modifications) {
-                          await modificationAPI.approveModification(mod.id);
-                        }
-                        setSuccess('Modificări aprobate!'); 
-                        fetchModifications(); 
-                        fetchProjectDetails(); 
-                      } catch (err) { setError(err.response?.data?.error || 'Eroare'); } 
-                    }} style={{...styles.button, ...styles.buttonSuccess, padding: '0.75rem 1.5rem'}}>✓ Acceptă Tot</button>
-                    <button onClick={async () => { 
-                      try { 
-                        for (const mod of group.modifications) {
-                          await modificationAPI.rejectModification(mod.id);
-                        }
-                        setSuccess('Modificări respinse!'); 
-                        fetchModifications(); 
-                      } catch (err) { setError(err.response?.data?.error || 'Eroare'); } 
-                    }} style={{...styles.button, ...styles.buttonDanger, padding: '0.75rem 1.5rem'}}>✕ Respinge Tot</button>
+                {String(pid) !== String(user?.id) && (
+                  <div className="row" style={{ gap: '.5rem' }}>
+                    <button className="btn btn-success btn-sm" onClick={() => handleApproveAllMods(g.mods)}>Acceptă tot</button>
+                    <button className="btn btn-sm" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }} onClick={() => handleRejectAllMods(g.mods)}>Respinge tot</button>
                   </div>
                 )}
               </div>
             ))}
           </div>
-        );
-      })()}
+        </div>
+      )}
 
-      <div style={styles.tabs}>
-        {['details', ...(user && (isParty1 || isParty2) ? ['chat', 'contracts'] : [])].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{...styles.tab, ...(activeTab === tab ? styles.tabActive : {})}}>
-            {tab === 'details' && '📋 Detalii'}
-            {tab === 'chat' && '💬 Chat'}
-            {tab === 'contracts' && '📜 Contracte'}
-          </button>
+      {/* Tabs */}
+      <div className="tabs-v3" style={{ marginBottom: '1.5rem' }}>
+        {tabs.map(t => (
+          <div key={t.id} className={`tab-v3 ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}
+            style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name={t.icon} size={13} /> {t.label}
+            {t.badge > 0 && (
+              <span style={{
+                minWidth: 17, height: 17, padding: '0 4px',
+                background: 'var(--warning)', color: '#fff',
+                fontSize: 9, fontWeight: 700, borderRadius: 9,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+              }}>
+                {t.badge > 9 ? '9+' : t.badge}
+              </span>
+            )}
+          </div>
         ))}
       </div>
 
+      {/* ——— DETAILS ——— */}
       {activeTab === 'details' && (
-        <div>
-          {user && (isParty1 || isParty2) && (
-          <div style={{...styles.infoBox, ...styles.infoBoxBlue}}>
-            <span style={{ fontSize: '1.5rem' }}>💡</span>
-            <div>
-              <p style={{ margin: 0, fontWeight: '600', fontSize: '1rem' }}>Contractul se va construi automat</p>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', opacity: 0.9 }}>Pe baza informațiilor din această pagină. Asigură-te că toate datele sunt corecte înainte de a semna contractul.</p>
-            </div>
-          </div>
-          )}
-
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <h3 style={styles.cardTitle}>📋 Despre Proiect</h3>
-              {user && (isParty1 || isParty2) && (
-                <button
-                  onClick={() => {
-                    setEditFormData({
-                      title: project.title,
-                      description: project.description,
-                      budget_ron: project.budget_ron,
-                      timeline_days: project.timeline_days,
-                      milestones: project.milestones ? project.milestones.map(m => ({...m})) : []
-                    });
-                    setShowEditProjectModal(true);
-                  }}
-                  style={{...styles.button, ...styles.buttonSecondary}}
-                >
-                  ✏️ Editează
-                </button>
-              )}
-            </div>
-            <div style={{ display: 'grid', gap: '1.5rem' }}>
-              <div>
-                <p style={styles.labelSmall}>TITLU PROIECT</p>
-                <p style={{ margin: 0, fontSize: '1.35rem', fontWeight: '600', color: '#1e293b' }}>{project.title}</p>
-              </div>
-              <div>
-                <p style={styles.labelSmall}>DESCRIERE</p>
-                <p style={{ ...styles.text, fontSize: '1.05rem', lineHeight: '1.7' }}>{project.description}</p>
-              </div>
-              <div style={styles.grid2}>
-                <div style={styles.statCard}>
-                  <p style={{...styles.statLabel, margin: 0}}>BUGET TOTAL</p>
-                  <p style={{...styles.statValue, color: '#16a34a', margin: 0}}>{project.budget_ron} RON</p>
-                </div>
-                <div style={styles.statCard}>
-                  <p style={{...styles.statLabel, margin: 0}}>TERMEN LIMITA</p>
-                  <p style={{...styles.statValue, color: '#0891b2', margin: 0}}>{project.timeline_days} zile</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
+          {/* Left: brief + milestones */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="card">
+              <div className="card-head">
+                <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg-0)' }}>Brief de proiect</div>
+                <div className="row" style={{ gap: '.5rem' }}>
+                  {canPropose && (
+                    <button className="btn btn-ghost btn-sm" onClick={handleOpenProposeProject}>
+                      <Icon name="edit" size={12} /> Propune modificare
+                    </button>
+                  )}
+                  <span className="badge no-dot">{contractSigned ? 'Contract semnat' : 'Sigilat'}</span>
                 </div>
               </div>
-              <div>
-                <p style={styles.labelSmall}>STATUS PROIECT</p>
-                <span style={{...styles.badge, backgroundColor: getProjectStatusColor(project.status), color: 'white', fontSize: '0.9rem', padding: '0.5rem 1rem'}}>{getProjectStatusLabel(project.status)}</span>
+              <div className="card-body">
+                <p style={{ fontFamily: 'var(--f-display)', fontSize: 18, lineHeight: 1.5, color: 'var(--fg-0)', letterSpacing: '-0.01em', marginBottom: '1rem' }}>
+                  „{project.description || 'Fără descriere.'}"
+                </p>
+                <div className="grid-3" style={{ marginTop: '1rem' }}>
+                  <div>
+                    <div className="h-eyebrow" style={{ fontSize: 9, marginBottom: 4 }}>Serviciu</div>
+                    <div style={{ fontSize: 13, color: 'var(--fg-0)' }}>{project.service_type || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="h-eyebrow" style={{ fontSize: 9, marginBottom: 4 }}>Timeline</div>
+                    <div style={{ fontSize: 13, color: 'var(--fg-0)' }}>{project.timeline_days ? `${project.timeline_days} zile` : '—'}</div>
+                  </div>
+                  <div>
+                    <div className="h-eyebrow" style={{ fontSize: 9, marginBottom: 4 }}>Buget</div>
+                    <div style={{ fontSize: 13, color: 'var(--fg-0)', fontFamily: 'var(--f-mono)' }}>{fmtRON(budget)}</div>
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* PM Project: show assignments list. Regular project: show milestones */}
+            {project.is_pm_task ? (
+              <div className="card">
+                <div className="card-head">
+                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg-0)' }}>Taskuri</div>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)' }}>
+                    {(project.assignments || []).length} task{(project.assignments || []).length !== 1 ? 'uri' : ''}
+                  </span>
+                </div>
+                {!(project.assignments || []).length ? (
+                  <EmptyState icon="kanban" title="Niciun task adăugat" description="Adminul sau beneficiarul va adăuga taskuri în acest proiect." />
+                ) : (
+                  <div className="card-body col" style={{ gap: '.625rem' }}>
+                    {(project.assignments || []).map((a, i) => {
+                      const needsPrestator = !a.expert_id && !a.company_id
+                        && ['pending_assignment', 'pending_admin_approval', 'open'].includes(a.status);
+                      return (
+                      <div
+                        key={a.id}
+                        className="card-interactive card"
+                        style={{ padding: '1rem 1.25rem', cursor: 'pointer', border: '1px solid var(--border-1)' }}
+                        onClick={() => navigate(`/project/${project.id}/assignment/${a.id}`)}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg-3)', background: 'var(--bg-1)', padding: '2px 6px', borderRadius: 4 }}>#{i + 1}</span>
+                              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg-0)' }}>{a.title}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 6 }}>
+                              <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>{a.service_type}</span>
+                              <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>{fmtRON(a.budget_ron)}</span>
+                              {(a.expert_name || a.company_name) ? (
+                                <span style={{ fontSize: 11, color: 'var(--fg-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <Icon name="user" size={10} /> {a.expert_name || a.company_name}
+                                </span>
+                              ) : needsPrestator ? (
+                                <span style={{ fontSize: 11, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                                  <Icon name="user" size={10} /> Fără prestator
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {needsPrestator && project.is_creator && (
+                              <button
+                                className="btn btn-primary btn-sm"
+                                style={{ fontSize: 11 }}
+                                onClick={(e) => { e.stopPropagation(); navigate(`/project/${project.id}/assignment/${a.id}`); }}
+                              >
+                                <Icon name="user-plus" size={11} /> Asignează prestator
+                              </button>
+                            )}
+                            <StatusBadge status={a.status} />
+                            <Icon name="chevron-right" size={13} style={{ color: 'var(--fg-3)' }} />
+                          </div>
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="card">
+                <div className="card-head">
+                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg-0)' }}>Milestones</div>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)' }}>
+                    {(project.milestones || []).filter(m => ['approved','released'].includes(m.status)).length}/{(project.milestones || []).length} complete
+                    {totalReleased > 0 && ` · ${fmtRON(totalReleased)} debursat`}
+                  </span>
+                </div>
+                {!project.milestones?.length ? (
+                  <EmptyState icon="flag" title="Niciun milestone" description="Nu sunt milestones definite." />
+                ) : (
+                  <div className="card-body">
+                    <div className="tl">
+                      {project.milestones.map((ms, i) => {
+                        const isDone = ['approved','released'].includes(ms.status);
+                        const isActive = ['in_progress','delivered','revision_requested'].includes(ms.status);
+                        const rowClass = isDone ? 'done' : isActive ? 'active' : 'pending';
+                        return (
+                          <div key={ms.id} className={`tl-row ${rowClass}`}>
+                            <div className="tl-dot">
+                              {isDone ? <Icon name="check" size={11} /> : i + 1}
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flex: 1 }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--fg-0)', marginBottom: 4 }}>{ms.title}</div>
+                                {ms.deliverable_description && (
+                                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5 }}>{ms.deliverable_description}</div>
+                                )}
+                                <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'center' }}>
+                                  {ms.percentage_of_budget && (
+                                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{ms.percentage_of_budget}% din buget</span>
+                                  )}
+                                  {isDone && <StatusBadge status={ms.status} />}
+                                  {isActive && <StatusBadge status={ms.status} />}
+                                  {canPropose && ms.status === 'pending' && (
+                                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleOpenProposeMilestone(ms)}>
+                                      <Icon name="edit" size={10} /> Editează
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums' }}>
+                                  {fmtRON(ms.amount_ron)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-            <div style={styles.grid2}>
-              <div style={{...styles.partyCard, borderTopColor: '#3b82f6'}}>
-                <h4 style={{ margin: '0 0 1.25rem 0', fontSize: '1.15rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>👤 Beneficiar</h4>
-              <div style={{ display: 'grid', gap: '1rem' }}>
-                {project.client_name ? (
-                  <>
+          {/* Right sidebar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {project.is_pm_task ? (
+              /* PM project sidebar: budget allocation summary */
+              <>
+                <div className="card">
+                  <div className="card-head">
+                    <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg-0)' }}>Buget proiect</div>
+                  </div>
+                  <div className="card-body col" style={{ gap: 10 }}>
+                    {(() => {
+                      const allAssignments = project.assignments || [];
+                      const completedAssignments = allAssignments.filter(a => a.status === 'completed');
+                      const activeAssignments = allAssignments.filter(a => a.status !== 'completed');
+                      const allocatedBudget = allAssignments.reduce((s, a) => s + (parseFloat(a.budget_ron) || 0), 0);
+                      const completedBudget = completedAssignments.reduce((s, a) => s + (parseFloat(a.budget_ron) || 0), 0);
+                      const pmProgress = budget > 0 ? Math.round((completedBudget / budget) * 100) : 0;
+                      return (<>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span style={{ color: 'var(--fg-3)' }}>Total buget</span>
+                          <span style={{ fontFamily: 'var(--f-mono)', fontWeight: 600 }}>{fmtRON(budget)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span style={{ color: 'var(--fg-3)' }}>Alocat pe taskuri</span>
+                          <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--accent)' }}>{fmtRON(allocatedBudget)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span style={{ color: 'var(--fg-3)' }}>Cheltuit (finalizat)</span>
+                          <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--success)' }}>{fmtRON(completedBudget)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span style={{ color: 'var(--fg-3)' }}>Progres</span>
+                          <span style={{ fontFamily: 'var(--f-mono)' }}>{pmProgress}%</span>
+                        </div>
+                        <div className="bar" style={{ marginTop: 4 }}>
+                          <div className="bar-fill" style={{ width: `${pmProgress}%` }} />
+                        </div>
+                        <div style={{ height: 1, background: 'var(--border-1)', margin: '4px 0' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span style={{ color: 'var(--fg-3)' }}>Taskuri active</span>
+                          <span style={{ fontFamily: 'var(--f-mono)' }}>{activeAssignments.length}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span style={{ color: 'var(--fg-3)' }}>Taskuri finalizate</span>
+                          <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--success)' }}>{completedAssignments.length} / {allAssignments.length}</span>
+                        </div>
+                        <div style={{ height: 1, background: 'var(--border-1)', margin: '4px 0' }} />
+                        <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+                          Escrow-ul se activează per task, la semnarea contractului.
+                        </div>
+                      </>);
+                    })()}
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-head">
+                    <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg-0)' }}>Beneficiar</div>
+                  </div>
+                  <div className="card-body">
                     {project.client_name && (
-                      <div>
-                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Nume</p>
-                        <Link to={`/profile/${project.client_id}`} style={{ ...styles.link, fontSize: '1.1rem', marginTop: '0.25rem', display: 'inline-block' }}>
-                          {project.client_name.split(' ')[0]} →
-                        </Link>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                        <Avatar user={{ name: project.client_name, color: 'blue' }} size="md" />
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-0)' }}>{project.client_name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>Client · Project Management</div>
+                        </div>
                       </div>
                     )}
-                    {project.client_profession && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Domeniu/Profesie</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.client_profession}</p></div>}
-                    {project.client_industry && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Industrie</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.client_industry}</p></div>}
-                    {project.client_experience_years && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Ani Experiență</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.client_experience_years} ani</p></div>}
-                    <div style={{ padding: '0.75rem', backgroundColor: '#fefce8', borderRadius: '8px', fontSize: '0.85rem', color: '#854d0e', border: '1px solid #fef08a' }}>
-                      🔒 Date de contact vizibile în chat
-                    </div>
-                  </>
-                ) : project.expert_name ? (
-                  <>
-                    {project.expert_name && (
-                      <div>
-                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Nume</p>
-                        <Link to={`/profile/${project.client_id}`} style={{ ...styles.link, fontSize: '1.1rem', marginTop: '0.25rem', display: 'inline-block' }}>
-                          {project.expert_name.split(' ')[0]} →
-                        </Link>
-                      </div>
-                    )}
-                    {project.expert_expertise && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Domeniu/Expertiză</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.expert_expertise}</p></div>}
-                    {project.expert_industry && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Industrie</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.expert_industry}</p></div>}
-                    {project.expert_experience_years && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Ani Experiență</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.expert_experience_years} ani</p></div>}
-                    <div style={{ padding: '0.75rem', backgroundColor: '#fefce8', borderRadius: '8px', fontSize: '0.85rem', color: '#854d0e', border: '1px solid #fef08a' }}>
-                      🔒 Date de contact vizibile în chat
-                    </div>
-                  </>
-                ) : (
-                  <p style={{ color: '#64748b', fontStyle: 'italic', fontSize: '0.95rem' }}>Nu există date</p>
-                )}
-              </div>
-            </div>
-
-              <div style={{...styles.partyCard, borderTopColor: '#22c55e'}}>
-                <h4 style={{ margin: '0 0 1.25rem 0', fontSize: '1.15rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>👨‍💻 Prestator</h4>
-              <div style={{ display: 'grid', gap: '1rem' }}>
-                {project.company_id ? (
-                  <>
-                    <div>
-                      <p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Denumire</p>
-                      <Link to={`/profile/${project.company_id}`} style={{ ...styles.link, fontSize: '1.1rem', marginTop: '0.25rem', display: 'inline-block' }}>
-                        {(project.company_name || '-')?.split(' ')[0]} →
-                      </Link>
-                    </div>
-                    {project.company_expertise && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Domeniu/Expertiză</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.company_expertise}</p></div>}
-                    {project.company_industry && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Industrie</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.company_industry}</p></div>}
-                    {project.company_experience_years && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Ani Experiență</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.company_experience_years} ani</p></div>}
-                    <div style={{ padding: '0.75rem', backgroundColor: '#fefce8', borderRadius: '8px', fontSize: '0.85rem', color: '#854d0e', border: '1px solid #fef08a' }}>
-                      🔒 Date de contact vizibile în chat
-                    </div>
-                  </>
-                ) : project.expert_id ? (
-                  <>
-                    <div>
-                      <p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Nume</p>
-                      <Link to={`/profile/${project.expert_id}`} style={{ ...styles.link, fontSize: '1.1rem', marginTop: '0.25rem', display: 'inline-block' }}>
-                        {project.expert_name ? project.expert_name.split(' ')[0] : '-'} →
-                      </Link>
-                    </div>
-                    {project.expert_expertise && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Domeniu/Expertiză</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.expert_expertise}</p></div>}
-                    {project.expert_industry && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Industrie</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.expert_industry}</p></div>}
-                    {project.expert_experience_years && <div><p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>Ani Experiență</p><p style={{ margin: '0.35rem 0 0 0', fontSize: '1rem', color: '#374151' }}>{project.expert_experience_years} ani</p></div>}
-                    <div style={{ padding: '0.75rem', backgroundColor: '#fefce8', borderRadius: '8px', fontSize: '0.85rem', color: '#854d0e', border: '1px solid #fef08a' }}>
-                      🔒 Date de contact vizibile în chat
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ padding: '1.5rem', backgroundColor: '#fefce8', borderRadius: '10px', textAlign: 'center', border: '1px solid #fef08a' }}>
-                    <p style={{ margin: 0, color: '#854d0e', fontSize: '1rem', fontWeight: '500' }}>⏳ În căutare de prestator...</p>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <h3 style={{...styles.sectionTitle, marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '2px solid #f1f5f9'}}>🎯 Milestones</h3>
-            {!project.milestones || project.milestones.length === 0 ? (
-              <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem', fontSize: '1.05rem' }}>Nu există milestones definite.</p>
+                </div>
+              </>
             ) : (
-              <div style={{ display: 'grid', gap: '1rem' }}>
-                {project.milestones.map((milestone, index) => (
-                  <div key={milestone.id} style={{...styles.milestoneCard, backgroundColor: getStatusBgColor(milestone.status), borderLeftColor: getMilestoneStatus(milestone.status)}}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', backgroundColor: getMilestoneStatus(milestone.status), color: 'white', fontSize: '0.9rem', fontWeight: '700' }}>{index + 1}</span>
-                        <strong style={{ fontSize: '1.1rem', color: '#1e293b' }}>{milestone.title}</strong>
+              /* Regular project sidebar: vault + parties + quick actions */
+              <>
+                <div className="vault" style={{ padding: '1.5rem' }}>
+                  <div className="vault-content">
+                    {(() => {
+                      const heldFromAccount = parseFloat(escrowAccount?.held_balance_ron);
+                      const heldAmount = Number.isFinite(heldFromAccount)
+                        ? heldFromAccount
+                        : Math.max(0, (parseFloat(budget) || 0) - (parseFloat(totalReleased) || 0));
+                      const fullyDisbursed = heldAmount <= 0 && totalReleased > 0;
+                      return (
+                        <>
+                          <div className="h-eyebrow" style={{ marginBottom: '0.625rem' }}>
+                            <Icon name={fullyDisbursed ? 'check' : 'lock'} size={11} />
+                            {fullyDisbursed ? ' Debursat integral' : ' În custodie'}
+                          </div>
+                          <div style={{ fontFamily: 'var(--f-display)', fontSize: 48, lineHeight: 0.95, letterSpacing: '-0.04em', color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums' }}>
+                            <em style={{ color: fullyDisbursed ? 'var(--success)' : 'var(--accent-hi)', fontStyle: 'italic' }}>
+                              {Math.round(heldAmount).toLocaleString('ro-RO')}
+                            </em>
+                          </div>
+                          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
+                            RON · {fullyDisbursed ? 'fonduri eliberate' : 'escrow activ'}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    <div style={{ height: 1, background: 'var(--border-1)', margin: '1rem 0' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <span style={{ color: 'var(--fg-3)' }}>Total contract</span>
+                        <span style={{ fontFamily: 'var(--f-mono)' }}>{fmtRON(budget)}</span>
                       </div>
-                      <span style={{ fontWeight: '700', color: '#16a34a', fontSize: '1.2rem' }}>{milestone.amount_ron} RON</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <span style={{ color: 'var(--fg-3)' }}>Debursat</span>
+                        <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--success)' }}>{fmtRON(totalReleased)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <span style={{ color: 'var(--fg-3)' }}>Progres</span>
+                        <span style={{ fontFamily: 'var(--f-mono)' }}>{progress}%</span>
+                      </div>
                     </div>
-                    {milestone.deliverable_description && <p style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: '#475569', lineHeight: '1.5' }}>{milestone.deliverable_description}</p>}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.95rem', color: '#64748b', fontWeight: '500' }}>{milestone.percentage_of_budget ? `${milestone.percentage_of_budget}% din buget` : ''}</span>
-                      <span style={{...styles.badge, backgroundColor: getMilestoneStatus(milestone.status), color: 'white', fontSize: '0.85rem'}}>{getStatusIcon(milestone.status)} {getStatusLabel(milestone.status)}</span>
+                    <div className="bar" style={{ marginTop: '0.875rem' }}>
+                      <div className="bar-fill" style={{ width: `${progress}%` }} />
                     </div>
+                    {/* Deposit funds — only for the client (party2), when escrow not yet funded */}
+                    {isParty2 && (() => {
+                      const held = parseFloat(escrowAccount?.held_balance_ron) || 0;
+                      const isFunded = held > 0;
+                      const blockingStatus = ['completed', 'cancelled', 'rejected'].includes(project.status);
+                      if (isFunded || blockingStatus) return null;
+                      return (
+                        <button
+                          className="btn btn-primary"
+                          style={{ marginTop: '1rem', width: '100%', justifyContent: 'center' }}
+                          onClick={() => navigate(`/escrow/${projectId}/checkout?amount=${budget}`)}
+                        >
+                          <Icon name="credit-card" size={14} /> Depune {fmtRON(budget)} în escrow
+                        </button>
+                      );
+                    })()}
                   </div>
-                ))}
-              </div>
-            )}
-            {project.milestones && project.milestones.length > 0 && (
-              <div style={styles.totalBox}>
-                <span style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b' }}>Total Buget:</span>
-                <span style={{ fontWeight: '700', fontSize: '1.35rem', color: '#16a34a' }}>{project.milestones.reduce((sum, m) => sum + (parseFloat(m.amount_ron) || 0), 0)} RON</span>
-              </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head">
+                    <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg-0)' }}>Părți</div>
+                    <span className="badge badge-green no-dot"><Icon name="check" size={10} /> Verificate</span>
+                  </div>
+                  <div className="card-body">
+                    {(project.client_name || project.company_name) && (
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.875rem', marginBottom: '1rem' }}>
+                        <Avatar user={{ name: project.client_name || project.company_name, color: 'blue' }} size="md" />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: 'var(--fg-0)', fontWeight: 500 }}>{project.client_name || project.company_name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>Companie · Beneficiar</div>
+                        </div>
+                        <TrustMeter level={3} />
+                      </div>
+                    )}
+                    {(project.expert_name || project.company_id) && (
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.875rem' }}>
+                        <Avatar user={{ name: project.expert_name || project.company_name || '—', color: 'cyan' }} size="md" online />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: 'var(--fg-0)', fontWeight: 500 }}>{project.expert_name || project.company_name || 'Fără prestator'}</div>
+                          <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>{project.expert_expertise || 'Expert · Prestator'}</div>
+                        </div>
+                        <TrustMeter level={4} />
+                      </div>
+                    )}
+                    {!project.expert_name && !project.expert_id && !project.company_id && (
+                      <div style={{ padding: '.75rem', background: 'var(--warning-bg)', borderRadius: 'var(--r-sm)', fontSize: 12.5, color: 'var(--warning)' }}>
+                        În căutare de prestator...
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-head"><div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg-0)' }}>Acțiuni rapide</div></div>
+                  <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button className="btn btn-secondary" style={{ justifyContent: 'space-between', width: '100%' }} onClick={() => setActiveTab('chat')}>
+                      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <Icon name="message" size={13} /> Chat echipă
+                      </span>
+                      <Icon name="chevron-right" size={13} />
+                    </button>
+                    <button className="btn btn-secondary" style={{ justifyContent: 'space-between', width: '100%' }} onClick={() => setActiveTab('contracts')}>
+                      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <Icon name="file" size={13} /> Contracte
+                        {pendingSignatureCount > 0 && (
+                          <span style={{
+                            minWidth: 17, height: 17, padding: '0 4px',
+                            background: 'var(--warning)', color: '#fff',
+                            fontSize: 9, fontWeight: 700, borderRadius: 9,
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                          }}>
+                            {pendingSignatureCount > 9 ? '9+' : pendingSignatureCount}
+                          </span>
+                        )}
+                      </span>
+                      <Icon name="chevron-right" size={13} />
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
       )}
 
+      {/* ——— CHAT ——— */}
       {activeTab === 'chat' && (
-        <div>
-          <h3 style={{...styles.sectionTitle, marginBottom: '1.5rem'}}>💬 Chat cu echipa</h3>
-          <div style={styles.chatContainer}>
-            <div style={styles.chatMessages}>
-              {messages.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#64748b', fontSize: '1rem', padding: '2rem' }}>Nu există mesaje. Începe conversația!</p>
-              ) : messages.map((msg, index) => (
-                <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.sender_id === user?.id ? 'flex-end' : 'flex-start', marginBottom: '1rem' }}>
-                  <div style={{ 
-                    maxWidth: '70%', 
-                    padding: '1rem 1.25rem', 
-                    backgroundColor: msg.sender_id === user?.id ? '#3b82f6' : 'white', 
-                    color: msg.sender_id === user?.id ? 'white' : '#1e293b', 
-                    borderRadius: '16px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                    border: msg.sender_id === user?.id ? 'none' : '1px solid #e2e8f0',
-                  }}>
-                    {msg.content}
-                  </div>
-                  <small style={{ color: '#94a3b8', marginTop: '0.4rem', fontSize: '0.8rem' }}>{formatMessageDate(msg.created_at)}</small>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-            <form onSubmit={handleSendMessage} style={styles.chatInput}>
-              <input 
-                type="text" 
-                value={newMessage} 
-                onChange={(e) => setNewMessage(e.target.value)} 
-                placeholder="Scrie un mesaj..." 
-                style={styles.chatInputField}
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#3b82f6';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#e2e8f0';
-                  e.target.style.boxShadow = 'none';
-                }}
-              />
-              <button type="submit" style={{...styles.button, ...styles.buttonPrimary, padding: '0.875rem 1.75rem'}}>Trimite</button>
-            </form>
+        <div className="card chat-wrap">
+          <div className="card-head">
+            <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, color: 'var(--fg-0)' }}>Chat echipă</div>
+            <span className="pulse ok" style={{ verticalAlign: '-1px' }} />
           </div>
+          <div className="chat-msgs">
+            {chatHasMore && (
+              <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+                <button className="btn btn-ghost btn-sm" onClick={loadMoreMessages} disabled={chatLoadingMore} style={{ fontSize: 11 }}>
+                  {chatLoadingMore ? '…' : 'Încarcă mesaje mai vechi'}
+                </button>
+              </div>
+            )}
+            {messages.length === 0 ? (
+              <EmptyState icon="message" title="Niciun mesaj" description="Începe conversația!" />
+            ) : messages.map((msg, i) => {
+              const isMe = msg.sender_id === user?.id;
+              const isAdminMsg = msg.sender_role === 'admin';
+              return (
+                <div key={i} className={`chat-msg ${isMe ? 'me' : ''}`} style={isAdminMsg ? { '--admin-msg-color': 'var(--violet)' } : undefined}>
+                  {!isMe && <Avatar user={{ name: msg.sender_name || '?', color: isAdminMsg ? 'purple' : 'blue' }} size="sm" />}
+                  <div>
+                    <div className="chat-bubble" style={isAdminMsg ? {
+                      background: 'var(--violet-bg, rgba(168,85,247,0.12))',
+                      border: '1px solid var(--violet, #a855f7)',
+                      color: 'var(--fg-0)',
+                    } : undefined}>
+                      {isAdminMsg && (
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--violet, #a855f7)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                          ⚡ Mesaj admin
+                        </div>
+                      )}
+                      {msg.content}
+                    </div>
+                    <div className="chat-meta">{msg.sender_name || 'Utilizator'}{isAdminMsg ? ' · Admin' : ''} · {fmtMsgDate(msg.created_at)}</div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+          <form onSubmit={handleSendMessage} className="chat-input-row">
+            <input
+              className="input"
+              type="text"
+              value={newMessage}
+              onChange={e => setNewMessage(e.target.value)}
+              placeholder="Scrie un mesaj…"
+              style={{ flex: 1 }}
+            />
+            <button type="button" className="btn btn-secondary" style={{ padding: '0.55rem' }}>
+              <Icon name="file" size={14} />
+            </button>
+            <button type="submit" className="btn btn-primary" style={{ padding: '0.55rem' }}>
+              <Icon name="send" size={14} />
+            </button>
+          </form>
         </div>
       )}
 
+      {/* ——— CONTRACTS ——— */}
       {activeTab === 'contracts' && (
-        <div>
-          <h2 style={{...styles.sectionTitle, marginBottom: '1.5rem'}}>📜 Contracte și Workflow</h2>
-          
-          {!workflowStatus && <p style={{color: '#ef4444'}}>Se încarcă contractele...</p>}
-          <div style={{...styles.card, marginBottom: '2rem', backgroundColor: '#f8fafc'}}>
-            <h3 style={{...styles.sectionTitle, marginBottom: '1.25rem', fontSize: '1.1rem'}}>📋 Progresul Proiectului</h3>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ 
-                  width: '48px', 
-                  height: '48px', 
-                  borderRadius: '50%', 
-                  backgroundColor: workflowStatus?.projectContract?.status === 'accepted' ? '#22c55e' : '#e2e8f0', 
-                  color: workflowStatus?.projectContract?.status === 'accepted' ? 'white' : '#94a3b8', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  margin: '0 auto 0.5rem',
-                  fontWeight: '700',
-                  fontSize: '1.25rem'
-                }}>
-                  {workflowStatus?.projectContract?.status === 'accepted' ? '✓' : '1'}
-                </div>
-                <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#475569' }}>Contract Principal</div>
-              </div>
-              <div style={{ flex: 0.5, display: 'flex', alignItems: 'center' }}>
-                <div style={{ width: '100%', height: '3px', backgroundColor: workflowStatus?.projectContract?.status === 'accepted' ? '#22c55e' : '#e2e8f0', borderRadius: '2px' }}></div>
-              </div>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ 
-                  width: '48px', 
-                  height: '48px', 
-                  borderRadius: '50%', 
-                  backgroundColor: workflowStatus?.milestones?.every(m => m.status === 'approved') ? '#22c55e' : '#e2e8f0', 
-                  color: workflowStatus?.milestones?.every(m => m.status === 'approved') ? 'white' : '#94a3b8', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  margin: '0 auto 0.5rem',
-                  fontWeight: '700',
-                  fontSize: '1.25rem'
-                }}>2</div>
-                <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#475569' }}>Milestones</div>
-              </div>
-              <div style={{ flex: 0.5, display: 'flex', alignItems: 'center' }}>
-                <div style={{ width: '100%', height: '3px', backgroundColor: workflowStatus?.milestones?.every(m => m.status === 'approved') ? '#22c55e' : '#e2e8f0', borderRadius: '2px' }}></div>
-              </div>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ 
-                  width: '48px', 
-                  height: '48px', 
-                  borderRadius: '50%', 
-                  backgroundColor: workflowStatus?.finalContract?.status === 'accepted' ? '#22c55e' : '#e2e8f0', 
-                  color: workflowStatus?.finalContract?.status === 'accepted' ? 'white' : '#94a3b8', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  margin: '0 auto 0.5rem',
-                  fontWeight: '700',
-                  fontSize: '1.25rem'
-                }}>3</div>
-                <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#475569' }}>Finalizare</div>
-              </div>
-            </div>
-          </div>
+        <div className="col" style={{ gap: '1.5rem' }}>
 
-          <div style={{...styles.card, marginBottom: '2rem'}}>
-            <h3 style={{...styles.sectionTitle, marginBottom: '1.25rem', fontSize: '1.1rem'}}>📄 Contract Principal</h3>
-            {!workflowStatus?.projectContract ? (
-              <div style={{ padding: '1.5rem', backgroundColor: '#fefce8', borderRadius: '12px', border: '1px solid #fef08a' }}>
-                <p style={{ margin: '0 0 1rem 0', color: '#854d0e', fontSize: '1rem' }}>Pentru a începe colaborarea, trebuie creat și semnat contractul principal.</p>
-                {user && (isParty1 || isParty2) && (
-                  <div style={{display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap'}}>
-                    <button onClick={async () => { 
-                      try { 
-                        await contractAPI.createProjectContract({ project_id: projectId }); 
-                        setSuccess('Contract creat!'); 
-                        fetchContracts(); 
-                      } catch (err) { setError(err.response?.data?.error || 'Eroare la creare contract'); } 
-                    }} style={{...styles.button, ...styles.buttonPrimary, padding: '0.875rem 1.5rem'}}>📝 Creează Contract</button>
-                  </div>
+          {/* ── PASUL 1: Contract de proiect ── */}
+          <ContractStep
+            stepNum={1}
+            title="Contract de proiect"
+            description="Ambele părți semnează contractul principal care definește termenii colaborării."
+            status={
+              !workflowStatus?.projectContract ? 'pending_action' :
+              workflowStatus.projectContract.status === 'accepted' ? 'done' : 'in_progress'
+            }
+          >
+            {!workflowStatus?.projectContract && (
+              <div>
+                <p style={{ fontSize: 13, color: 'var(--fg-2)', marginBottom: '1rem' }}>
+                  Contractul principal nu a fost generat. Oricare dintre părți poate iniția procesul.
+                </p>
+                {(isParty1 || isParty2) && (
+                  <button className="btn btn-primary" onClick={handleGenerateProjectContract}>
+                    <Icon name="file" size={14} /> Generează contract de proiect
+                  </button>
                 )}
-              </div>
-            ) : workflowStatus.projectContract.status !== 'accepted' ? (
-              <div style={{ padding: '1.5rem', backgroundColor: '#fefce8', borderRadius: '12px', border: '1px solid #fef08a' }}>
-                <div style={{ marginBottom: '1rem' }}>
-                  <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#854d0e' }}><strong>Status:</strong> {workflowStatus.projectContract.status === 'pending' ? 'În așteptare semnături' : workflowStatus.projectContract.status}</p>
-                  <p style={{ margin: '0 0 0.5rem 0', color: '#854d0e' }}><strong>Prestator:</strong> {workflowStatus.projectContract.party1_accepted ? '✓ Semnat' : '⏳ Nesemnat'}</p>
-                  <p style={{ margin: 0, color: '#854d0e' }}><strong>Beneficiar:</strong> {workflowStatus.projectContract.party2_accepted ? '✓ Semnat' : '⏳ Nesemnat'}</p>
-                </div>
-                {user && (isParty1 || isParty2) && (
-                  <div style={{display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap'}}>
-                    <button onClick={() => {
-                      const contract = contracts.find(c => c.id === workflowStatus.projectContract.id || c.contract_type === 'project');
-                      if (contract) setSelectedContract(contract);
-                      else if (workflowStatus.projectContract.id) {
-                        contractAPI.getContract(workflowStatus.projectContract.id).then(res => {
-                          if (res.data.contract) setSelectedContract(res.data.contract);
-                        });
-                      }
-                    }} style={{...styles.button, backgroundColor: '#6366f1', padding: '0.875rem 1.5rem'}}>👁️ Vezi Contract</button>
-                    {(user.id === (project.expert_id || project.company_id) ? !workflowStatus.projectContract.party1_accepted : !workflowStatus.projectContract.party2_accepted) && (
-                      <button onClick={async () => { 
-                        try { 
-                          await contractAPI.acceptContract(workflowStatus.projectContract.id); 
-                          setSuccess('Ai semnat contractul!'); 
-                          fetchContracts(); 
-                        } catch (err) { setError(err.response?.data?.error || 'Eroare la semnare'); } 
-                      }} style={{...styles.button, ...styles.buttonPrimary, padding: '0.875rem 1.5rem'}}>✍️ Semnează Contract</button>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ padding: '1.25rem', backgroundColor: '#dcfce7', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
-                <p style={{ margin: 0, color: '#16a34a', fontWeight: '600', fontSize: '1.05rem' }}>✅ Contract semnat și activ!</p>
               </div>
             )}
-          </div>
-
-          {workflowStatus?.projectContract && workflowStatus.projectContract.status === 'accepted' && project.milestones && project.milestones.length > 0 && (
-            <div style={{...styles.card, marginBottom: '2rem'}}>
-              <h3 style={{...styles.sectionTitle, marginBottom: '1rem'}}>🎯 Milestones - Execuție și Finalizare</h3>
-              <p style={{ marginBottom: '1.5rem', color: '#64748b', fontSize: '1rem' }}>1. Semnare pentru începere → 2. Prestatorul încarcă materiale → 3. Beneficiarul aprobă și eliberează banii</p>
-              {project.milestones.map((milestone, index) => {
-                const m = workflowStatus?.milestones?.find(ms => ms.id === milestone.id) || { status: 'pending', party1_approved: false, party2_approved: false };
-                const isPendingStart = m.status === 'pending';
-                const isInProgress = m.status === 'in_progress';
-                const isDelivered = m.status === 'delivered';
-                const isApproved = m.status === 'approved';
-                const needsBothSignaturesStart = m.status === 'pending' && (!m.party1_approved || !m.party2_approved);
-                const prevApproved = index === 0 || (workflowStatus?.milestones?.[index-1]?.status === 'approved');
-                const canSignStart = needsBothSignaturesStart && prevApproved;
-                // Prestator = company_id sau expert_id (cel asignat), Beneficiar = client_id (cel care a creat task-ul)
-                const isPrestator = user?.id === (project.company_id || project.expert_id);
-                const isBeneficiar = user?.id === project.client_id;
-                const hasUserSignedStart = isPrestator ? m.party1_approved : (isBeneficiar ? m.party2_approved : false);
-                
-                return (
-                  <div key={milestone.id} style={{ padding: '1.5rem', backgroundColor: isApproved ? '#dcfce7' : isDelivered ? '#eff6ff' : isInProgress ? '#fefce8' : '#f8fafc', borderRadius: '12px', marginBottom: '1.25rem', border: '1px solid', borderColor: isApproved ? '#bbf7d0' : isDelivered ? '#bfdbfe' : isInProgress ? '#fef08a' : '#e2e8f0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b' }}>Milestone {index + 1}: {milestone.title}</div>
-                      <span style={{ padding: '0.4rem 0.85rem', backgroundColor: isApproved ? '#22c55e' : isDelivered ? '#0ea5e9' : isInProgress ? '#eab308' : '#94a3b8', color: 'white', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' }}>
-                        {isApproved ? '✓ Aprobat' : isDelivered ? '📤 Livrat' : isInProgress ? '🔄 În Lucru' : needsBothSignaturesStart ? '⏳ Nesemnat' : '⏳ Nesemnat'}
+            {workflowStatus?.projectContract && workflowStatus.projectContract.status !== 'accepted' && (() => {
+              const pc = workflowStatus.projectContract;
+              const myAccepted = isParty1 ? pc.party1_accepted : pc.party2_accepted;
+              const otherAccepted = isParty1 ? pc.party2_accepted : pc.party1_accepted;
+              return (
+                <div>
+                  <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem', fontSize: 13 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 18, height: 18, borderRadius: '50%', background: pc.party1_accepted ? 'var(--success)' : 'var(--border-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {pc.party1_accepted ? <Icon name="check" size={10} style={{ color: '#fff' }} /> : null}
+                      </span>
+                      <span style={{ color: pc.party1_accepted ? 'var(--success)' : 'var(--fg-3)' }}>
+                        Prestator {pc.party1_accepted ? 'a semnat' : 'nu a semnat'}
                       </span>
                     </div>
-                    <div style={{ fontSize: '1rem', color: '#475569', marginBottom: '1rem' }}>
-                      <p style={{ margin: '0 0 0.5rem 0' }}><strong>Suma:</strong> <span style={{ color: '#16a34a', fontWeight: '700' }}>{milestone.amount_ron} RON</span> ({milestone.percentage_of_budget}%)</p>
-                      {milestone.deliverable_description && <p style={{ margin: 0 }}><strong>Descriere:</strong> {milestone.deliverable_description}</p>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 18, height: 18, borderRadius: '50%', background: pc.party2_accepted ? 'var(--success)' : 'var(--border-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {pc.party2_accepted ? <Icon name="check" size={10} style={{ color: '#fff' }} /> : null}
+                      </span>
+                      <span style={{ color: pc.party2_accepted ? 'var(--success)' : 'var(--fg-3)' }}>
+                        Beneficiar {pc.party2_accepted ? 'a semnat' : 'nu a semnat'}
+                      </span>
                     </div>
-                    
-                    {needsBothSignaturesStart && (
-                      <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '1rem', fontSize: '0.9rem', padding: '0.75rem', backgroundColor: 'white', borderRadius: '8px' }}>
-                        <div style={{ color: '#475569' }}><strong>Începere - Prestator:</strong> {m.party1_approved ? '✓ Semnat' : '⏳ Nesemnat'}</div>
-                        <div style={{ color: '#475569' }}><strong>Începere - Beneficiar:</strong> {m.party2_approved ? '✓ Semnat' : '⏳ Nesemnat'}</div>
-                      </div>
-                    )}
+                  </div>
+                  {!myAccepted && (
+                    <button className="btn btn-success" onClick={() => setSelectedContract(pc)}>
+                      <Icon name="check" size={14} /> Semnează contractul
+                    </button>
+                  )}
+                  {myAccepted && !otherAccepted && (
+                    <div style={{ fontSize: 13, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Icon name="clock" size={13} /> Ai semnat — așteptăm semnătura celeilalte părți
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {workflowStatus?.projectContract?.pdf_url && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <a href={withAuthToken(workflowStatus.projectContract.pdf_url)} download="contract-proiect.pdf" className="btn btn-ghost btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Icon name="file" size={13} /> Descarcă contract PDF
+                </a>
+              </div>
+            )}
+            {workflowStatus?.projectContract?.status === 'accepted' && (
+              <div style={{ fontSize: 13, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="check" size={13} /> Contractul a fost semnat de ambele părți · Nr. {workflowStatus.projectContract.contract_number}
+              </div>
+            )}
+          </ContractStep>
 
-                    {canSignStart && !hasUserSignedStart && user && (
-                      <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
-                        <button onClick={() => setSelectedAnnex(milestone)} style={{...styles.button, backgroundColor: '#8b5cf6', padding: '0.75rem 1.25rem'}}>📋 Vezi Anexă</button>
-                        <button onClick={() => setSigningMilestone({ id: milestone.id, title: milestone.title })} style={{...styles.button, ...styles.buttonPrimary, padding: '0.75rem 1.25rem'}}>✍️ Semnează Începere</button>
-                      </div>
-                    )}
+          {/* ── PASUL 2+: Milestones ── */}
+          {(project.milestones || []).map((ms, idx) => {
+            const msContract = workflowStatus?.milestoneContracts?.find(c => c.milestone_id === ms.id);
+            const projectContractDone = workflowStatus?.projectContract?.status === 'accepted';
+            const prevMsDone = idx === 0 || ['approved', 'released'].includes((project.milestones || [])[idx - 1]?.status);
+            const isLocked = !projectContractDone || !prevMsDone;
 
-                    {!canSignStart && user && (isParty1 || isParty2) && (
-                      <div style={{ marginTop: '1rem' }}>
-                        <button onClick={() => setSelectedAnnex(milestone)} style={{...styles.button, backgroundColor: '#8b5cf6', padding: '0.75rem 1.25rem'}}>📋 Vezi Anexă</button>
-                      </div>
-                    )}
+            const msStatusLabel = { pending: 'Nesemnat', in_progress: 'În lucru', delivered: 'Livrat — așteptare aprobare', revision_requested: 'Revizuire solicitată', approved: 'Aprobat', released: 'Fonduri eliberate' };
+            const msStepStatus = ms.status === 'approved' || ms.status === 'released' ? 'done'
+              : ms.status === 'delivered' || ms.status === 'in_progress' || ms.status === 'revision_requested' ? 'in_progress'
+              : isLocked ? 'locked' : 'pending_action';
 
-                    {isInProgress && isParty1 && !isDelivered && (
-                      <div style={{ marginTop: '1.25rem', padding: '1.25rem', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                        <p style={{ margin: '0 0 1rem 0', fontWeight: '600', color: '#1e293b', fontSize: '1rem' }}>📤 Încarcă Materialele Livrabile</p>
-                        <input 
-                          type="text" 
-                          placeholder="Link către materiale (Google Drive, Dropbox, etc.)" 
-                          id={`deliverable-${milestone.id}`}
-                          style={{ width: '100%', padding: '0.875rem 1rem', borderRadius: '10px', border: '2px solid #e2e8f0', marginBottom: '0.75rem', fontSize: '1rem', outline: 'none' }}
-                        />
-                        <button onClick={async () => { 
-                          const link = document.getElementById(`deliverable-${milestone.id}`).value;
-                          if (!link) { setError('Introdu un link'); return; }
-                          try { 
-                            await contractAPI.deliverMilestone({ project_id: projectId, milestone_id: milestone.id, deliverable_url: link }); 
-                            setSuccess('Materiale încărcate! Așteaptă aprobarea beneficiarului.'); 
-                            fetchContracts(); 
-                          } catch (err) { setError(err.response?.data?.error || 'Eroare'); } 
-                        }} style={{...styles.button, ...styles.buttonPrimary, padding: '0.75rem 1.25rem', backgroundColor: '#0891b2'}}>📤 Încarcă Materiale</button>
-                      </div>
-                    )}
+            const myMsAccepted = isParty1 ? ms.party1_approved : ms.party2_approved;
+            const otherMsAccepted = isParty1 ? ms.party2_approved : ms.party1_approved;
 
-                    {isDelivered && (
-                      <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#eff6ff', borderRadius: '10px', fontSize: '0.95rem', border: '1px solid #bfdbfe' }}>
-                        📤 Materiale încărcate, în așteptare pentru aprobare
-                        {m.deliverable_file_url && (
-                          <div style={{ marginTop: '0.75rem' }}>
-                            <strong>Link materiale:</strong> <a href={m.deliverable_file_url} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>{m.deliverable_file_url}</a>
+            return (
+              <ContractStep
+                key={ms.id}
+                stepNum={idx + 2}
+                title={`Milestone ${idx + 1}: ${ms.title}`}
+                description={`${ms.percentage_of_budget || '—'}% din buget · ${ms.amount_ron ? ms.amount_ron + ' RON' : ''}`}
+                status={msStepStatus}
+              >
+                {/* Escrow block — per milestone, after contract signed */}
+                {workflowStatus?.projectContract?.status === 'accepted' && !project.is_project_management && (() => {
+                  const msAmount = parseFloat(ms.amount_ron) || 0;
+                  const held = parseFloat(escrowAccount?.held_balance_ron) || 0;
+                  const funded = escrowAccount && held >= msAmount - 0.5;
+                  // Show only if previous milestone is done (or this is first) and not locked
+                  if (isLocked) return null;
+                  return (
+                    <div style={{
+                      marginBottom: '0.875rem', padding: '0.875rem 1rem', borderRadius: 'var(--r-md)',
+                      background: funded ? 'var(--success-bg)' : 'var(--warning-bg)',
+                      border: `1px solid ${funded ? 'var(--success-border)' : 'var(--warning-border)'}`,
+                      display: 'flex', alignItems: 'center', gap: '0.875rem',
+                    }}>
+                      <Icon name={funded ? 'lock' : 'alert-triangle'} size={16} style={{ color: funded ? 'var(--success)' : 'var(--warning)', flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 12.5, color: funded ? 'var(--success)' : 'var(--fg-0)' }}>
+                          {funded ? `${fmtRON(msAmount)} blocați în escrow` : `Fonduri lipsă · ${fmtRON(msAmount)} necesari`}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>
+                          {funded
+                            ? 'Fondurile sunt securizate. Vor fi eliberate la aprobarea acestui milestone.'
+                            : 'Beneficiarul trebuie să depună fondurile înainte ca prestatorul să livreze.'}
+                        </div>
+                        {funded && project.deadline && idx === 0 && (
+                          <div style={{ marginTop: 4, fontSize: 11.5, color: 'var(--fg-2)', fontFamily: 'var(--f-mono)' }}>
+                            Termen limită: {fmtDate(project.deadline)}
                           </div>
                         )}
                       </div>
-                    )}
-
-                    {isDelivered && isParty2 && !isApproved && (
-                      <div style={{ marginTop: '1rem' }}>
-                        <button onClick={async () => { 
-                          try { 
-                            await contractAPI.approveMilestone({ project_id: projectId, milestone_id: milestone.id }); 
-                            setSuccess('Milestone aprobat! Banii au fost eliberați către prestator.'); 
-                            fetchContracts(); 
-                          } catch (err) { setError(err.response?.data?.error || 'Eroare'); } 
-                        }} style={{...styles.button, ...styles.buttonSuccess, padding: '0.75rem 1.25rem'}}>✅ Aprobă și Eliberează Bani</button>
-                      </div>
-                    )}
-
-                    {isApproved && (
-                      <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#dcfce7', borderRadius: '10px', fontSize: '0.95rem', border: '1px solid #bbf7d0' }}>
-                        ✅ Aprobat - Banii au fost eliberați
-                      </div>
-                    )}
-
-                    {!canSignStart && !hasUserSignedStart && !isPendingStart && index > 0 && (
-                      <p style={{ marginTop: '0.75rem', color: '#dc2626', fontSize: '0.9rem', fontWeight: '500' }}>⏳ Trebuie să semnați milestone-ul anterior mai întâi</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {workflowStatus?.projectContract?.status === 'accepted' && workflowStatus?.milestones?.every(m => m.status === 'approved') && (
-            <div style={{...styles.card, marginBottom: '2rem'}}>
-              <h3 style={{...styles.sectionTitle, marginBottom: '1.25rem'}}>🏁 Finalizare Proiect</h3>
-              <div style={{ padding: '1.5rem', backgroundColor: '#dcfce7', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
-                <p style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', fontWeight: '600', color: '#166534' }}>🎉 Toate milestone-urile sunt finalizate!</p>
-                {!workflowStatus?.finalContract ? (
-                  <button onClick={async () => { try { await contractAPI.createFinalContract({ project_id: projectId }); setSuccess('Contract de finalizare creat!'); fetchContracts(); } catch (err) { setError(err.response?.data?.error || 'Eroare'); } }} style={{...styles.button, ...styles.buttonSuccess, padding: '0.875rem 1.5rem'}}>📝 Creează Contract de Finalizare</button>
-                ) : workflowStatus.finalContract.status !== 'accepted' ? (
-                  <div>
-                    <div style={{ display: 'flex', gap: '2rem', marginBottom: '1.25rem', fontSize: '0.95rem' }}>
-                      <div style={{ color: '#166534' }}><strong>Prestator:</strong> {workflowStatus.finalContract.party1_accepted ? '✓ Semnat' : '⏳ Nesemnat'}</div>
-                      <div style={{ color: '#166534' }}><strong>Beneficiar:</strong> {workflowStatus.finalContract.party2_accepted ? '✓ Semnat' : '⏳ Nesemnat'}</div>
+                      {!funded && isParty2 && (
+                        <button className="btn btn-warning btn-sm" onClick={() => openDepositModal(ms)} style={{ flexShrink: 0 }}>
+                          Depune {fmtRON(msAmount)}
+                        </button>
+                      )}
                     </div>
-                    {user && (isParty1 || isParty2) && (
-                      <button onClick={async () => { try { await contractAPI.acceptContract(workflowStatus.finalContract.id); setSuccess('Ai semnat contractul de finalizare!'); fetchContracts(); } catch (err) { setError(err.response?.data?.error || 'Eroare'); } }} style={{...styles.button, ...styles.buttonPrimary, padding: '0.875rem 1.5rem'}}>✍️ Semnează Contract de Finalizare</button>
+                  );
+                })()}
+
+                {msContract?.pdf_url && (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <a href={withAuthToken(msContract.pdf_url)} download="contract-milestone.pdf" className="btn btn-ghost btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <Icon name="file" size={13} /> Descarcă anexă milestone PDF
+                    </a>
+                  </div>
+                )}
+                {isLocked && (
+                  <div style={{ fontSize: 13, color: 'var(--fg-3)' }}>
+                    <Icon name="lock" size={12} /> {!projectContractDone ? 'Necesită semnarea contractului de proiect.' : 'Necesită finalizarea milestone-ului anterior.'}
+                  </div>
+                )}
+                {!isLocked && (
+                  <div className="col" style={{ gap: '0.875rem' }}>
+                    {/* Sub-step A: Livrare prestator + semnare contract de predare */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', fontSize: 13 }}>
+                      <span style={{ width: 22, height: 22, borderRadius: '50%', background: ['delivered','approved','released'].includes(ms.status) ? 'var(--success)' : ms.status === 'revision_requested' ? 'var(--warning)' : 'var(--border-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                        {['delivered','approved','released'].includes(ms.status) ? <Icon name="check" size={11} style={{ color: '#fff' }} /> : ms.status === 'revision_requested' ? <span style={{ fontSize: 9, color: '#fff' }}>↺</span> : <span style={{ fontSize: 9, color: 'var(--fg-3)' }}>A</span>}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: 500, color: ['delivered','approved','released'].includes(ms.status) ? 'var(--fg-0)' : ms.status === 'revision_requested' ? 'var(--warning)' : 'var(--fg-2)' }}>
+                          {ms.status === 'revision_requested' ? `Revizuire solicitată (${ms.revision_count || 1}/3)` : 'Livrare prestator + contract de predare'}
+                        </span>
+                        {ms.status === 'revision_requested' && ms.revision_feedback && (
+                          <div style={{ marginTop: 6, padding: '0.5rem 0.75rem', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--r-sm)', fontSize: 12, color: 'var(--fg-1)' }}>
+                            <strong style={{ color: 'var(--warning)' }}>Feedback beneficiar:</strong> {ms.revision_feedback}
+                          </div>
+                        )}
+                        {/* Prestator: file input when pending, in_progress or revision_requested */}
+                        {(['pending', 'in_progress', 'revision_requested'].includes(ms.status)) && isParty1 && (
+                          <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {ms.status === 'revision_requested' && (
+                              <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 2 }}>Încarcă versiunea revizuită:</div>
+                            )}
+                            <input
+                              type="text"
+                              className="input"
+                              placeholder="Descriere livrabil (opțional)"
+                              value={deliverDescriptions[ms.id] || ''}
+                              onChange={e => setDeliverDescriptions(d => ({ ...d, [ms.id]: e.target.value }))}
+                              style={{ fontSize: 12 }}
+                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <label style={{ cursor: 'pointer', flex: 1 }}>
+                                <div style={{
+                                  border: '1.5px dashed var(--border-2)', borderRadius: 'var(--r-sm)',
+                                  padding: '0.625rem 1rem', fontSize: 12, color: deliverFiles[ms.id] ? 'var(--fg-0)' : 'var(--fg-3)',
+                                  background: deliverFiles[ms.id] ? 'var(--success-bg)' : 'var(--bg-1)',
+                                  display: 'flex', alignItems: 'center', gap: 8,
+                                }}>
+                                  <Icon name="upload" size={13} style={{ color: deliverFiles[ms.id] ? 'var(--success)' : 'var(--fg-3)' }} />
+                                  {deliverFiles[ms.id] ? deliverFiles[ms.id].name : 'Selectează fișier (PDF, DOC, ZIP…)'}
+                                </div>
+                                <input
+                                  type="file"
+                                  style={{ display: 'none' }}
+                                  accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.mp4"
+                                  onChange={e => setDeliverFiles(f => ({ ...f, [ms.id]: e.target.files[0] }))}
+                                />
+                              </label>
+                              <button
+                                className="btn btn-primary btn-sm"
+                                disabled={!deliverFiles[ms.id] || deliverBusy[ms.id]}
+                                onClick={() => handleStartDelivery(ms.id)}
+                              >
+                                {deliverBusy[ms.id] ? '…' : ms.status === 'revision_requested' ? '✍️ Relivrează' : '✍️ Livrează'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {(['pending', 'in_progress'].includes(ms.status)) && isParty2 && (
+                          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--fg-3)' }}>Așteptăm livrarea documentelor de la prestator...</div>
+                        )}
+                        {ms.status === 'revision_requested' && isParty2 && (
+                          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--warning)' }}>Așteptăm versiunea revizuită de la prestator...</div>
+                        )}
+                        {['delivered','approved','released'].includes(ms.status) && ms.deliverable_file_url && (
+                          <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <a
+                              href={withAuthToken(ms.deliverable_file_url)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-ghost btn-sm"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}
+                            >
+                              <Icon name="file" size={12} /> Descarcă livrabil
+                            </a>
+                            {(() => {
+                              const mc = workflowStatus?.milestoneContracts?.find(c => c.milestone_id === ms.id);
+                              return mc?.pdf_url ? (
+                                <a href={withAuthToken(mc.pdf_url)} download="contract-predare.pdf" className="btn btn-ghost btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                                  <Icon name="file" size={12} /> Contract predare PDF
+                                </a>
+                              ) : null;
+                            })()}
+                            {(isAdminUser || isInvolved) && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}
+                                onClick={() => toggleHistory(ms.id)}
+                              >
+                                <Icon name="list" size={12} /> {historyExpanded[ms.id] ? 'Ascunde istoric' : 'Istoric livrări'}
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Deliverable upload history (all versions) */}
+                        {historyExpanded[ms.id] && (
+                          <div style={{ marginTop: 8, padding: '0.625rem 0.875rem', background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-sm)' }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                              Istoric upload-uri ({(deliverableHistories[ms.id] || []).length} versiuni)
+                            </div>
+                            {(deliverableHistories[ms.id] || []).length === 0 ? (
+                              <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>Nicio versiune înregistrată.</div>
+                            ) : (
+                              <div className="col" style={{ gap: 4 }}>
+                                {(deliverableHistories[ms.id] || []).map(h => (
+                                  <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '4px 0', borderBottom: '1px dashed var(--border-1)' }}>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                      <span className="mono" style={{ fontSize: 10, padding: '2px 6px', background: 'var(--bg-2)', borderRadius: 3, color: 'var(--fg-3)' }}>v{h.version_number}</span>
+                                      <a href={withAuthToken(h.file_url)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-hi)' }}>{h.file_name || 'fișier'}</a>
+                                      <span style={{ color: 'var(--fg-3)' }}>· {h.uploaded_by_name || '—'}</span>
+                                    </div>
+                                    <span style={{ color: 'var(--fg-3)', fontSize: 11 }}>{fmtDate(h.uploaded_at)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Admin release funds — only for admins, when milestone is delivered or disputed */}
+                        {isAdminUser && ['delivered','disputed','in_progress','revision_requested'].includes(ms.status) && (
+                          <div style={{ marginTop: 8, padding: '0.625rem 0.875rem', background: 'var(--violet-bg, rgba(168,85,247,0.08))', border: '1px solid var(--violet, #a855f7)', borderRadius: 'var(--r-sm)' }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--violet, #a855f7)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                              ⚡ Decizie admin: eliberare fonduri
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-border)', fontSize: 12 }}
+                                onClick={() => setAdminReleaseForm({ milestoneId: ms.id, direction: 'prestator', amount: ms.amount_ron || '', reason: '' })}
+                              >
+                                → Eliberează spre prestator
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                style={{ background: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid var(--warning-border)', fontSize: 12 }}
+                                onClick={() => setAdminReleaseForm({ milestoneId: ms.id, direction: 'client', amount: ms.amount_ron || '', reason: '' })}
+                              >
+                                ← Returnează la beneficiar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Sub-step B: Aprobare beneficiar + eliberare fonduri + semnare */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', fontSize: 13 }}>
+                      <span style={{ width: 22, height: 22, borderRadius: '50%', background: ['approved','released'].includes(ms.status) ? 'var(--success)' : 'var(--border-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                        {['approved','released'].includes(ms.status) ? <Icon name="check" size={11} style={{ color: '#fff' }} /> : <span style={{ fontSize: 9, color: 'var(--fg-3)' }}>B</span>}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: 500, color: ['approved','released'].includes(ms.status) ? 'var(--fg-0)' : 'var(--fg-2)' }}>
+                          {['approved','released'].includes(ms.status) ? `Aprobat · ${ms.amount_ron} RON eliberați` : 'Confirmare primire + eliberare fonduri'}
+                        </span>
+                        {['approved','released'].includes(ms.status) && (
+                          <div style={{ marginTop: 6 }}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              style={{ fontSize: 11 }}
+                              onClick={async () => {
+                                try {
+                                  const r = await axios.get(`/api/milestones/${ms.id}/invoice`, { headers: { Authorization: `Bearer ${token}` } });
+                                  if (r.data.invoice_url) {
+                                    const blobRes = await axios.get(r.data.invoice_url, {
+                                      responseType: 'blob',
+                                      headers: { Authorization: `Bearer ${token}` },
+                                    });
+                                    const url = URL.createObjectURL(new Blob([blobRes.data], { type: 'application/pdf' }));
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `confirmare-plata-${ms.title || ms.id}.pdf`;
+                                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                                  }
+                                } catch { alert('Nu s-a putut genera confirmarea de plată.'); }
+                              }}
+                            >
+                              <Icon name="file" size={12} /> Descarcă confirmare plată
+                            </button>
+                          </div>
+                        )}
+                        {ms.status === 'disputed' && (
+                          <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 'var(--r-sm)', fontSize: 12.5, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Icon name="flag" size={13} /> Milestone în dispută — workflow-ul este blocat. Adminul va decide cui i se eliberează fondurile.
+                          </div>
+                        )}
+                        {ms.status === 'delivered' && isParty1 && (
+                          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>Așteptăm confirmarea beneficiarului...</div>
+                        )}
+                        {ms.status === 'delivered' && isParty2 && project.status !== 'disputed' && (
+                          <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <button
+                                className="btn btn-success btn-sm"
+                                onClick={() => handleStartApproval(ms.id)}
+                              >
+                                <Icon name="check" size={12} /> ✍️ Aprobă și eliberează {ms.amount_ron} RON
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                onClick={() => {
+                                  setShowRevisionInput(s => ({ ...s, [ms.id]: !s[ms.id] }));
+                                  setShowDisputeInput(s => ({ ...s, [ms.id]: false }));
+                                }}
+                                style={{ background: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid var(--warning-border)' }}
+                              >
+                                ↺ Solicită revizuire {ms.revision_count > 0 ? `(${ms.revision_count}/3)` : ''}
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                onClick={() => {
+                                  setShowDisputeInput(s => ({ ...s, [ms.id]: !s[ms.id] }));
+                                  setShowRevisionInput(s => ({ ...s, [ms.id]: false }));
+                                }}
+                                style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }}
+                              >
+                                <Icon name="flag" size={12} /> Deschide dispută
+                              </button>
+                            </div>
+                            {showRevisionInput[ms.id] && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--r-sm)' }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)' }}>
+                                  Descrie ce trebuie revizuit ({(ms.revision_count || 0) + 1}/3 revizuiri):
+                                </div>
+                                <textarea
+                                  className="input"
+                                  placeholder="Ex: Logo-ul trebuie să fie mai mare, culorile să fie conform brandbook-ului..."
+                                  value={revisionFeedbacks[ms.id] || ''}
+                                  onChange={e => setRevisionFeedbacks(f => ({ ...f, [ms.id]: e.target.value }))}
+                                  style={{ fontSize: 12, minHeight: 70, resize: 'vertical' }}
+                                />
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                  <button
+                                    className="btn btn-sm"
+                                    onClick={() => handleRequestRevision(ms.id)}
+                                    disabled={revisionBusy[ms.id]}
+                                    style={{ background: 'var(--warning)', color: '#fff', border: 'none' }}
+                                  >
+                                    {revisionBusy[ms.id] ? '…' : 'Trimite cerere de revizuire'}
+                                  </button>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => setShowRevisionInput(s => ({ ...s, [ms.id]: false }))}
+                                  >
+                                    Anulează
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {showDisputeInput[ms.id] && (
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input
+                                  type="text"
+                                  className="input"
+                                  placeholder="Descrie motivul disputei..."
+                                  value={disputeReasons[ms.id] || ''}
+                                  onChange={e => setDisputeReasons(r => ({ ...r, [ms.id]: e.target.value }))}
+                                  style={{ flex: 1, fontSize: 12 }}
+                                />
+                                <button
+                                  className="btn btn-sm"
+                                  onClick={() => handleDisputeMilestone(ms.id)}
+                                  style={{ background: 'var(--danger)', color: '#fff', border: 'none', flexShrink: 0 }}
+                                >
+                                  Trimite
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </ContractStep>
+            );
+          })}
+
+          {/* ── BACKFILL — pentru proiecte finalizate fără documente generate ── */}
+          {project.status === 'completed'
+            && (workflowStatus?.deliveryContracts || []).length === 0
+            && !workflowStatus?.finalContract && (
+            <ContractStep
+              stepNum={(project.milestones || []).length + 2}
+              title="Documente emise"
+              description="Contracte de predare-primire și finalizare."
+              status="pending_action"
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', padding: '0.75rem 1rem', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--r-sm)' }}>
+                <Icon name="alert-triangle" size={16} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+                <div style={{ flex: 1, fontSize: 13, color: 'var(--fg-1)' }}>
+                  Documentele de predare-primire și finalizare nu au fost generate automat la închiderea acestui proiect.
+                </div>
+                <button
+                  className="btn btn-warning btn-sm"
+                  style={{ flexShrink: 0 }}
+                  onClick={async () => {
+                    try {
+                      await axios.post(`/api/contracts/project/${projectId}/backfill`, {}, { headers });
+                      await fetchContracts();
+                      setSuccess('Documentele au fost generate cu succes!');
+                    } catch (e) {
+                      setError(e.response?.data?.error || 'Eroare la generarea documentelor.');
+                    }
+                  }}
+                >
+                  Generează documentele lipsă
+                </button>
+              </div>
+            </ContractStep>
+          )}
+
+          {/* ── DOCUMENTE EMISE — predare-primire + finalizare ── */}
+          {((workflowStatus?.deliveryContracts || []).length > 0 || workflowStatus?.finalContract) && (
+            <ContractStep
+              stepNum={(project.milestones || []).length + 2}
+              title="Documente emise"
+              description="Contracte de predare-primire generate la fiecare milestone + contractul de finalizare."
+              status={workflowStatus?.finalContract?.status === 'accepted' ? 'done' : 'in_progress'}
+            >
+              <div className="col" style={{ gap: '0.5rem' }}>
+                {(workflowStatus?.deliveryContracts || []).map(dc => (
+                  <div key={dc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', background: 'var(--bg-1)', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-0)' }}>
+                        Contract predare-primire — {dc.milestone_title || 'Milestone'}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>
+                        Nr. {dc.contract_number}
+                        {dc.party1_accepted && dc.party2_accepted
+                          ? <span style={{ color: 'var(--success)', marginLeft: 6 }}>✓ Semnat de ambele părți</span>
+                          : dc.party1_accepted
+                            ? <span style={{ color: 'var(--warning)', marginLeft: 6 }}>Semnat de prestator</span>
+                            : null}
+                      </div>
+                    </div>
+                    {dc.pdf_url ? (
+                      <a href={withAuthToken(dc.pdf_url)} download={`predare-primire-${dc.id}.pdf`} className="btn btn-ghost btn-sm" style={{ fontSize: 12, flexShrink: 0 }}>
+                        <Icon name="file" size={12} /> Descarcă
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--fg-3)', flexShrink: 0 }}>PDF în generare</span>
                     )}
                   </div>
-                ) : <div style={{ padding: '1.25rem', backgroundColor: '#22c55e', color: 'white', borderRadius: '10px', fontWeight: '600', fontSize: '1.05rem' }}>✅ Proiect Complet Finalizat!</div>}
+                ))}
+                {workflowStatus?.finalContract && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', background: 'var(--bg-1)', borderRadius: 'var(--r-sm)', border: '1px solid var(--border-1)' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-0)' }}>
+                        Contract de finalizare proiect
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>
+                        Nr. {workflowStatus.finalContract.contract_number}
+                        {workflowStatus.finalContract.status === 'accepted'
+                          ? <span style={{ color: 'var(--success)', marginLeft: 6 }}>✓ Finalizat</span>
+                          : <span style={{ color: 'var(--warning)', marginLeft: 6 }}>În procesare</span>}
+                      </div>
+                    </div>
+                    {workflowStatus.finalContract.pdf_url ? (
+                      <a href={withAuthToken(workflowStatus.finalContract.pdf_url)} download="finalizare-proiect.pdf" className="btn btn-ghost btn-sm" style={{ fontSize: 12, flexShrink: 0 }}>
+                        <Icon name="file" size={12} /> Descarcă
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--fg-3)', flexShrink: 0 }}>PDF în generare</span>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
+            </ContractStep>
           )}
+
+          {/* ── FINALIZARE AUTOMATĂ ── */}
+          {project.status === 'completed' && (
+            <ContractStep
+              stepNum={(project.milestones || []).length + 3}
+              title="Proiect finalizat"
+              description="Toate milestone-urile au fost livrate, aprobate și plătite."
+              status="done"
+            >
+              <div className="col" style={{ gap: '0.75rem' }}>
+                <div style={{ fontSize: 13, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="flag" size={13} /> Proiect finalizat cu succes!
+                </div>
+                {reviewStatus?.can_review && (
+                  <div style={{ padding: '0.875rem 1rem', background: 'var(--accent-bg, #eff6ff)', border: '1px solid var(--accent-border, #bfdbfe)', borderRadius: 'var(--r-sm)', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg-0)' }}>Cum a decurs colaborarea?</div>
+                      <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>
+                        Lasă o recenzie pentru <strong>{reviewStatus.reviewable_user?.name}</strong> — ajuți comunitatea să ia decizii mai bune.
+                      </div>
+                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={() => setShowReviewModal(true)}>
+                      ★ Lasă recenzie
+                    </button>
+                  </div>
+                )}
+                {reviewStatus?.reason === 'already_reviewed' && (
+                  <div style={{ fontSize: 12, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="check" size={12} /> Ai lăsat deja o recenzie pentru acest proiect.
+                  </div>
+                )}
+              </div>
+            </ContractStep>
+          )}
+
         </div>
       )}
 
-      {showEditProjectModal && (
-        <div style={styles.modal}>
-          <div style={styles.modalContent}>
-            <h2 style={{ marginTop: 0, marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: '700', color: '#1e293b' }}>✏️ Editează Task</h2>
-            
-            <div style={{ marginBottom: '2rem' }}>
-              <h4 style={{ marginBottom: '1rem', color: '#1e293b', fontSize: '1.1rem', fontWeight: '600' }}>📝 Date Proiect</h4>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={styles.label}>Titlu</label>
-                <input type="text" value={editFormData.title} onChange={(e) => setEditFormData({...editFormData, title: e.target.value})} style={styles.input} />
-              </div>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={styles.label}>Descriere</label>
-                <textarea value={editFormData.description} onChange={(e) => setEditFormData({...editFormData, description: e.target.value})} rows={4} style={styles.textarea} />
-              </div>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Buget (RON)</label>
-                  <input type="number" value={editFormData.budget_ron} onChange={(e) => handleBudgetChange(e.target.value)} style={styles.input} />
+      {/* Review modal */}
+      {showReviewModal && reviewStatus?.reviewable_user && (
+        <ReviewModal
+          isOpen={showReviewModal}
+          onClose={() => setShowReviewModal(false)}
+          reviewableUser={reviewStatus.reviewable_user}
+          projectTitle={project?.title}
+          projectId={projectId}
+          onReviewSubmitted={() => {
+            setShowReviewModal(false);
+            fetchReviewStatus();
+          }}
+        />
+      )}
+
+      {/* Modals (pass-through — keep original components) */}
+      {selectedContract && (
+        <ContractModal
+          contract={selectedContract}
+          onClose={() => setSelectedContract(null)}
+          onSign={(signature) => handleAcceptContract(selectedContract.id, signature)}
+          user={user}
+        />
+      )}
+      {deliveryFlow && (
+        <ContractModal
+          contract={deliveryFlow.step === 'pred' ? deliveryFlow.predContract : deliveryFlow.finalContract}
+          project={project}
+          user={user}
+          onClose={() => setDeliveryFlow(null)}
+          onSign={handleDeliverySign}
+        />
+      )}
+      {approvalFlow && (
+        <ContractModal
+          contract={approvalFlow.step === 'pred' ? approvalFlow.predContract : approvalFlow.finalContract}
+          project={project}
+          user={user}
+          onClose={() => setApprovalFlow(null)}
+          onSign={handleApprovalSign}
+        />
+      )}
+      {pmFinalizeContract && (
+        <ContractModal
+          contract={pmFinalizeContract}
+          project={project}
+          user={user}
+          onClose={() => setPmFinalizeContract(null)}
+          onSign={handlePmFinalizeSign}
+        />
+      )}
+      {adminReleaseForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}
+          onClick={e => e.target === e.currentTarget && setAdminReleaseForm(null)}>
+          <div className="card" style={{ width: 480, padding: '1.5rem' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--fg-0)', marginBottom: '0.875rem' }}>
+              ⚡ Eliberare fonduri — decizie admin
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--fg-2)', marginBottom: '1rem', lineHeight: 1.5 }}>
+              {adminReleaseForm.direction === 'prestator'
+                ? 'Banii vor fi eliberați din escrow către prestator (cu comision aplicat).'
+                : 'Banii vor fi returnați în wallet-ul beneficiarului.'}
+            </div>
+            <div className="col" style={{ gap: '0.75rem', marginBottom: '1rem' }}>
+              <div>
+                <label className="label">Direcție</label>
+                <div className="row" style={{ gap: '.5rem' }}>
+                  {[
+                    { v: 'prestator', l: '→ Prestator', c: 'var(--success)' },
+                    { v: 'client', l: '← Beneficiar', c: 'var(--warning)' },
+                  ].map(o => (
+                    <button key={o.v} type="button"
+                      onClick={() => setAdminReleaseForm(p => ({ ...p, direction: o.v }))}
+                      style={{
+                        flex: 1, padding: '.625rem', borderRadius: 8, cursor: 'pointer',
+                        background: adminReleaseForm.direction === o.v ? `color-mix(in srgb, ${o.c} 18%, transparent)` : 'var(--bg-1)',
+                        border: `1.5px solid ${adminReleaseForm.direction === o.v ? o.c : 'var(--border-1)'}`,
+                        color: adminReleaseForm.direction === o.v ? o.c : 'var(--fg-2)',
+                        fontWeight: 600, fontSize: 13,
+                      }}>{o.l}</button>
+                  ))}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={styles.label}>Termen (zile)</label>
-                  <input type="number" value={editFormData.timeline_days} onChange={(e) => setEditFormData({...editFormData, timeline_days: e.target.value})} style={styles.input} />
-                </div>
+              </div>
+              <div>
+                <label className="label">Sumă (RON)</label>
+                <input className="input" type="number" min="0" step="0.01"
+                  value={adminReleaseForm.amount}
+                  onChange={e => setAdminReleaseForm(p => ({ ...p, amount: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Motiv (opțional)</label>
+                <textarea className="input" rows={2} value={adminReleaseForm.reason}
+                  onChange={e => setAdminReleaseForm(p => ({ ...p, reason: e.target.value }))}
+                  placeholder="Notă pentru istoric / wallet description" />
               </div>
             </div>
+            <div className="row" style={{ gap: '.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setAdminReleaseForm(null)} disabled={adminReleaseLoading}>Anulează</button>
+              <button className="btn btn-primary" onClick={handleAdminRelease} disabled={adminReleaseLoading}>
+                {adminReleaseLoading ? '…' : 'Confirmă eliberarea'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {selectedAnnex && (
+        <AnnexModal
+          annex={selectedAnnex}
+          onClose={() => setSelectedAnnex(null)}
+        />
+      )}
+      {showRefundModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowRefundModal(false); }}>
+          <div className="card" style={{ width: 420, padding: '1.5rem' }}>
+            <div className="card-title" style={{ marginBottom: '.5rem', fontSize: 16 }}>
+              <Icon name="reload" size={15} /> Solicită refund escrow
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--fg-2)', marginBottom: '1rem' }}>
+              Vei primi în wallet suma rămasă în escrow pentru proiectul <strong>"{project.title}"</strong>.
+            </p>
+            <div style={{ padding: '.875rem', background: 'var(--bg-2)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-sm)', marginBottom: '1.25rem' }}>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Sumă de refund</div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 24, fontWeight: 700, color: refundEscrowAmount > 0 ? 'var(--success)' : 'var(--fg-3)' }}>
+                {fmtRON(refundEscrowAmount)}
+              </div>
+              {refundEscrowAmount === 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--warning)', marginTop: 6 }}>
+                  ⚠ Nu există fonduri în escrow pentru acest proiect.
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setShowRefundModal(false)} disabled={refundLoading}>
+                Anulează
+              </button>
+              <button className="btn btn-primary" onClick={confirmRefund} disabled={refundLoading || refundEscrowAmount === 0}>
+                {refundLoading ? 'Se procesează...' : 'Confirmă refund'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {editFormData.milestones && editFormData.milestones.length > 0 && (() => {
-              const { totalAmount, totalPercentage } = calculateTotals(editFormData.milestones, editFormData.budget_ron);
-              const budget = parseFloat(editFormData.budget_ron) || 0;
-              const isOverBudget = totalAmount > budget;
-              const isOverPercentage = totalPercentage > 100;
-              
-              return (
-                <div style={{ marginBottom: '2rem' }}>
-                  <h4 style={{ marginBottom: '1rem', color: '#1e293b', fontSize: '1.1rem', fontWeight: '600' }}>🎯 Milestones</h4>
-                  {editFormData.milestones.map((milestone, index) => (
-                    <div key={milestone.id || index} style={{ padding: '1.25rem', backgroundColor: '#f8fafc', borderRadius: '12px', marginBottom: '1rem', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontWeight: '600', marginBottom: '1rem', color: '#1e293b' }}>Milestone {index + 1}</div>
-                      <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.9rem', color: '#475569', marginBottom: '0.4rem', fontWeight: '500' }}>Titlu</label>
-                        <input type="text" value={milestone.title || ''} onChange={(e) => {
-                          const newMilestones = [...editFormData.milestones];
-                          newMilestones[index] = { ...newMilestones[index], title: e.target.value };
-                          setEditFormData({...editFormData, milestones: newMilestones});
-                        }} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '2px solid #e2e8f0', fontSize: '1rem', outline: 'none' }} />
+      {/* Deposit funds modal */}
+      {showDepositModal && depositMilestone && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(8,12,20,.72)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1500 }}
+          onClick={e => e.target === e.currentTarget && !escrowLoading && setShowDepositModal(false)}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-2)', borderRadius: 'var(--r-lg)', width: '100%', maxWidth: 440, boxShadow: '0 32px 64px rgba(0,0,0,.45)', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-1) 100%)' }}>
+              <div>
+                <div style={{ fontSize: 10, fontFamily: 'var(--f-mono)', color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>Depunere fonduri escrow</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--fg-0)' }}>{depositMilestone.title}</div>
+              </div>
+              <button onClick={() => !escrowLoading && setShowDepositModal(false)} style={{ width: 30, height: 30, borderRadius: 8, background: 'transparent', border: '1px solid var(--border-2)', color: 'var(--fg-2)', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+            </div>
+            {/* Body */}
+            <div style={{ padding: '1.5rem' }}>
+              <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: 11, fontFamily: 'var(--f-mono)', color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Sumă de depus</div>
+                <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--fg-0)', fontFamily: 'var(--f-mono)', letterSpacing: '-0.02em' }}>
+                  {fmtRON(depositMilestone.amount_ron)}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>
+                  {depositMilestone.percentage_of_budget}% din bugetul proiectului
+                </div>
+              </div>
+              <div style={{ padding: '0.875rem 1rem', background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-md)', fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.55, marginBottom: '1.25rem' }}>
+                {escrowAccount
+                  ? <>Fondurile se adaugă în contul escrow existent și vor fi eliberate prestatorului <strong>numai după ce aprobi livrabilul acestui milestone</strong>.</>
+                  : <>Fondurile vor fi blocate în custodie ESCRO și eliberate prestatorului <strong>numai după ce aprobi livrabilul</strong>. Prestatorul va fi notificat imediat și poate începe lucrul.</>
+                }
+              </div>
+              {project.deadline && (
+                <div style={{ padding: '0.625rem 1rem', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.25rem' }}>
+                  <Icon name="clock" size={13} /> Termen limită: <strong>{fmtDate(project.deadline)}</strong>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '.625rem' }}>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowDepositModal(false)} disabled={escrowLoading}>
+                  Anulează
+                </button>
+                <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleActivateEscrow} disabled={escrowLoading}>
+                  {escrowLoading ? 'Se procesează...' : `Depune ${fmtRON(depositMilestone.amount_ron)}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Propose modification modal */}
+      {showProposeModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={e => e.target === e.currentTarget && setShowProposeModal(false)}>
+          <div className="card" style={{ width: 480, padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="row-between" style={{ marginBottom: '1.25rem' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{proposeMsId ? 'Propune modificare milestone' : 'Propune modificare proiect'}</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>Cealaltă parte trebuie să accepte modificările.</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowProposeModal(false)}>✕</button>
+            </div>
+            <div className="col" style={{ gap: '.875rem' }}>
+              {!proposeMsId ? (
+                <>
+                  <div>
+                    <label className="label">Titlu proiect</label>
+                    <input className="input" value={proposeForm.title || ''} onChange={e => setProposeForm(p => ({ ...p, title: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label">Descriere</label>
+                    <textarea className="input" rows={3} value={proposeForm.description || ''} onChange={e => setProposeForm(p => ({ ...p, description: e.target.value }))} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
+                    <div>
+                      <label className="label">Buget (RON)</label>
+                      <input className="input" type="number" value={proposeForm.budget_ron || ''} onChange={e => setProposeForm(p => ({ ...p, budget_ron: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="label">Timeline (zile)</label>
+                      <input className="input" type="number" value={proposeForm.timeline_days || ''} onChange={e => setProposeForm(p => ({ ...p, timeline_days: e.target.value }))} />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="label">Titlu milestone</label>
+                    <input className="input" value={proposeForm.title || ''} onChange={e => setProposeForm(p => ({ ...p, title: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label">Descriere livrabil</label>
+                    <textarea className="input" rows={2} value={proposeForm.deliverable_description || ''} onChange={e => setProposeForm(p => ({ ...p, deliverable_description: e.target.value }))} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
+                    <div>
+                      <label className="label">Valoare (RON)</label>
+                      <input className="input" type="number" value={proposeForm.amount_ron || ''} onChange={e => setProposeForm(p => ({ ...p, amount_ron: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="label">% din buget</label>
+                      <input className="input" type="number" min="1" max="100" value={proposeForm.percentage_of_budget || ''} onChange={e => setProposeForm(p => ({ ...p, percentage_of_budget: e.target.value }))} />
+                    </div>
+                  </div>
+                </>
+              )}
+              <div style={{ padding: '.5rem .75rem', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 6, fontSize: 12, color: 'var(--warning)' }}>
+                Modificările intră în vigoare doar după ce sunt acceptate de ambele părți.
+              </div>
+              <div className="row" style={{ gap: '.5rem', justifyContent: 'flex-end' }}>
+                <button className="btn btn-ghost" onClick={() => setShowProposeModal(false)}>Anulează</button>
+                <button className="btn btn-primary" onClick={handleSubmitPropose} disabled={proposeSubmitting}>
+                  <Icon name="send" size={13} /> {proposeSubmitting ? 'Se trimite…' : 'Trimite propunerea'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add task modal — for PM project owner */}
+      {showAddTaskModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={e => e.target === e.currentTarget && setShowAddTaskModal(false)}>
+          <div className="card" style={{ width: 560, padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="row-between" style={{ marginBottom: '1.25rem' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--fg-0)' }}>Adaugă task în proiect</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{project.title}</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowAddTaskModal(false)}>✕</button>
+            </div>
+            <div className="col" style={{ gap: '1rem' }}>
+              <div>
+                <label className="label">Titlu task *</label>
+                <input className="input" value={addTaskForm.title} placeholder="Ex: Design UI aplicație mobilă"
+                  onChange={e => setAddTaskForm(p => ({ ...p, title: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Descriere *</label>
+                <textarea className="input" rows={3} value={addTaskForm.description} placeholder="Detaliază ce trebuie realizat..."
+                  onChange={e => setAddTaskForm(p => ({ ...p, description: e.target.value }))} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
+                <div>
+                  <label className="label">Buget (RON)</label>
+                  <input className="input" type="number" value={addTaskForm.budget_ron}
+                    onChange={e => setAddTaskForm(p => ({ ...p, budget_ron: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Termen (zile)</label>
+                  <input className="input" type="number" value={addTaskForm.timeline_days}
+                    onChange={e => setAddTaskForm(p => ({ ...p, timeline_days: parseInt(e.target.value) }))} />
+                </div>
+              </div>
+              <div>
+                <label className="label">Tip task</label>
+                <div className="row" style={{ gap: '.75rem' }}>
+                  {[{ v: 'matching', l: 'Matching', d: 'Admin asignează prestator' }, { v: 'direct', l: 'Direct', d: 'Specific un prestator' }].map(o => (
+                    <div key={o.v} onClick={() => setAddTaskForm(p => ({ ...p, service_type: o.v, expert_id: '', company_id: '' }))}
+                      style={{ flex: 1, padding: '.75rem', borderRadius: 8, border: `1.5px solid ${addTaskForm.service_type === o.v ? 'var(--accent)' : 'var(--border-1)'}`, cursor: 'pointer', background: addTaskForm.service_type === o.v ? 'var(--accent-bg)' : 'var(--bg-1)' }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg-0)' }}>{o.l}</div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{o.d}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {addTaskForm.service_type === 'direct' && (
+                <div>
+                  <label className="label">Prestator</label>
+                  <select
+                    className="input"
+                    value={addTaskForm.expert_id || addTaskForm.company_id || ''}
+                    onChange={e => {
+                      const sel = allUsers.find(u => String(u.id) === e.target.value);
+                      setAddTaskForm(p => ({
+                        ...p,
+                        expert_id: sel?.role === 'expert' ? e.target.value : '',
+                        company_id: sel?.role === 'company' ? e.target.value : '',
+                      }));
+                    }}
+                  >
+                    <option value="">— Selectează un prestator —</option>
+                    {allUsers.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}{u.company ? ` (${u.company})` : ''} · {u.role === 'company' ? 'Companie' : 'Expert'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Milestones */}
+              <div>
+                <div className="row-between" style={{ marginBottom: '.625rem' }}>
+                  <label className="label" style={{ margin: 0 }}>Milestones * <span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 400 }}>(suma = 100%)</span></label>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={addAtfMs}>
+                    <Icon name="plus" size={12} /> Adaugă
+                  </button>
+                </div>
+                <div className="col" style={{ gap: '.5rem' }}>
+                  {addTaskForm.milestones.map((m, i) => (
+                    <div key={i} style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 8, padding: '.75rem' }}>
+                      <div className="row-between" style={{ marginBottom: '.5rem' }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>MS {i + 1}</span>
+                        {addTaskForm.milestones.length > 1 && (
+                          <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', padding: '2px 6px' }} onClick={() => removeAtfMs(i)}>✕</button>
+                        )}
                       </div>
-                      <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.9rem', color: '#475569', marginBottom: '0.4rem', fontWeight: '500' }}>Descriere</label>
-                        <textarea value={milestone.deliverable_description || ''} onChange={(e) => {
-                          const newMilestones = [...editFormData.milestones];
-                          newMilestones[index] = { ...newMilestones[index], deliverable_description: e.target.value };
-                          setEditFormData({...editFormData, milestones: newMilestones});
-                        }} rows={3} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '2px solid #e2e8f0', fontSize: '1rem', outline: 'none', resize: 'vertical' }} />
-                      </div>
-                      <div style={{ display: 'flex', gap: '1rem' }}>
-                        <div style={{ flex: 1 }}>
-                          <label style={{ display: 'block', fontSize: '0.9rem', color: '#475569', marginBottom: '0.4rem', fontWeight: '500' }}>Suma (RON)</label>
-                          <input type="number" value={milestone.amount_ron || ''} onChange={(e) => handleMilestoneAmountChange(index, e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '2px solid #e2e8f0', fontSize: '1rem', outline: 'none' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <label style={{ display: 'block', fontSize: '0.9rem', color: '#475569', marginBottom: '0.4rem', fontWeight: '500' }}>Procent (%)</label>
-                          <input type="number" value={milestone.percentage_of_budget || ''} onChange={(e) => handleMilestonePercentageChange(index, e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '2px solid #e2e8f0', fontSize: '1rem', outline: 'none' }} />
+                      <div className="col" style={{ gap: '.5rem' }}>
+                        <input className="input" style={{ fontSize: 13 }} placeholder="Titlu milestone *" value={m.title}
+                          onChange={e => updateAtf(i, 'title', e.target.value)} />
+                        <input className="input" style={{ fontSize: 13 }} placeholder="Descriere livrabil" value={m.deliverable_description}
+                          onChange={e => updateAtf(i, 'deliverable_description', e.target.value)} />
+                        <div className="row" style={{ gap: '.5rem', alignItems: 'center' }}>
+                          <input className="input" style={{ fontSize: 13, width: 80 }} type="number" min="1" max="100" placeholder="%" value={m.percentage_of_budget}
+                            onChange={e => updateAtf(i, 'percentage_of_budget', e.target.value)} />
+                          <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>% din buget</span>
+                          {addTaskForm.budget_ron && m.percentage_of_budget && (
+                            <span style={{ fontSize: 12, color: 'var(--success)', fontFamily: 'var(--f-mono)', marginLeft: 'auto' }}>
+                              ≈ {Math.round(parseFloat(addTaskForm.budget_ron) * parseFloat(m.percentage_of_budget) / 100).toLocaleString()} RON
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
                   ))}
-                  <div style={{ padding: '1rem', backgroundColor: isOverBudget || isOverPercentage ? '#fee2e2' : '#dcfce7', borderRadius: '10px', marginTop: '0.5rem', border: '1px solid', borderColor: isOverBudget || isOverPercentage ? '#fecaca' : '#bbf7d0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', marginBottom: '0.5rem' }}>
-                      <span style={{ color: '#1e293b' }}>Total Sume:</span>
-                      <span style={{ color: isOverBudget ? '#dc2626' : '#16a34a', fontSize: '1.1rem' }}>{totalAmount.toFixed(2)} RON</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600' }}>
-                      <span style={{ color: '#1e293b' }}>Total Procent:</span>
-                      <span style={{ color: isOverPercentage ? '#dc2626' : '#16a34a', fontSize: '1.1rem' }}>{totalPercentage.toFixed(2)}%</span>
-                    </div>
-                    {isOverBudget && <p style={{ margin: '0.75rem 0 0 0', color: '#dc2626', fontSize: '0.9rem', fontWeight: '500' }}>⚠️ Sumele depășesc bugetul!</p>}
-                    {isOverPercentage && <p style={{ margin: '0.75rem 0 0 0', color: '#dc2626', fontSize: '0.9rem', fontWeight: '500' }}>⚠️ Procentele depășesc 100%!</p>}
-                  </div>
                 </div>
-              );
-            })()}
+                {(() => {
+                  const total = addTaskForm.milestones.reduce((s, m) => s + (parseFloat(m.percentage_of_budget) || 0), 0);
+                  return total !== 100 && total > 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>Suma curentă: {total}% (trebuie 100%)</div>
+                  ) : total === 100 ? (
+                    <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 6 }}>✓ 100% alocat</div>
+                  ) : null;
+                })()}
+              </div>
 
-            <div style={{ padding: '1rem', backgroundColor: '#eff6ff', borderRadius: '10px', marginBottom: '1.5rem', border: '1px solid #bfdbfe' }}>
-              <p style={{ margin: 0, fontSize: '0.95rem', color: '#1e40af', fontWeight: '500' }}>
-                💡 Modificările vor fi trimise pentru aprobarea celeilalte părți.
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowEditProjectModal(false)} style={{...styles.button, ...styles.buttonSecondary, padding: '0.875rem 1.5rem'}}>Anulează</button>
-              <button onClick={async () => {
-                try {
-                  const totalPercentage = (editFormData.milestones || []).reduce((sum, m) => sum + (parseFloat(m.percentage_of_budget) || 0), 0);
-                  const totalAmount = (editFormData.milestones || []).reduce((sum, m) => sum + (parseFloat(m.amount_ron) || 0), 0);
-                  const budget = parseFloat(editFormData.budget_ron) || 0;
-                  
-                  if (totalPercentage > 100) {
-                    setError('Suma procentelor depășește 100%');
-                    return;
-                  }
-                  if (totalAmount > budget && budget > 0) {
-                    setError('Suma milestone-urilor depășește bugetul proiectului');
-                    return;
-                  }
-
-                  if (editFormData.title !== project.title) {
-                    await modificationAPI.proposeProjectModification({ project_id: projectId, field_name: 'title', old_value: project.title, new_value: editFormData.title });
-                  }
-                  if (editFormData.description !== project.description) {
-                    await modificationAPI.proposeProjectModification({ project_id: projectId, field_name: 'description', old_value: project.description, new_value: editFormData.description });
-                  }
-                  if (String(editFormData.budget_ron) !== String(project.budget_ron)) {
-                    await modificationAPI.proposeProjectModification({ project_id: projectId, field_name: 'budget_ron', old_value: String(project.budget_ron), new_value: String(editFormData.budget_ron) });
-                  }
-                  if (String(editFormData.timeline_days) !== String(project.timeline_days)) {
-                    await modificationAPI.proposeProjectModification({ project_id: projectId, field_name: 'timeline_days', old_value: String(project.timeline_days), new_value: String(editFormData.timeline_days) });
-                  }
-                  for (const m of editFormData.milestones || []) {
-                    const orig = project.milestones?.find(om => om.id === m.id);
-                    if (orig && m.id) {
-                      if (m.title !== orig.title) {
-                        await modificationAPI.proposeMilestoneModification({ project_id: projectId, milestone_id: m.id, field_name: 'title', old_value: orig.title, new_value: m.title });
-                      }
-                      if (m.deliverable_description !== orig.deliverable_description) {
-                        await modificationAPI.proposeMilestoneModification({ project_id: projectId, milestone_id: m.id, field_name: 'deliverable_description', old_value: orig.deliverable_description || '', new_value: m.deliverable_description });
-                      }
-                      if (String(m.amount_ron) !== String(orig.amount_ron)) {
-                        await modificationAPI.proposeMilestoneModification({ project_id: projectId, milestone_id: m.id, field_name: 'amount_ron', old_value: String(orig.amount_ron), new_value: String(m.amount_ron) });
-                      }
-                      if (String(m.percentage_of_budget) !== String(orig.percentage_of_budget)) {
-                        await modificationAPI.proposeMilestoneModification({ project_id: projectId, milestone_id: m.id, field_name: 'percentage_of_budget', old_value: String(orig.percentage_of_budget), new_value: String(m.percentage_of_budget) });
-                      }
-                    }
-                  }
-                  setSuccess('Modificări propuse! Așteaptă aprobarea celeilalte părți.');
-                  setShowEditProjectModal(false);
-                  fetchModifications();
-                } catch (err) {
-                  setError(err.response?.data?.error || 'Eroare la propunerea modificărilor');
-                }
-              }} style={{...styles.button, ...styles.buttonPrimary, padding: '0.875rem 1.5rem'}}>💾 Propune Modificări</button>
+              <div className="row" style={{ gap: '.75rem', justifyContent: 'flex-end' }}>
+                <button className="btn btn-ghost" onClick={() => setShowAddTaskModal(false)}>Anulează</button>
+                <button className="btn btn-primary" onClick={handleSubmitAddTask}>
+                  <Icon name="send" size={13} /> Adaugă task
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      {selectedContract && (
-        <ContractModal 
-          contract={selectedContract}
-          project={project}
-          user={user}
-          onClose={() => setSelectedContract(null)}
-          onSign={async (signature) => {
-            setSigningContract(true);
-            try {
-              await contractAPI.acceptContract(selectedContract.id, { signature });
-              setSuccess('Contract semnat cu succes!');
-              setSelectedContract(null);
-              fetchContracts();
-            } catch (err) {
-              setError(err.response?.data?.error || 'Eroare la semnare');
-            } finally {
-              setSigningContract(false);
-            }
-          }}
-          loading={signingContract}
-        />
-      )}
+function PartyCard({ name, id, extra, color = 'cyan' }) {
+  return (
+    <div className="row" style={{ gap: '.75rem', alignItems: 'flex-start' }}>
+      <Avatar user={{ name, color }} size="md" />
+      <div>
+        <Link to={`/profile/${id}`} style={{ fontWeight: 600, fontSize: 14, color: 'var(--accent-hi)', textDecoration: 'none' }}>
+          {name} →
+        </Link>
+        {extra && <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{extra}</div>}
+        <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>Date de contact: vizibile în chat</div>
+      </div>
+    </div>
+  );
+}
 
-      {signingMilestone && (
-        <SignatureModal
-          onSave={async (signature) => {
-            try {
-              await contractAPI.signMilestoneStart({ 
-                project_id: projectId, 
-                milestone_id: signingMilestone.id,
-                signature 
-              });
-              setSuccess('Ai semnat pentru începerea milestone-ului!');
-              fetchContracts();
-            } catch (err) {
-              setError(err.response?.data?.error || 'Eroare la semnare');
-            } finally {
-              setSigningMilestone(null);
-            }
-          }}
-          onCancel={() => setSigningMilestone(null)}
-        />
-      )}
+function TrustMeter({ level = 1 }) {
+  return (
+    <div className="trust">
+      <div className="trust-l">L{level}</div>
+      <div className="trust-d">
+        {[1,2,3,4,5].map(n => (
+          <span key={n} className={`trust-pip ${n <= level ? 'on' : ''}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      {selectedAnnex && (() => {
-        const ms = workflowStatus?.milestones?.find(m => m.id === selectedAnnex.id) || {};
-        const isUserPrestator = user?.id === (project.company_id || project.expert_id);
-        return (
-        <AnnexModal
-          milestone={selectedAnnex}
-          project={project}
-          party1Name={project.expert_name}
-          party2Name={project.client_name}
-          party1Company={project.company_name || project.expert_company}
-          party2Company={project.client_company}
-          onClose={() => setSelectedAnnex(null)}
-          onSign={() => {
-            setSelectedAnnex(null);
-            setSigningMilestone({ id: selectedAnnex.id, title: selectedAnnex.title });
-          }}
-          loading={signingMilestone !== null}
-          userHasSigned={isUserPrestator ? ms.party1_approved : ms.party2_approved}
-          otherHasSigned={isUserPrestator ? ms.party2_approved : ms.party1_approved}
-          isParty={isParty1 || isParty2}
-          isPrestator={isUserPrestator}
-        />
-        );
-      })()}
+function ContractStep({ stepNum, title, description, status, children }) {
+  const statusConfig = {
+    done:         { dot: 'var(--success)', dotText: '#fff', icon: 'check', border: 'var(--success-border)', bg: 'var(--bg-0)' },
+    in_progress:  { dot: 'var(--accent)',  dotText: '#fff', icon: null,    border: 'var(--accent)',          bg: 'var(--bg-0)' },
+    pending_action:{ dot: 'var(--warning)',dotText: '#fff', icon: null,    border: 'var(--warning-border)',  bg: 'var(--warning-bg)' },
+    locked:       { dot: 'var(--border-2)',dotText: 'var(--fg-4)', icon: null, border: 'var(--border-1)', bg: 'var(--bg-1)' },
+  };
+  const cfg = statusConfig[status] || statusConfig.locked;
+
+  return (
+    <div className="card" style={{ borderColor: cfg.border, opacity: status === 'locked' ? 0.6 : 1 }}>
+      <div className="card-body">
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+          <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', background: cfg.dot, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 700, color: cfg.dotText }}>
+            {status === 'done' ? <Icon name="check" size={15} style={{ color: '#fff' }} /> : stepNum}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--fg-0)', marginBottom: 2 }}>{title}</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: children ? '1rem' : 0 }}>{description}</div>
+            {children}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
