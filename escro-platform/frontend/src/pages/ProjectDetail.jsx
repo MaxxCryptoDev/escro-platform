@@ -1,15 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { contractAPI, modificationAPI, projectAPI, escrowAPI } from '../services/api';
 import ContractModal from '../components/ContractModal';
+import ContractStep from '../components/ContractStep';
+import ActionBanner from '../components/ActionBanner';
 import SignatureModal from '../components/SignatureModal';
 import AnnexModal from '../components/AnnexModal';
 import ReviewModal from '../components/ReviewModal';
 import { Icon, Avatar, StatusBadge, EscrowBar, Spinner, EmptyState } from '../components/ui';
-import { fmtRON, fmtDate, getInitials, withAuthToken } from '../utils/format';
+import { fmtRON, fmtDate, getInitials, withAuthToken, serviceLabel } from '../utils/format';
 
 const fmtMsgDate = (s) => {
   const d = new Date(s);
@@ -34,12 +36,20 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [applyMessage, setApplyMessage] = useState('');
+  const [applyLoading, setApplyLoading] = useState(false);
   const [messages, setMessages] = useState([]);
   const [chatHasMore, setChatHasMore] = useState(false);
   const [chatCursor, setChatCursor] = useState(null);
   const [chatLoadingMore, setChatLoadingMore] = useState(false);
   const [newMessage, setNewMessage] = useState('');
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'details');
+  // Legacy URLs use ?tab=milestones, but ProjectDetail has no milestones tab — deliveries happen via Contracts.
+  const initialTab = (() => {
+    const raw = searchParams.get('tab') || 'details';
+    return raw === 'milestones' ? 'contracts' : raw;
+  })();
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [contracts, setContracts] = useState([]);
   const [workflowStatus, setWorkflowStatus] = useState(null);
   const [modifications, setModifications] = useState([]);
@@ -156,33 +166,12 @@ export default function ProjectDetail() {
 
   const openDepositModal = (ms) => { setDepositMilestone(ms); setShowDepositModal(true); };
 
-  const handleActivateEscrow = async () => {
-    if (escrowLoading || !depositMilestone) return;
-    setEscrowLoading(true);
-    try {
-      const amount = parseFloat(depositMilestone.amount_ron) || 0;
-      const isFirst = !escrowAccount;
-
-      if (isFirst) {
-        const escRes = await axios.post('/api/escrow', { project_id: projectId, total_amount_ron: amount }, { headers });
-        const escrowId = escRes.data.escrow?.id;
-        if (escrowId) {
-          await axios.post('/api/escrow/confirm-payment', { escrow_id: escrowId, payment_intent_id: `stub_${escrowId}` }, { headers });
-        }
-      } else {
-        await axios.post(`/api/escrow/project/${projectId}/topup`, { amount_ron: amount, milestone_id: depositMilestone.id }, { headers });
-      }
-
-      const updated = await axios.get(`/api/escrow/project/${projectId}`, { headers }).catch(() => null);
-      setEscrowAccount(updated?.data?.escrow || null);
-      setShowDepositModal(false);
-      setSuccess(`${fmtRON(amount)} blocați în escrow. Prestatorul a fost notificat.`);
-      fetchProject();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Eroare la depunerea fondurilor.');
-    } finally {
-      setEscrowLoading(false);
-    }
+  const handleActivateEscrow = () => {
+    if (!depositMilestone) return;
+    const amount = parseFloat(depositMilestone.amount_ron) || 0;
+    if (!(amount > 0)) { setError('Suma milestone-ului este invalidă.'); return; }
+    setShowDepositModal(false);
+    navigate(`/escrow/${projectId}/checkout?amount=${amount}&milestone_id=${depositMilestone.id}`);
   };
 
   useEffect(() => { fetchProject(); fetchModifications(); fetchContracts(); }, [fetchProject, fetchModifications, fetchContracts]);
@@ -238,6 +227,32 @@ export default function ProjectDetail() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-open Apply modal when navigating from Marketplace with ?apply=1
+  useEffect(() => {
+    if (searchParams.get('apply') === '1' && project && !project.is_owner
+      && !project.expert_id && !project.company_id
+      && ['expert', 'company'].includes(user?.role)
+      && ['open', 'pending_assignment'].includes(project.status)) {
+      setShowApplyModal(true);
+    }
+  }, [searchParams, project, user?.role]);
+
+  const handleApplyToProject = async () => {
+    if (applyLoading || !project) return;
+    setApplyLoading(true);
+    setError('');
+    try {
+      const res = await axios.post(`/api/projects/${projectId}/apply`, { message: applyMessage.trim() || null }, { headers });
+      setSuccess(res.data?.message || 'Aplicația a fost trimisă adminului.');
+      setShowApplyModal(false);
+      setApplyMessage('');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Eroare la trimiterea aplicației.');
+    } finally {
+      setApplyLoading(false);
+    }
+  };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -765,12 +780,42 @@ export default function ProjectDetail() {
 
   return (
     <div className="escro-page fade-up">
-      {/* Back */}
+      {/* Back — sub-tasks (project_id linked to a parent PM task) return to the parent task page */}
       <div style={{ marginBottom: '1.25rem' }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)}>
-          <Icon name="arrow-left" size={12} /> Înapoi
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => project.task_id ? navigate(`/project/${project.task_id}`) : navigate(-1)}
+        >
+          <Icon name="arrow-left" size={12} /> {project.task_id ? 'Înapoi la project management' : 'Înapoi'}
         </button>
       </div>
+
+      {/* Status banner — for the poster while the project is still pre-assignment */}
+      {isParty2 && !project.expert_id && !project.company_id && (() => {
+        if (project.status === 'pending_admin_approval') {
+          return (
+            <ActionBanner
+              tone="accent"
+              eyebrow="Proiect trimis"
+              title="Proiectul tău este în verificare la administrator"
+              body="Taskul va fi publicat după validare. Te anunțăm imediat ce devine vizibil prestatorilor."
+              icon="clock"
+            />
+          );
+        }
+        if (['open', 'pending_assignment'].includes(project.status)) {
+          return (
+            <ActionBanner
+              tone="success"
+              eyebrow="Proiect publicat"
+              title="Taskul tău este în căutarea unui prestator"
+              body="L-am publicat în Marketplace. Te notificăm imediat ce un expert sau o companie se asociază cu proiectul tău."
+              icon="search"
+            />
+          );
+        }
+        return null;
+      })()}
 
       {/* Header */}
       <div className="page-head" style={{ alignItems: 'flex-start', borderBottom: '1px solid var(--border-1)', paddingBottom: '1.5rem', marginBottom: '1.25rem' }}>
@@ -802,6 +847,17 @@ export default function ProjectDetail() {
           </div>
         </div>
         <div className="page-actions">
+          {/* Apply to project — prestator on a marketplace-visible project they don't own */}
+          {!project.is_pm_task
+            && !project.is_owner
+            && !project.expert_id && !project.company_id
+            && ['expert', 'company'].includes(user?.role)
+            && ['open', 'pending_assignment'].includes(project.status)
+            && ['matching', 'direct'].includes(project.service_type) && (
+            <button className="btn btn-primary btn-sm" onClick={() => setShowApplyModal(true)}>
+              <Icon name="send" size={13} /> Aplică la proiect
+            </button>
+          )}
           {project.is_pm_task && project.is_creator && (
             <button className="btn btn-primary btn-sm" onClick={handleOpenAddTask}>
               <Icon name="plus" size={13} /> Adaugă task
@@ -889,6 +945,40 @@ export default function ProjectDetail() {
           </div>
         </div>
       )}
+
+      {/* Sub-task awaiting client approval — show when PM has any sub-task pending the
+          current user's approval (PM owner). Sends user to the specific assignment detail. */}
+      {project.is_pm_task && (project.is_owner || project.is_creator)
+        && (project.assignments || []).some(a => a.status === 'pending_client_approval') && (() => {
+        const pending = (project.assignments || []).filter(a => a.status === 'pending_client_approval');
+        return (
+          <div style={{
+            padding: '1rem 1.25rem',
+            background: 'var(--warning-bg)',
+            border: '1px solid var(--warning-border)',
+            borderRadius: 'var(--r-md)',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            flexWrap: 'wrap',
+          }}>
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--warning)' }}>
+                <Icon name="flag" size={14} /> {pending.length === 1 ? 'Un task nou așteaptă aprobarea ta' : `${pending.length} task-uri așteaptă aprobarea ta`}
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--fg-1)', marginTop: 4 }}>
+                Adminul a configurat {pending.length === 1 ? 'un task' : `${pending.length} task-uri`} în proiectul tău. Verifică detaliile și aprobă pentru ca prestatorul să poată începe lucrul.
+              </div>
+            </div>
+            {pending.length === 1 && (
+              <button className="btn btn-primary btn-sm" onClick={() => navigate(`/project/${project.id}/assignment/${pending[0].id}`)}>
+                <Icon name="arrow-right" size={13} /> Vezi taskul
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Admin edit banner — user must accept/reject admin's proposed changes */}
       {project.status === 'pending_client_approval' && (project.is_owner || project.is_creator) && (
@@ -1003,6 +1093,16 @@ export default function ProjectDetail() {
         </div>
       )}
 
+      {/* Workflow mini-stepper (non-PM only) */}
+      <WorkflowStepper
+        project={project}
+        workflowStatus={workflowStatus}
+        onJump={(id) => {
+          if (id === 'contract' || id === 'final') setActiveTab('contracts');
+          else setActiveTab('contracts');
+        }}
+      />
+
       {/* Tabs */}
       <div className="tabs-v3" style={{ marginBottom: '1.5rem' }}>
         {tabs.map(t => (
@@ -1047,7 +1147,7 @@ export default function ProjectDetail() {
                 <div className="grid-3" style={{ marginTop: '1rem' }}>
                   <div>
                     <div className="h-eyebrow" style={{ fontSize: 9, marginBottom: 4 }}>Serviciu</div>
-                    <div style={{ fontSize: 13, color: 'var(--fg-0)' }}>{project.service_type || '—'}</div>
+                    <div style={{ fontSize: 13, color: 'var(--fg-0)' }}>{project.is_pm_task ? 'Project Management' : (project.service_type ? serviceLabel(project.service_type) : '—')}</div>
                   </div>
                   <div>
                     <div className="h-eyebrow" style={{ fontSize: 9, marginBottom: 4 }}>Timeline</div>
@@ -1077,13 +1177,35 @@ export default function ProjectDetail() {
                     {(project.assignments || []).map((a, i) => {
                       const needsPrestator = !a.expert_id && !a.company_id
                         && ['pending_assignment', 'pending_admin_approval', 'open'].includes(a.status);
+                      // Sub-task is waiting for THIS user (PM owner) to approve. Highlight it.
+                      const needsClientApproval = a.status === 'pending_client_approval'
+                        && (project.is_owner || project.is_creator);
+                      const highlight = needsClientApproval;
                       return (
                       <div
                         key={a.id}
                         className="card-interactive card"
-                        style={{ padding: '1rem 1.25rem', cursor: 'pointer', border: '1px solid var(--border-1)' }}
+                        style={{
+                          padding: '1rem 1.25rem',
+                          cursor: 'pointer',
+                          border: `1px solid ${highlight ? 'var(--warning-border)' : 'var(--border-1)'}`,
+                          background: highlight ? 'var(--warning-bg)' : undefined,
+                          position: 'relative',
+                        }}
                         onClick={() => navigate(`/project/${project.id}/assignment/${a.id}`)}
                       >
+                        {needsClientApproval && (
+                          <div style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '3px 9px', borderRadius: 100,
+                            background: 'var(--warning)', color: '#000',
+                            fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em',
+                            textTransform: 'uppercase', marginBottom: 8,
+                          }}>
+                            <span className="urgent-pulse" style={{ width: 5, height: 5, borderRadius: '50%', background: '#000' }} />
+                            Acțiune necesară · Aprobă task-ul
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div style={{ flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -1091,7 +1213,7 @@ export default function ProjectDetail() {
                               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg-0)' }}>{a.title}</span>
                             </div>
                             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 6 }}>
-                              <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>{a.service_type}</span>
+                              <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>{serviceLabel(a.service_type)}</span>
                               <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>{fmtRON(a.budget_ron)}</span>
                               {(a.expert_name || a.company_name) ? (
                                 <span style={{ fontSize: 11, color: 'var(--fg-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1105,7 +1227,16 @@ export default function ProjectDetail() {
                             </div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {needsPrestator && project.is_creator && (
+                            {needsClientApproval && (
+                              <button
+                                className="btn btn-primary btn-sm"
+                                style={{ fontSize: 11 }}
+                                onClick={(e) => { e.stopPropagation(); navigate(`/project/${project.id}/assignment/${a.id}`); }}
+                              >
+                                <Icon name="check" size={11} /> Aprobă
+                              </button>
+                            )}
+                            {needsPrestator && isAdminUser && !needsClientApproval && (
                               <button
                                 className="btn btn-primary btn-sm"
                                 style={{ fontSize: 11 }}
@@ -1136,46 +1267,25 @@ export default function ProjectDetail() {
                 {!project.milestones?.length ? (
                   <EmptyState icon="flag" title="Niciun milestone" description="Nu sunt milestones definite." />
                 ) : (
-                  <div className="card-body">
-                    <div className="tl">
-                      {project.milestones.map((ms, i) => {
-                        const isDone = ['approved','released'].includes(ms.status);
-                        const isActive = ['in_progress','delivered','revision_requested'].includes(ms.status);
-                        const rowClass = isDone ? 'done' : isActive ? 'active' : 'pending';
-                        return (
-                          <div key={ms.id} className={`tl-row ${rowClass}`}>
-                            <div className="tl-dot">
-                              {isDone ? <Icon name="check" size={11} /> : i + 1}
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flex: 1 }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--fg-0)', marginBottom: 4 }}>{ms.title}</div>
-                                {ms.deliverable_description && (
-                                  <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5 }}>{ms.deliverable_description}</div>
-                                )}
-                                <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'center' }}>
-                                  {ms.percentage_of_budget && (
-                                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{ms.percentage_of_budget}% din buget</span>
-                                  )}
-                                  {isDone && <StatusBadge status={ms.status} />}
-                                  {isActive && <StatusBadge status={ms.status} />}
-                                  {canPropose && ms.status === 'pending' && (
-                                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => handleOpenProposeMilestone(ms)}>
-                                      <Icon name="edit" size={10} /> Editează
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums' }}>
-                                  {fmtRON(ms.amount_ron)}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {project.milestones.map((ms, i) => {
+                      const prevMs = project.milestones[i - 1];
+                      const prevMsDone = i === 0 || (prevMs && ['approved', 'released'].includes(prevMs.status));
+                      return (
+                        <MilestoneCardV2
+                          key={ms.id}
+                          ms={ms}
+                          idx={i}
+                          isParty1={isParty1}
+                          isParty2={isParty2}
+                          canPropose={canPropose}
+                          contractSigned={contractSigned}
+                          prevMsDone={prevMsDone}
+                          onEditPropose={() => handleOpenProposeMilestone(ms)}
+                          onJumpContracts={() => setActiveTab('contracts')}
+                        />
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1256,67 +1366,15 @@ export default function ProjectDetail() {
             ) : (
               /* Regular project sidebar: vault + parties + quick actions */
               <>
-                <div className="vault" style={{ padding: '1.5rem' }}>
-                  <div className="vault-content">
-                    {(() => {
-                      const heldFromAccount = parseFloat(escrowAccount?.held_balance_ron);
-                      const heldAmount = Number.isFinite(heldFromAccount)
-                        ? heldFromAccount
-                        : Math.max(0, (parseFloat(budget) || 0) - (parseFloat(totalReleased) || 0));
-                      const fullyDisbursed = heldAmount <= 0 && totalReleased > 0;
-                      return (
-                        <>
-                          <div className="h-eyebrow" style={{ marginBottom: '0.625rem' }}>
-                            <Icon name={fullyDisbursed ? 'check' : 'lock'} size={11} />
-                            {fullyDisbursed ? ' Debursat integral' : ' În custodie'}
-                          </div>
-                          <div style={{ fontFamily: 'var(--f-display)', fontSize: 48, lineHeight: 0.95, letterSpacing: '-0.04em', color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums' }}>
-                            <em style={{ color: fullyDisbursed ? 'var(--success)' : 'var(--accent-hi)', fontStyle: 'italic' }}>
-                              {Math.round(heldAmount).toLocaleString('ro-RO')}
-                            </em>
-                          </div>
-                          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
-                            RON · {fullyDisbursed ? 'fonduri eliberate' : 'escrow activ'}
-                          </div>
-                        </>
-                      );
-                    })()}
-                    <div style={{ height: 1, background: 'var(--border-1)', margin: '1rem 0' }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: 'var(--fg-3)' }}>Total contract</span>
-                        <span style={{ fontFamily: 'var(--f-mono)' }}>{fmtRON(budget)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: 'var(--fg-3)' }}>Debursat</span>
-                        <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--success)' }}>{fmtRON(totalReleased)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: 'var(--fg-3)' }}>Progres</span>
-                        <span style={{ fontFamily: 'var(--f-mono)' }}>{progress}%</span>
-                      </div>
-                    </div>
-                    <div className="bar" style={{ marginTop: '0.875rem' }}>
-                      <div className="bar-fill" style={{ width: `${progress}%` }} />
-                    </div>
-                    {/* Deposit funds — only for the client (party2), when escrow not yet funded */}
-                    {isParty2 && (() => {
-                      const held = parseFloat(escrowAccount?.held_balance_ron) || 0;
-                      const isFunded = held > 0;
-                      const blockingStatus = ['completed', 'cancelled', 'rejected'].includes(project.status);
-                      if (isFunded || blockingStatus) return null;
-                      return (
-                        <button
-                          className="btn btn-primary"
-                          style={{ marginTop: '1rem', width: '100%', justifyContent: 'center' }}
-                          onClick={() => navigate(`/escrow/${projectId}/checkout?amount=${budget}`)}
-                        >
-                          <Icon name="credit-card" size={14} /> Depune {fmtRON(budget)} în escrow
-                        </button>
-                      );
-                    })()}
-                  </div>
-                </div>
+                <VaultHeroSegmented
+                  project={project}
+                  totalReleased={totalReleased}
+                  escrowAccount={escrowAccount}
+                  isParty2={isParty2}
+                  projectId={projectId}
+                  navigate={navigate}
+                  budget={budget}
+                />
 
                 <div className="card">
                   <div className="card-head">
@@ -1428,22 +1486,34 @@ export default function ProjectDetail() {
             })}
             <div ref={messagesEndRef} />
           </div>
-          <form onSubmit={handleSendMessage} className="chat-input-row">
-            <input
-              className="input"
-              type="text"
-              value={newMessage}
-              onChange={e => setNewMessage(e.target.value)}
-              placeholder="Scrie un mesaj…"
-              style={{ flex: 1 }}
-            />
-            <button type="button" className="btn btn-secondary" style={{ padding: '0.55rem' }}>
-              <Icon name="file" size={14} />
-            </button>
-            <button type="submit" className="btn btn-primary" style={{ padding: '0.55rem' }}>
-              <Icon name="send" size={14} />
-            </button>
-          </form>
+          {['completed', 'cancelled', 'rejected'].includes(project?.status) ? (
+            <div style={{
+              padding: '0.875rem 1rem',
+              background: 'var(--bg-1)', border: '1px solid var(--border-1)',
+              borderRadius: 'var(--r-md)', display: 'flex', alignItems: 'center', gap: '0.625rem',
+              fontSize: 12.5, color: 'var(--fg-2)',
+            }}>
+              <Icon name="lock" size={13} style={{ color: 'var(--fg-3)' }} />
+              Conversația e blocată — proiectul este {project.status === 'completed' ? 'finalizat' : project.status === 'cancelled' ? 'anulat' : 'respins'}. Poți vedea mesajele anterioare, dar nu mai poți trimite mesaje noi.
+            </div>
+          ) : (
+            <form onSubmit={handleSendMessage} className="chat-input-row">
+              <input
+                className="input"
+                type="text"
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                placeholder="Scrie un mesaj…"
+                style={{ flex: 1 }}
+              />
+              <button type="button" className="btn btn-secondary" style={{ padding: '0.55rem' }}>
+                <Icon name="file" size={14} />
+              </button>
+              <button type="submit" className="btn btn-primary" style={{ padding: '0.55rem' }}>
+                <Icon name="send" size={14} />
+              </button>
+            </form>
+          )}
         </div>
       )}
 
@@ -1531,6 +1601,12 @@ export default function ProjectDetail() {
             const prevMsDone = idx === 0 || ['approved', 'released'].includes((project.milestones || [])[idx - 1]?.status);
             const isLocked = !projectContractDone || !prevMsDone;
 
+            // A milestone is "funded" if a deposit has actually been processed for it.
+            // The Stripe webhook moves the milestone from 'pending' → 'in_progress' on payment
+            // success, so any status other than 'pending' means the deposit was recorded.
+            const msAmt = parseFloat(ms.amount_ron) || 0;
+            const msFunded = ms.status !== 'pending';
+
             const msStatusLabel = { pending: 'Nesemnat', in_progress: 'În lucru', delivered: 'Livrat — așteptare aprobare', revision_requested: 'Revizuire solicitată', approved: 'Aprobat', released: 'Fonduri eliberate' };
             const msStepStatus = ms.status === 'approved' || ms.status === 'released' ? 'done'
               : ms.status === 'delivered' || ms.status === 'in_progress' || ms.status === 'revision_requested' ? 'in_progress'
@@ -1549,11 +1625,12 @@ export default function ProjectDetail() {
               >
                 {/* Escrow block — per milestone, after contract signed */}
                 {workflowStatus?.projectContract?.status === 'accepted' && !project.is_project_management && (() => {
-                  const msAmount = parseFloat(ms.amount_ron) || 0;
-                  const held = parseFloat(escrowAccount?.held_balance_ron) || 0;
-                  const funded = escrowAccount && held >= msAmount - 0.5;
-                  // Show only if previous milestone is done (or this is first) and not locked
-                  if (isLocked) return null;
+                  const msAmount = msAmt;
+                  const funded = !!escrowAccount && msFunded;
+                  const isPaid = ['approved', 'released'].includes(ms.status);
+                  // Show only if previous milestone is done (or this is first) and not locked,
+                  // and milestone hasn't already been released to prestator.
+                  if (isLocked || isPaid) return null;
                   return (
                     <div style={{
                       marginBottom: '0.875rem', padding: '0.875rem 1rem', borderRadius: 'var(--r-md)',
@@ -1620,16 +1697,27 @@ export default function ProjectDetail() {
                             {ms.status === 'revision_requested' && (
                               <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 2 }}>Încarcă versiunea revizuită:</div>
                             )}
+                            {!msFunded && (
+                              <div style={{
+                                padding: '0.625rem 0.875rem', borderRadius: 'var(--r-sm)',
+                                background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
+                                fontSize: 12, color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 6,
+                              }}>
+                                <Icon name="lock" size={12} style={{ color: 'var(--warning)' }} />
+                                Așteaptă depunerea fondurilor de către beneficiar pentru acest milestone înainte să livrezi.
+                              </div>
+                            )}
                             <input
                               type="text"
                               className="input"
                               placeholder="Descriere livrabil (opțional)"
                               value={deliverDescriptions[ms.id] || ''}
                               onChange={e => setDeliverDescriptions(d => ({ ...d, [ms.id]: e.target.value }))}
-                              style={{ fontSize: 12 }}
+                              style={{ fontSize: 12, opacity: msFunded ? 1 : 0.5 }}
+                              disabled={!msFunded}
                             />
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <label style={{ cursor: 'pointer', flex: 1 }}>
+                              <label style={{ cursor: msFunded ? 'pointer' : 'not-allowed', flex: 1, opacity: msFunded ? 1 : 0.5 }}>
                                 <div style={{
                                   border: '1.5px dashed var(--border-2)', borderRadius: 'var(--r-sm)',
                                   padding: '0.625rem 1rem', fontSize: 12, color: deliverFiles[ms.id] ? 'var(--fg-0)' : 'var(--fg-3)',
@@ -1644,12 +1732,14 @@ export default function ProjectDetail() {
                                   style={{ display: 'none' }}
                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.mp4"
                                   onChange={e => setDeliverFiles(f => ({ ...f, [ms.id]: e.target.files[0] }))}
+                                  disabled={!msFunded}
                                 />
                               </label>
                               <button
                                 className="btn btn-primary btn-sm"
-                                disabled={!deliverFiles[ms.id] || deliverBusy[ms.id]}
+                                disabled={!msFunded || !deliverFiles[ms.id] || deliverBusy[ms.id]}
                                 onClick={() => handleStartDelivery(ms.id)}
+                                title={!msFunded ? 'Fondurile nu sunt depuse în escrow pentru acest milestone' : undefined}
                               >
                                 {deliverBusy[ms.id] ? '…' : ms.status === 'revision_requested' ? '✍️ Relivrează' : '✍️ Livrează'}
                               </button>
@@ -2206,6 +2296,162 @@ export default function ProjectDetail() {
       )}
 
       {/* Propose modification modal */}
+      {/* Apply to project modal */}
+      {showApplyModal && project && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1500 }}
+          onClick={e => e.target === e.currentTarget && !applyLoading && setShowApplyModal(false)}>
+          <div className="card" style={{ width: 640, padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="row-between" style={{ marginBottom: '1.25rem' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>Confirmă aplicarea la proiect</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>Verifică detaliile înainte de a trimite</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => !applyLoading && setShowApplyModal(false)}>✕</button>
+            </div>
+
+            <div className="col" style={{ gap: '1rem' }}>
+              {/* Project header */}
+              <div style={{ padding: '1rem 1.125rem', background: 'var(--bg-1)', border: '1px solid var(--border-2)', borderRadius: 'var(--r-md)' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--fg-0)', marginBottom: 6 }}>{project.title}</div>
+                {project.description && (
+                  <div style={{ fontSize: 12.5, color: 'var(--fg-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                    {project.description}
+                  </div>
+                )}
+              </div>
+
+              {/* Key facts grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '.75rem' }}>
+                <div style={{ padding: '.75rem .875rem', background: 'var(--bg-1)', border: '1px solid var(--border-2)', borderRadius: 'var(--r-sm)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>
+                    <Icon name="wallet" size={10} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Buget
+                  </div>
+                  <div style={{ fontSize: 14, fontFamily: 'var(--f-mono)', fontWeight: 700, color: 'var(--fg-0)' }}>
+                    {fmtRON(project.budget_ron)} RON
+                  </div>
+                </div>
+                <div style={{ padding: '.75rem .875rem', background: 'var(--bg-1)', border: '1px solid var(--border-2)', borderRadius: 'var(--r-sm)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>
+                    <Icon name="clock" size={10} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Termen
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg-0)' }}>
+                    {project.timeline_days ? `${project.timeline_days} zile` : '—'}
+                  </div>
+                </div>
+                {project.deadline && (
+                  <div style={{ padding: '.75rem .875rem', background: 'var(--bg-1)', border: '1px solid var(--border-2)', borderRadius: 'var(--r-sm)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>
+                      <Icon name="calendar" size={10} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Deadline
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-0)' }}>
+                      {fmtDate(project.deadline)}
+                    </div>
+                  </div>
+                )}
+                {project.service_type && (
+                  <div style={{ padding: '.75rem .875rem', background: 'var(--bg-1)', border: '1px solid var(--border-2)', borderRadius: 'var(--r-sm)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>
+                      <Icon name="tag" size={10} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Serviciu
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-0)' }}>
+                      {serviceLabel(project.service_type)}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Client info */}
+              {(project.client_name || project.client_company) && (
+                <div style={{ padding: '.875rem 1rem', background: 'var(--bg-1)', border: '1px solid var(--border-2)', borderRadius: 'var(--r-md)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
+                    <Icon name="user" size={10} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Client
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-0)' }}>
+                    {project.client_company || project.client_name}
+                  </div>
+                  {project.client_industry && (
+                    <div style={{ fontSize: 11.5, color: 'var(--fg-2)', marginTop: 2 }}>
+                      {project.client_industry}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Milestones list */}
+              {project.milestones && project.milestones.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-2)', textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 600, marginBottom: '.5rem' }}>
+                    <Icon name="flag" size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                    Etape ({project.milestones.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+                    {project.milestones.map((ms, idx) => (
+                      <div key={ms.id || idx} style={{ padding: '.75rem .875rem', background: 'var(--bg-1)', border: '1px solid var(--border-2)', borderRadius: 'var(--r-sm)' }}>
+                        <div className="row-between" style={{ alignItems: 'flex-start', gap: '.75rem' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-0)' }}>
+                              {idx + 1}. {ms.title}
+                            </div>
+                            {(ms.deliverable_description || ms.description) && (
+                              <div style={{ fontSize: 11.5, color: 'var(--fg-2)', marginTop: 4, lineHeight: 1.5 }}>
+                                {ms.deliverable_description || ms.description}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--f-mono)', color: 'var(--fg-0)' }}>
+                              {fmtRON(ms.amount_ron)} <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>RON</span>
+                            </div>
+                            {ms.percentage_of_budget != null && (
+                              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+                                {ms.percentage_of_budget}%
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Process info */}
+              <div style={{ padding: '0.875rem 1rem', background: 'var(--accent-bg)', border: '1px solid var(--accent-border)', borderRadius: 'var(--r-md)', fontSize: 12.5, color: 'var(--fg-1)' }}>
+                <Icon name="info" size={12} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                Aplicația ta va fi trimisă adminului pentru aprobare. Vei fi notificat când e procesată.
+              </div>
+
+              {/* Optional message */}
+              <div>
+                <label className="label">Mesaj pentru admin/client (opțional)</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder="De ce ești potrivit pentru acest proiect, experiența relevantă, întrebări..."
+                  value={applyMessage}
+                  onChange={e => setApplyMessage(e.target.value)}
+                  maxLength={1000}
+                  style={{ resize: 'vertical' }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4, textAlign: 'right' }}>
+                  {applyMessage.length}/1000
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="row" style={{ gap: '.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-2)', paddingTop: '1rem' }}>
+                <button className="btn btn-ghost" onClick={() => setShowApplyModal(false)} disabled={applyLoading}>
+                  Anulează
+                </button>
+                <button className="btn btn-primary" onClick={handleApplyToProject} disabled={applyLoading}>
+                  {applyLoading ? 'Se trimite...' : <><Icon name="check" size={13} /> Confirmă aplicarea</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showProposeModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
           onClick={e => e.target === e.currentTarget && setShowProposeModal(false)}>
@@ -2408,6 +2654,394 @@ export default function ProjectDetail() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// WorkflowStepper — horizontal mini-stepper above the tabs
+// shows: Contract → MS1 → MS2 → ... → Final contract
+// ═══════════════════════════════════════════════════════════
+function WorkflowStepper({ project, workflowStatus, onJump }) {
+  const ms = project.milestones || [];
+  if (project.is_pm_task || ms.length === 0) return null;
+
+  const projectContractDone = workflowStatus?.projectContract?.status === 'accepted';
+  const allMilestonesDone = ms.every(m => ['approved', 'released'].includes(m.status));
+
+  const steps = [
+    {
+      id: 'contract',
+      label: 'Contract proiect',
+      shortLabel: 'C',
+      status: projectContractDone ? 'done' : (workflowStatus?.projectContract ? 'active' : 'pending'),
+      amount: null,
+    },
+    ...ms.map((m, i) => {
+      let status = 'pending';
+      if (['approved', 'released'].includes(m.status)) status = 'done';
+      else if (['in_progress', 'delivered', 'revision_requested', 'funded'].includes(m.status)) status = 'active';
+      return {
+        id: m.id,
+        label: `MS${i + 1} · ${m.title}`,
+        shortLabel: `MS${i + 1}`,
+        status,
+        amount: parseFloat(m.amount_ron) || 0,
+      };
+    }),
+    {
+      id: 'final',
+      label: 'Contract final',
+      shortLabel: 'F',
+      status: allMilestonesDone && project.status === 'completed' ? 'done' : (allMilestonesDone ? 'active' : 'pending'),
+      amount: null,
+    },
+  ];
+
+  const activeIdx = Math.max(0, steps.findIndex(s => s.status === 'active'));
+  const doneCount = steps.filter(s => s.status === 'done').length;
+
+  return (
+    <div style={{
+      background: 'linear-gradient(180deg, var(--bg-card), var(--bg-1))',
+      border: '1px solid var(--border-1)',
+      borderRadius: 'var(--r-lg)',
+      padding: '.875rem 1rem',
+      marginBottom: '1.25rem',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '.625rem' }}>
+        <div className="h-eyebrow" style={{ margin: 0 }}>
+          <span className="pulse" style={{ width: 6, height: 6 }} /> Flux proiect · pas {Math.min(activeIdx + 1, steps.length)} din {steps.length}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>
+          {doneCount}/{steps.length} pași finalizați
+        </div>
+      </div>
+
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '.5rem',
+        overflowX: 'auto', padding: '0 0 4px',
+      }}>
+        {steps.map((s, i) => {
+          const isActive = s.status === 'active';
+          const isDone = s.status === 'done';
+          const isPending = s.status === 'pending';
+          return (
+            <Fragment key={s.id}>
+              <button
+                onClick={() => onJump?.(s.id)}
+                style={{
+                  flex: '0 0 auto',
+                  display: 'flex', alignItems: 'center', gap: '.5rem',
+                  padding: '.5rem .75rem',
+                  background: isActive ? 'var(--accent-bg)' : isDone ? 'var(--success-bg)' : 'transparent',
+                  border: '1px solid ' + (isActive ? 'var(--accent-border)' : isDone ? 'var(--success-border)' : 'var(--border-1)'),
+                  borderRadius: 'var(--r-md)',
+                  color: isActive ? 'var(--accent-hi)' : isDone ? 'var(--success)' : 'var(--fg-3)',
+                  fontSize: 12.5, fontWeight: 600,
+                  opacity: isPending && !isActive ? 0.6 : 1,
+                  cursor: 'pointer',
+                  transition: 'all 160ms',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{
+                  width: 20, height: 20, borderRadius: '50%',
+                  background: isDone ? 'var(--success)' : isActive ? 'var(--accent)' : 'var(--bg-2)',
+                  color: (isDone || isActive) ? '#fff' : 'var(--fg-3)',
+                  display: 'grid', placeItems: 'center',
+                  fontSize: 10, fontWeight: 700,
+                  fontFamily: 'var(--f-mono)',
+                  boxShadow: isActive ? '0 0 0 4px var(--accent-bg)' : 'none',
+                }}>
+                  {isDone ? <Icon name="check" size={11} /> : s.shortLabel}
+                </span>
+                <span>{s.label.length > 28 ? s.label.slice(0, 26) + '…' : s.label}</span>
+                {s.amount > 0 && (
+                  <span style={{
+                    fontFamily: 'var(--f-mono)', fontSize: 10.5,
+                    color: isDone ? 'var(--success)' : isActive ? 'var(--accent-hi)' : 'var(--fg-4)',
+                  }}>
+                    {Math.round(s.amount / 1000)}k
+                  </span>
+                )}
+              </button>
+              {i < steps.length - 1 && (
+                <span style={{
+                  flex: '0 0 auto', width: 16, height: 1,
+                  background: isDone ? 'var(--success)' : 'var(--border-2)',
+                  opacity: isDone ? 0.7 : 1,
+                }} />
+              )}
+            </Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// VaultHeroSegmented — segmented escrow bar per milestone
+// ═══════════════════════════════════════════════════════════
+function VaultHeroSegmented({ project, totalReleased, escrowAccount, isParty2, projectId, navigate, budget }) {
+  const ms = project.milestones || [];
+  const released = ms
+    .filter(m => ['approved', 'released'].includes(m.status))
+    .reduce((s, m) => s + (parseFloat(m.amount_ron) || 0), 0);
+  const held = ms
+    .filter(m => !['approved', 'released'].includes(m.status) && ['in_progress', 'delivered', 'funded', 'revision_requested'].includes(m.status))
+    .reduce((s, m) => s + (parseFloat(m.amount_ron) || 0), 0);
+  const total = budget || 0;
+  const pending = Math.max(0, total - released - held);
+  const releasedPct = total > 0 ? (released / total) * 100 : 0;
+  const heldFromAccount = parseFloat(escrowAccount?.held_balance_ron) || 0;
+
+  const colors = {
+    released: { bg: 'linear-gradient(90deg, #10b981, #34d399)', solid: 'var(--success)', label: 'Eliberat' },
+    held:     { bg: 'linear-gradient(90deg, var(--accent), var(--accent-hi))', solid: 'var(--accent)', label: 'În escrow' },
+    pending:  { bg: 'repeating-linear-gradient(45deg, rgba(255,255,255,.04), rgba(255,255,255,.04) 6px, rgba(255,255,255,.10) 6px, rgba(255,255,255,.10) 12px)', solid: 'var(--border-3)', label: 'Restant' },
+  };
+
+  return (
+    <div className="vault" style={{ padding: '1.5rem 1.75rem' }}>
+      <div className="vault-content">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+          <div>
+            <div className="h-eyebrow" style={{ marginBottom: '.5rem' }}>
+              <Icon name="shield" size={11} /> Escrow · buget total
+            </div>
+            <div style={{ fontFamily: 'var(--f-display)', fontSize: 'clamp(40px, 6vw, 64px)', lineHeight: 0.95, letterSpacing: '-0.04em', color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums' }}>
+              <em style={{ fontStyle: 'italic', color: 'var(--accent-hi)', fontWeight: 400 }}>{Math.round(total).toLocaleString('ro-RO')}</em>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: 'var(--fg-3)', marginLeft: 8, letterSpacing: '.05em' }}>RON</span>
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--fg-2)', marginTop: '.5rem', maxWidth: 420 }}>
+              Fondurile sunt blocate în escrow și eliberate per milestone aprobat.
+            </div>
+          </div>
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6,
+            padding: '.625rem .875rem', background: 'rgba(0,0,0,.2)',
+            border: '1px solid var(--border-1)', borderRadius: 'var(--r-md)',
+          }}>
+            <div style={{ fontSize: 10.5, fontFamily: 'var(--f-mono)', color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+              Progres
+            </div>
+            <div style={{ fontFamily: 'var(--f-display)', fontSize: 26, lineHeight: 1, color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums' }}>
+              {Math.round(releasedPct)}<span style={{ fontSize: 14, color: 'var(--fg-3)', marginLeft: 2 }}>%</span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>
+              {fmtRON(released)} / {fmtRON(total)}
+            </div>
+          </div>
+        </div>
+
+        {/* Segmented bar */}
+        {ms.length > 0 && total > 0 && (
+          <div style={{
+            display: 'flex', height: 20, borderRadius: 10, overflow: 'hidden',
+            background: 'var(--bg-0)', border: '1px solid var(--border-2)',
+            boxShadow: '0 1px 0 rgba(255,255,255,.04) inset, 0 6px 18px rgba(0,0,0,.25)',
+          }}>
+            {ms.map((m, i) => {
+              const pct = ((parseFloat(m.amount_ron) || 0) / total) * 100;
+              const key = ['approved', 'released'].includes(m.status)
+                ? 'released'
+                : (['in_progress', 'delivered', 'funded', 'revision_requested'].includes(m.status) ? 'held' : 'pending');
+              const c = colors[key];
+              return (
+                <div
+                  key={m.id}
+                  title={`MS${i + 1} · ${m.title} · ${fmtRON(m.amount_ron)} · ${c.label}`}
+                  style={{
+                    width: `${pct}%`,
+                    background: c.bg,
+                    borderRight: i < ms.length - 1 ? '1px solid rgba(0,0,0,.3)' : 'none',
+                    transition: 'filter 160ms',
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* Legend */}
+        <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+          {[
+            { k: 'released', value: released, count: ms.filter(m => ['approved', 'released'].includes(m.status)).length },
+            { k: 'held',     value: held,     count: ms.filter(m => !['approved', 'released'].includes(m.status) && ['in_progress', 'delivered', 'funded', 'revision_requested'].includes(m.status)).length },
+            { k: 'pending',  value: pending,  count: ms.filter(m => m.status === 'pending').length },
+          ].map(({ k, value, count }) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'flex-start', gap: '.625rem' }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, marginTop: 4, background: colors[k].solid, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 10.5, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)', letterSpacing: '.04em' }}>
+                  {colors[k].label} · {count}
+                </div>
+                <div style={{ fontFamily: 'var(--f-display)', fontSize: 17, color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+                  {Math.round(value).toLocaleString('ro-RO')} <span style={{ fontSize: 10, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>RON</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Per-milestone funding happens via MilestoneCardV2 below (button "Depune fonduri escrow"
+            shows for each milestone in 'pending' state). No full-budget deposit — escrow is funded
+            milestone-by-milestone as the project progresses. */}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// MilestoneCardV2 — visual milestone card with next-action pill
+// Used in Details tab; click handlers route to Contracts tab
+// ═══════════════════════════════════════════════════════════
+function MilestoneCardV2({ ms, idx, isParty1, isParty2, canPropose, contractSigned, prevMsDone, onEditPropose, onJumpContracts }) {
+  const isDone = ['approved', 'released'].includes(ms.status);
+  const isActive = ['in_progress', 'delivered', 'revision_requested', 'funded'].includes(ms.status);
+  const isDelivered = ms.status === 'delivered';
+
+  // Next action label per role.
+  // Funding is gated: project contract must be signed AND prior milestone done — only the next-in-line
+  // milestone is fundable, never multiple at once.
+  let nextAction = null;
+  if (isParty1) {
+    if (['funded', 'in_progress'].includes(ms.status)) nextAction = { label: 'Livrează milestone', tone: 'primary', icon: 'upload' };
+    else if (ms.status === 'revision_requested') nextAction = { label: 'Trimite revizia', tone: 'warning', icon: 'rotate' };
+  } else if (isParty2) {
+    if (isDelivered) nextAction = { label: 'Aprobă livrabilul', tone: 'success', icon: 'check' };
+    else if (ms.status === 'pending' && contractSigned && prevMsDone) {
+      nextAction = { label: 'Depune fonduri escrow', tone: 'primary', icon: 'lock' };
+    }
+  }
+
+  // Informational hint when funding would otherwise be expected but is gated
+  let gateHint = null;
+  if (isParty2 && ms.status === 'pending' && !nextAction) {
+    if (!contractSigned) gateHint = 'Semnează contractul de proiect înainte de a finanța această etapă.';
+    else if (!prevMsDone) gateHint = 'Finalizează etapa anterioară înainte de a finanța această etapă.';
+  }
+
+  const progress =
+    isDone ? 100 :
+    ms.status === 'delivered' ? 80 :
+    ms.status === 'revision_requested' ? 60 :
+    ms.status === 'in_progress' ? 45 :
+    ms.status === 'funded' ? 20 : 0;
+
+  const toneBg = {
+    primary: { bg: 'var(--accent-bg)', border: 'var(--accent-border)', dot: 'var(--accent-hi)' },
+    success: { bg: 'var(--success-bg)', border: 'var(--success-border)', dot: 'var(--success)' },
+    warning: { bg: 'var(--warning-bg)', border: 'var(--warning-border)', dot: 'var(--warning)' },
+  };
+  const t = nextAction ? toneBg[nextAction.tone] : null;
+
+  return (
+    <div className="card" style={{
+      borderColor: isActive ? 'var(--accent-border)' : isDone ? 'var(--success-border)' : 'var(--border-1)',
+      background: isActive ? 'linear-gradient(180deg, var(--bg-card), rgba(59,130,246,.04))' : 'var(--bg-card)',
+      transition: 'border-color 200ms, background 200ms',
+      marginBottom: 0,
+    }}>
+      {isActive && <div style={{ height: 2, background: 'linear-gradient(90deg, var(--accent), var(--accent-hi))', boxShadow: '0 0 12px var(--accent-glow)' }} />}
+
+      <div className="card-body" style={{ padding: '1rem 1.125rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: 2 }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--fg-3)', letterSpacing: '.06em' }}>
+                MS{String(idx + 1).padStart(2, '0')}
+              </span>
+              <StatusBadge status={ms.status} />
+            </div>
+            <div style={{ fontFamily: 'var(--f-display)', fontSize: 19, lineHeight: 1.2, letterSpacing: '-0.015em', color: 'var(--fg-0)' }}>
+              {ms.title}
+            </div>
+            {ms.deliverable_description && (
+              <div style={{ fontSize: 12.5, color: 'var(--fg-2)', marginTop: 4, lineHeight: 1.5 }}>
+                {ms.deliverable_description}
+              </div>
+            )}
+          </div>
+
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontFamily: 'var(--f-display)', fontSize: 26, lineHeight: 1, color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
+              {Math.round(parseFloat(ms.amount_ron) || 0).toLocaleString('ro-RO')}
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)', marginLeft: 4 }}>RON</span>
+            </div>
+            {ms.percentage_of_budget && (
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>
+                {ms.percentage_of_budget}% din buget
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ marginTop: '0.875rem' }}>
+          <div style={{
+            height: 6, borderRadius: 3, overflow: 'hidden',
+            background: 'var(--border-1)', position: 'relative',
+          }}>
+            <div style={{
+              height: '100%', width: `${progress}%`,
+              background: isDone ? 'linear-gradient(90deg, var(--success), #34d399)'
+                : ms.status === 'revision_requested' ? 'linear-gradient(90deg, var(--warning), #fbbf24)'
+                : 'linear-gradient(90deg, var(--accent), var(--accent-hi))',
+              boxShadow: isActive ? '0 0 12px var(--accent-glow)' : 'none',
+              transition: 'width 600ms cubic-bezier(.16,1,.3,1)',
+            }} />
+          </div>
+        </div>
+
+        {/* Next-action highlight */}
+        {nextAction && (
+          <div style={{
+            marginTop: '0.875rem', padding: '.625rem .875rem',
+            background: t.bg, border: `1px solid ${t.border}`,
+            borderRadius: 'var(--r-md)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+              <span className="pulse" style={{ background: t.dot, width: 6, height: 6 }} />
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--fg-0)' }}>
+                Pasul tău: {nextAction.label}
+              </span>
+            </div>
+            <button
+              className={`btn btn-sm ${nextAction.tone === 'success' ? 'btn-success' : nextAction.tone === 'warning' ? 'btn-warning' : 'btn-primary'}`}
+              onClick={onJumpContracts}
+            >
+              <Icon name={nextAction.icon} size={12} /> {nextAction.label}
+            </button>
+          </div>
+        )}
+
+        {/* Gate hint — explain why no funding CTA appears yet */}
+        {!nextAction && gateHint && (
+          <div style={{
+            marginTop: '0.875rem', padding: '.625rem .875rem',
+            background: 'var(--bg-1)', border: '1px dashed var(--border-2)',
+            borderRadius: 'var(--r-md)',
+            display: 'flex', alignItems: 'center', gap: '.5rem',
+            fontSize: 12, color: 'var(--fg-2)',
+          }}>
+            <Icon name="info" size={12} style={{ color: 'var(--fg-3)', flexShrink: 0 }} />
+            <span>{gateHint}</span>
+          </div>
+        )}
+
+        {/* Footer row: edit / details */}
+        {(canPropose && ms.status === 'pending') && (
+          <div style={{ marginTop: '.625rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={onEditPropose}>
+              <Icon name="edit" size={10} /> Propune modificare
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PartyCard({ name, id, extra, color = 'cyan' }) {
   return (
     <div className="row" style={{ gap: '.75rem', alignItems: 'flex-start' }}>
@@ -2436,29 +3070,3 @@ function TrustMeter({ level = 1 }) {
   );
 }
 
-function ContractStep({ stepNum, title, description, status, children }) {
-  const statusConfig = {
-    done:         { dot: 'var(--success)', dotText: '#fff', icon: 'check', border: 'var(--success-border)', bg: 'var(--bg-0)' },
-    in_progress:  { dot: 'var(--accent)',  dotText: '#fff', icon: null,    border: 'var(--accent)',          bg: 'var(--bg-0)' },
-    pending_action:{ dot: 'var(--warning)',dotText: '#fff', icon: null,    border: 'var(--warning-border)',  bg: 'var(--warning-bg)' },
-    locked:       { dot: 'var(--border-2)',dotText: 'var(--fg-4)', icon: null, border: 'var(--border-1)', bg: 'var(--bg-1)' },
-  };
-  const cfg = statusConfig[status] || statusConfig.locked;
-
-  return (
-    <div className="card" style={{ borderColor: cfg.border, opacity: status === 'locked' ? 0.6 : 1 }}>
-      <div className="card-body">
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-          <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', background: cfg.dot, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 700, color: cfg.dotText }}>
-            {status === 'done' ? <Icon name="check" size={15} style={{ color: '#fff' }} /> : stepNum}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--fg-0)', marginBottom: 2 }}>{title}</div>
-            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: children ? '1rem' : 0 }}>{description}</div>
-            {children}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}

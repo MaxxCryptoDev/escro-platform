@@ -3,6 +3,7 @@ import { protect, adminOnly } from '../middleware/auth.js';
 import trustProfileService from '../services/trustProfileService.js';
 import trustProfileInit from '../services/trustProfileInit.js';
 import pool from '../config/database.js';
+import { logAdminAction } from '../services/adminAuditService.js';
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ router.get('/all', async (req, res) => {
 
     const publicProfiles = profiles.map(p => ({
       user_id: p.user_id,
-      name: p.name,
+      name: p.user_name,
       profile_type: p.profile_type,
       trust_level: p.trust_level,
       trust_score: p.trust_score,
@@ -117,6 +118,10 @@ router.post('/recalculate/:userId', protect, adminOnly, async (req, res) => {
       reason || 'admin_manual_recalculation'
     );
 
+    await logAdminAction(req, 'trust_recalculate', 'user', userId, {
+      reason: reason || 'admin_manual_recalculation'
+    });
+
     res.json({
       message: 'Trust profile recalculated successfully',
       trust_profile: result
@@ -136,10 +141,25 @@ router.put('/admin/update-level/:userId', protect, adminOnly, async (req, res) =
       return res.status(400).json({ error: 'Trust level must be between 1 and 5' });
     }
 
-    await pool.query(
-      'UPDATE trust_profiles SET trust_level = $1, trust_score = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
-      [trust_level, trust_level * 20, userId]
+    // Capture previous level for audit
+    const prev = await pool.query(
+      'SELECT trust_level, trust_score FROM trust_profiles WHERE user_id = $1',
+      [userId]
     );
+    const previousLevel = prev.rows[0]?.trust_level ?? null;
+
+    // Keep level and score consistent: every level = 20 points
+    const newScore = trust_level * 20;
+    await pool.query(
+      `UPDATE trust_profiles SET trust_level = $1, trust_score = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $3`,
+      [trust_level, newScore, userId]
+    );
+
+    await logAdminAction(req, 'trust_level_update', 'user', userId, {
+      previous_level: previousLevel,
+      new_level: trust_level
+    });
 
     res.json({ message: 'Trust level updated successfully', trust_level });
   } catch (err) {
@@ -181,6 +201,10 @@ router.post('/admin-verify/:userId', protect, adminOnly, async (req, res) => {
     const { userId } = req.params;
 
     await trustProfileService.setKnownByAdmin(userId, req.user.id);
+
+    await logAdminAction(req, 'trust_admin_verify', 'user', userId, {
+      note: 'Marked as known directly by admin'
+    });
 
     res.json({ message: 'User marked as known by admin' });
   } catch (err) {
@@ -240,6 +264,11 @@ router.get('/admin/all', protect, adminOnly, async (req, res) => {
 router.post('/admin/initialize', protect, adminOnly, async (req, res) => {
   try {
     const result = await trustProfileInit.initializeAllTrustProfiles();
+    await logAdminAction(req, 'trust_initialize_all', 'trust_profile', null, {
+      processed: result?.processed ?? null,
+      created: result?.created ?? null,
+      updated: result?.updated ?? null
+    });
     res.json({
       message: 'Trust profiles initialized successfully',
       ...result
@@ -274,6 +303,11 @@ router.post('/admin/override/:userId', protect, adminOnly, async (req, res) => {
       return res.status(400).json({ error: result.reason });
     }
 
+    await logAdminAction(req, 'trust_manual_override_set', 'user', userId, {
+      new_level: result.new_level,
+      reason
+    });
+
     res.json({
       message: 'Manual trust override applied successfully',
       new_level: result.new_level,
@@ -294,6 +328,8 @@ router.delete('/admin/override/:userId', protect, adminOnly, async (req, res) =>
     if (!result.success) {
       return res.status(400).json({ error: result.reason });
     }
+
+    await logAdminAction(req, 'trust_manual_override_remove', 'user', userId, {});
 
     res.json({ message: 'Manual trust override removed successfully' });
   } catch (err) {
@@ -324,6 +360,11 @@ router.post('/admin/award-type2/:userId', protect, adminOnly, async (req, res) =
     if (!result.success) {
       return res.status(400).json({ error: result.reason });
     }
+
+    await logAdminAction(req, 'trust_award_type2', 'user', userId, {
+      validation_type: result.validation_type,
+      points_awarded: result.points_awarded
+    });
 
     res.json({
       message: 'Type2 validation points awarded successfully',

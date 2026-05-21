@@ -27,9 +27,15 @@ const createAdmin = async () => {
       process.exit(0);
     }
     
+    // Auto-accept current T&C version for admin (avoids re-prompt on first login)
+    const termsRes = await pool.query(`SELECT version FROM terms_versions WHERE is_current = TRUE LIMIT 1`).catch(() => ({ rows: [] }));
+    const currentTermsVersion = termsRes.rows[0]?.version || null;
+
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash, name, role, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING id, email, name, role',
-      [email, hashedPassword, name, 'admin']
+      `INSERT INTO users (email, password_hash, name, role, accepted_terms_version, accepted_terms_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+       RETURNING id, email, name, role`,
+      [email, hashedPassword, name, 'admin', currentTermsVersion]
     );
     
     console.log('✅ Admin created successfully:');

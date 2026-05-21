@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { sendEmailIfEnabled } from '../services/emailService.js';
 
 // Create a task participation request
 export const createTaskRequest = async (req, res) => {
@@ -152,40 +153,125 @@ export const updateTaskRequestStatus = async (req, res) => {
 
     const taskRequest = requestResult.rows[0];
 
-    // Start transaction
-    await pool.query('BEGIN');
-
+    const client = await pool.connect();
     try {
-      // Update task request status
-      const updateRequestQuery = `
-        UPDATE task_requests
-        SET status = $1, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2
-        RETURNING id, user_id, project_id, message, status, created_at, updated_at
-      `;
-      const updateResult = await pool.query(updateRequestQuery, [status, requestId]);
+      await client.query('BEGIN');
 
-      // If approved, also update the project with expert_id and set status to 'assigned'
+      const updateResult = await client.query(
+        `UPDATE task_requests
+         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2
+         RETURNING id, user_id, project_id, message, status, created_at, updated_at`,
+        [status, requestId]
+      );
+
+      let approvedContext = null; // captured for post-commit notifications
+
       if (status === 'approved') {
-        const updateProjectQuery = `
-          UPDATE projects
-          SET expert_id = $1, status = 'assigned', updated_at = CURRENT_TIMESTAMP
-          WHERE id = $2
-        `;
-        await pool.query(updateProjectQuery, [taskRequest.user_id, taskRequest.project_id]);
+        // Block if project already has prestator
+        const existing = await client.query(
+          `SELECT expert_id, company_id FROM projects WHERE id = $1 FOR UPDATE`,
+          [taskRequest.project_id]
+        );
+        if (existing.rows[0]?.expert_id || existing.rows[0]?.company_id) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            success: false,
+            error: 'Project already has a prestator assigned. Unassign first.'
+          });
+        }
+
+        // Set expert_id or company_id based on the applicant's role
+        const userRoleRes = await client.query(`SELECT role FROM users WHERE id = $1`, [taskRequest.user_id]);
+        const applicantRole = userRoleRes.rows[0]?.role;
+        if (applicantRole === 'expert') {
+          await client.query(
+            `UPDATE projects
+             SET expert_id = $1, status = 'assigned', updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [taskRequest.user_id, taskRequest.project_id]
+          );
+        } else if (applicantRole === 'company') {
+          await client.query(
+            `UPDATE projects
+             SET company_id = $1, status = 'assigned', updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [taskRequest.user_id, taskRequest.project_id]
+          );
+        } else {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, error: `Cannot assign user with role '${applicantRole}'` });
+        }
+
+        // Capture project title + client_id for notifications after commit
+        const projInfo = await client.query(
+          `SELECT title, client_id FROM projects WHERE id = $1`,
+          [taskRequest.project_id]
+        );
+        if (projInfo.rows.length > 0) {
+          approvedContext = {
+            applicantId: taskRequest.user_id,
+            applicantRole,
+            projectId: taskRequest.project_id,
+            projectTitle: projInfo.rows[0].title,
+            clientId: projInfo.rows[0].client_id,
+          };
+        }
       }
 
-      // Commit transaction
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
+
+      // Post-commit: notify the approved applicant + the client so both know they can start working.
+      if (approvedContext) {
+        const { applicantId, applicantRole, projectId, projectTitle, clientId } = approvedContext;
+        const notifType = applicantRole === 'expert' ? 'expert_assigned' : 'company_assigned';
+        const projectLink = `/project/${projectId}`;
+        const chatLink = `/project/${projectId}?tab=chat`;
+
+        // Notify the approved prestator
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, title, message, link, created_at)
+           VALUES ($1, $2, 'Aplicația a fost aprobată!', $3, $4, NOW())`,
+          [
+            applicantId,
+            notifType,
+            `Adminul a aprobat aplicația ta la "${projectTitle}". Verifică detaliile proiectului și poți începe să discuți cu beneficiarul în chat.`,
+            chatLink
+          ]
+        ).catch(e => console.warn('[bg notify applicant]', e.message));
+
+        // Email to applicant
+        sendEmailIfEnabled(pool, applicantId, 'taskAcceptanceRequired', {
+          projectTitle,
+          projectUrl: `${process.env.FRONTEND_URL}${projectLink}`,
+          invitationMessage: `Aplicația ta la proiectul <strong>"${projectTitle}"</strong> a fost <strong>aprobată</strong>! Verifică detaliile și începe colaborarea.`,
+        }).catch(e => console.warn('[bg email applicant]', e.message));
+
+        // Notify the client (so they know which prestator is now on the project)
+        if (clientId) {
+          const applicantLabel = applicantRole === 'expert' ? 'un expert' : 'o companie';
+          await pool.query(
+            `INSERT INTO notifications (user_id, type, title, message, link, created_at)
+             VALUES ($1, $2, 'Prestator asignat la proiect', $3, $4, NOW())`,
+            [
+              clientId,
+              notifType,
+              `Adminul a aprobat ${applicantLabel} pentru proiectul tău "${projectTitle}". Poți începe să discuți cu el în chat.`,
+              chatLink
+            ]
+          ).catch(e => console.warn('[bg notify client]', e.message));
+        }
+      }
 
       res.json({
         success: true,
         data: updateResult.rows[0]
       });
-
     } catch (error) {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(e => console.warn('[rollback]', e.message));
       throw error;
+    } finally {
+      client.release();
     }
 
   } catch (error) {

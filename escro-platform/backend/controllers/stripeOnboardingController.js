@@ -23,7 +23,14 @@ export const initiateOnboarding = async (req, res, next) => {
     if (userRole === 'admin') {
       return res.status(403).json({ error: 'Adminul nu trece prin onboarding-ul Stripe.' });
     }
-    // All other roles (client, expert, company) go through Stripe KYC.
+    if (userRole === 'individual') {
+      // Individuals are beneficiari-only: they pay with card via Stripe Checkout (no Connect needed).
+      // Their KYC is satisfied by admin verification call.
+      return res.status(412).json({
+        error: 'Persoanele fizice nu necesită onboarding Stripe. Plățile se fac direct cu cardul la fiecare depunere în escrow.',
+      });
+    }
+    // Expert + company go through Stripe Connect onboarding (they receive payouts).
 
     const userRes = await pool.query(
       `SELECT id, email, name, role, stripe_account_id, company, cui, phone FROM users WHERE id = $1`,
@@ -64,33 +71,49 @@ export const initiateOnboarding = async (req, res, next) => {
       ? user.stripe_account_id
       : null;
 
-    // Create the Express account if we don't have a real one yet
+    // Create the Express account if we don't have a real one yet.
+    // Use a row lock to prevent racing duplicate requests from creating two Stripe accounts.
     if (!accountId) {
-      // Only the 'individual' role is a real persoană fizică for Stripe KYC.
-      // Both 'expert' (PFA/SRL) and 'company' (SRL) have CUI → business KYC.
-      const businessType = userRole === 'individual' ? 'individual' : 'company';
-
-      const accountParams = {
-        type: 'express',
-        country: 'RO',
-        email: user.email,
-        capabilities: { transfers: { requested: true } },
-        business_type: businessType,
-        metadata: { escro_user_id: userId, role: userRole },
-      };
-
-      // Pre-fill what we already collected at registration to reduce friction during onboarding
-      if (businessType === 'company') {
-        if (user.company) accountParams.business_profile = { name: user.company };
-        if (user.cui) accountParams.company = { tax_id: user.cui };
+      const dbClient = await pool.connect();
+      try {
+        await dbClient.query('BEGIN');
+        const lockedRes = await dbClient.query(
+          `SELECT stripe_account_id FROM users WHERE id = $1 FOR UPDATE`,
+          [userId]
+        );
+        const locked = lockedRes.rows[0]?.stripe_account_id;
+        if (locked && locked.startsWith('acct_')) {
+          // Another concurrent request already created the account — reuse it.
+          accountId = locked;
+          await dbClient.query('COMMIT');
+        } else {
+          const businessType = userRole === 'individual' ? 'individual' : 'company';
+          const accountParams = {
+            type: 'express',
+            country: 'RO',
+            email: user.email,
+            capabilities: { transfers: { requested: true } },
+            business_type: businessType,
+            metadata: { escro_user_id: userId, role: userRole },
+          };
+          if (businessType === 'company') {
+            if (user.company) accountParams.business_profile = { name: user.company };
+            if (user.cui) accountParams.company = { tax_id: user.cui };
+          }
+          const account = await stripe.accounts.create(accountParams);
+          accountId = account.id;
+          await dbClient.query(
+            `UPDATE users SET stripe_account_id = $1 WHERE id = $2`,
+            [accountId, userId]
+          );
+          await dbClient.query('COMMIT');
+        }
+      } catch (err) {
+        await dbClient.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        dbClient.release();
       }
-
-      const account = await stripe.accounts.create(accountParams);
-      accountId = account.id;
-      await pool.query(
-        `UPDATE users SET stripe_account_id = $1 WHERE id = $2`,
-        [accountId, userId]
-      );
     }
 
     const link = await stripe.accountLinks.create({
@@ -260,13 +283,19 @@ export const handleWebhook = async (req, res) => {
     if (!secret) console.warn('[stripe:webhook] STRIPE_WEBHOOK_SECRET missing — running unverified (dev only)');
   }
 
-  // Persist for audit
-  await pool.query(
+  // Persist for audit + idempotency check.
+  // If event was already processed (Stripe redelivery), skip the side effects.
+  const persistRes = await pool.query(
     `INSERT INTO stripe_events (stripe_event_id, event_type, resource_id, data, processed, created_at)
      VALUES ($1, $2, $3, $4, FALSE, NOW())
-     ON CONFLICT (stripe_event_id) DO NOTHING`,
+     ON CONFLICT (stripe_event_id) DO UPDATE SET stripe_event_id = stripe_events.stripe_event_id
+     RETURNING processed`,
     [event.id, event.type, event.data?.object?.id || null, JSON.stringify(event)]
-  ).catch(e => console.warn('[stripe:webhook] persist failed:', e.message));
+  ).catch(e => { console.warn('[stripe:webhook] persist failed:', e.message); return null; });
+  if (persistRes?.rows?.[0]?.processed === true) {
+    console.log(`[stripe:webhook] event ${event.id} already processed, skipping handler`);
+    return res.status(200).json({ received: true, deduplicated: true });
+  }
 
   try {
     switch (event.type) {
@@ -316,22 +345,38 @@ export const handleWebhook = async (req, res) => {
       case 'payment_intent.succeeded': {
         const pi = event.data.object;
         const escrowId = pi.metadata?.escrow_id;
-        if (escrowId) {
-          // Mark escrow as held with full amount, mirror the confirmPayment flow
+        const milestoneId = pi.metadata?.milestone_id;
+        const totalChargedRon = ((pi.amount_received || pi.amount) || 0) / 100;
+        // Split Stripe charge into milestone amount (held for expert) + client commission
+        // (immediate platform earning). Metadata is authoritative; fall back to /1.05 split.
+        let milestoneAmountRon = parseFloat(pi.metadata?.milestone_amount) || 0;
+        let clientCommissionRon = parseFloat(pi.metadata?.client_commission) || 0;
+        if (!milestoneAmountRon && totalChargedRon > 0) {
+          // Fallback: derive milestone amount from total (milestone × 1.05 = total).
+          milestoneAmountRon = Math.round((totalChargedRon / 1.05) * 100) / 100;
+          clientCommissionRon = Math.round((totalChargedRon - milestoneAmountRon) * 100) / 100;
+        }
+        if (escrowId && milestoneAmountRon > 0) {
+          // Add ONLY the milestone amount to held (this is what's earmarked for the expert);
+          // add client commission to platform earnings. Idempotency: stripe_events.processed.
           await pool.query(
             `UPDATE escrow_accounts
              SET status = 'held',
-                 held_balance_ron = COALESCE(NULLIF(held_balance_ron, 0), total_amount_ron),
-                 stripe_payment_intent_id = $2
-             WHERE id = $1 AND status != 'held'`,
-            [escrowId, pi.id]
-          ).catch(async () => {
-            // stripe_payment_intent_id column may not exist yet — fallback without it
-            await pool.query(
-              `UPDATE escrow_accounts SET status = 'held', held_balance_ron = COALESCE(NULLIF(held_balance_ron, 0), total_amount_ron) WHERE id = $1 AND status != 'held'`,
-              [escrowId]
-            );
-          });
+                 held_balance_ron = COALESCE(held_balance_ron, 0) + $2,
+                 total_amount_ron = COALESCE(total_amount_ron, 0) + $2,
+                 claudiu_earned_total_ron = COALESCE(claudiu_earned_total_ron, 0) + $3,
+                 stripe_payment_intent_id = $4
+             WHERE id = $1`,
+            [escrowId, milestoneAmountRon, clientCommissionRon, pi.id]
+          );
+        }
+        // Move the funded milestone to 'in_progress' so prestator can start delivering.
+        if (milestoneId) {
+          await pool.query(
+            `UPDATE milestones SET status = 'in_progress', updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1 AND status = 'pending'`,
+            [milestoneId]
+          ).catch(() => {});
         }
         break;
       }

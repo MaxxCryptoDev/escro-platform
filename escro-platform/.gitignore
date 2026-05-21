@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+frontend/dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+server.log
+npm-debug.log*
+backend/uploads/
+!backend/uploads/.gitkeep
+
+# Database backups
+backups/
+*.sql.gz
+
+# Docker / TLS state — must NOT be committed
+certbot/conf/
+certbot/www/
+edge/active.conf
+db/data/
+.env.production
+backend/.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Misc shell-redirect leftovers (defensive)
+backend/ole.error*
+backend/ult:*
+backend/ql
+backend/e()
+backend/server.log

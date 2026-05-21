@@ -17,26 +17,50 @@ apiClient.interceptors.request.use((config) => {
 export const authAPI = {
   register: (data) => apiClient.post('/auth/register', data),
   login: (email, password) => apiClient.post('/auth/login', { email, password }),
-  getCurrentUser: () => apiClient.get('/auth/me')
+  getCurrentUser: () => apiClient.get('/auth/me'),
+  forgotPassword: (email) => apiClient.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password) => apiClient.post('/auth/reset-password', { token, password }),
+  changePassword: (currentPassword, newPassword) => apiClient.put('/auth/change-password', { currentPassword, newPassword }),
+};
+
+export const termsAPI = {
+  getCurrent: () => apiClient.get('/terms/current'),
+  check: () => apiClient.get('/terms/check'),
+  accept: () => apiClient.post('/terms/accept'),
+  // Admin
+  listVersions: () => apiClient.get('/admin/terms'),
+  getVersion: (id) => apiClient.get(`/admin/terms/${id}`),
+  publishVersion: (data) => apiClient.post('/admin/terms', data),
 };
 
 export const projectAPI = {
   createProject: (data) => apiClient.post('/projects', data),
   getProjects: () => apiClient.get('/projects'),
-  getProjectDetail: (id) => apiClient.get(`/projects/${id}`)
+  getProjectDetail: (id) => apiClient.get(`/projects/${id}`),
+  cancelProject: (id, reason) => apiClient.post(`/projects/${id}/cancel`, { reason }),
+  // Admin edit flow
+  adminEditProject: (id, data) => apiClient.post(`/admin/projects/${id}/admin-edit`, data),
+  acceptAdminEdit: (id) => apiClient.post(`/projects/${id}/accept-admin-edit`),
+  rejectAdminEdit: (id, reason) => apiClient.post(`/projects/${id}/reject-admin-edit`, { reason }),
+  // Expert/Company accept/refuse assignment offered by admin
+  expertAcceptAssignment: (id) => apiClient.post(`/projects/${id}/expert-accept`),
+  expertRejectAssignment: (id, reason) => apiClient.post(`/projects/${id}/expert-reject`, { reason }),
 };
 
 export const milestoneAPI = {
   uploadDeliverable: (milestoneId, data) => apiClient.post(`/milestones/${milestoneId}/deliverable`, data),
   approveMilestone: (milestoneId, data) => apiClient.put(`/milestones/${milestoneId}/approve`, data),
-  disputeMilestone: (milestoneId, data) => apiClient.post(`/milestones/${milestoneId}/dispute`, data)
+  disputeMilestone: (milestoneId, data) => apiClient.post(`/milestones/${milestoneId}/dispute`, data),
+  getMyDisputes: () => apiClient.get('/disputes'),
 };
 
 export const escrowAPI = {
   createEscrowAccount: (data) => apiClient.post('/escrow', data),
   createPaymentIntent: (data) => apiClient.post('/escrow/payment-intent', data),
   confirmPayment: (data) => apiClient.post('/escrow/confirm-payment', data),
-  getEscrowStatus: (id) => apiClient.get(`/escrow/${id}`)
+  getEscrowStatus: (id) => apiClient.get(`/escrow/${id}`),
+  getEscrowByProject: (projectId) => apiClient.get(`/escrow/project/${projectId}`),
+  refundEscrow: (projectId) => apiClient.post(`/escrow/project/${projectId}/refund`),
 };
 
 export const messageAPI = {
@@ -53,9 +77,7 @@ export const contractAPI = {
   createAllMilestoneContracts: (data) => apiClient.post('/contracts/milestones/all', data),
   createFinalContract: (data) => apiClient.post('/contracts/final', data),
   acceptContract: (contractId, data = {}) => apiClient.put(`/contracts/${contractId}/accept`, data),
-  signMilestoneStart: (data) => apiClient.post('/contracts/milestone/sign-start', data),
-  deliverMilestone: (data) => apiClient.post('/contracts/milestone/deliver', data),
-  approveMilestone: (data) => apiClient.post('/contracts/milestone/approve', data),
+  regeneratePdf: (contractId) => apiClient.post(`/contracts/${contractId}/regenerate-pdf`),
   getProjectContracts: (projectId) => apiClient.get(`/projects/${projectId}/contracts`),
   getContract: (contractId) => apiClient.get(`/contracts/${contractId}`),
   getWorkflowStatus: (projectId) => apiClient.get(`/projects/${projectId}/workflow`),
@@ -94,12 +116,7 @@ export const adminAPI = {
   deleteProject: (projectId) => apiClient.delete(`/admin/projects/${projectId}`),
   assignExpertToProject: (projectId, data) => apiClient.put(`/admin/projects/${projectId}/assign-expert`, data),
   removeExpertFromProject: (projectId) => apiClient.put(`/admin/projects/${projectId}/remove-expert`),
-  
-  // Task Requests Management
-  getPendingTaskRequests: () => apiClient.get('/admin/task-requests/pending'),
-  approveTaskRequest: (requestId) => apiClient.post(`/admin/task-requests/${requestId}/approve`),
-  rejectTaskRequest: (requestId) => apiClient.post(`/admin/task-requests/${requestId}/reject`),
-  
+
   // Expert Posted Tasks Management
   getPendingExpertPostedTasks: () => apiClient.get('/admin/expert-posted-tasks/pending'),
   approveExpertPostedTask: (projectId) => apiClient.post(`/admin/expert-posted-tasks/${projectId}/approve`),
@@ -113,9 +130,35 @@ export const adminAPI = {
   assignCompanyToClientTask: (projectId, data) => apiClient.post(`/admin/client-posted-tasks/${projectId}/assign-company`, data),
   
   // Disputes & Dashboard
-  resolveMilestoneDispute: (disputeId, data) => apiClient.put(`/admin/disputes/${disputeId}/resolve`, data),
+  resolveAdminDispute: (disputeId, data) => apiClient.put(`/admin/disputes/${disputeId}/resolve`, data),
   getAdminDashboard: () => apiClient.get('/admin/dashboard'),
-  fixMilestones: () => apiClient.post('/admin/fix-milestones')
+
+  // Trust & Referral admin views
+  getAllTrustProfiles: () => apiClient.get('/trust-profiles/admin/all'),
+  getReferralStats: () => apiClient.get('/referrals/admin/stats'),
+  getAllReferralCodes: () => apiClient.get('/referrals/admin/all-codes'),
+  getVerificationCalls: () => apiClient.get('/verification-calls'),
+
+  // Financiar, Contracte, Dispute, Activity
+  getAdminFinanciar: () => apiClient.get('/admin/financiar'),
+  getAdminContracts: () => apiClient.get('/admin/contracts'),
+  getAdminDisputes: () => apiClient.get('/admin/disputes'),
+  getAdminActivity: (page = 1) => apiClient.get(`/admin/activity?page=${page}&limit=25`),
+  getAuditLog: (params = {}) => apiClient.get('/admin/audit-log', { params }),
+  // Bulk user actions
+  bulkUserAction: (data) => apiClient.post('/admin/users/bulk-action', data),
+  // Project change history (admin & parties)
+  getProjectHistory: (projectId) => apiClient.get(`/projects/${projectId}/history`),
+
+  // Referral admin
+  generateVipCode: (data) => apiClient.post('/referrals/admin/generate-vip-code', data),
+
+  // Payout management
+  getAdminPayouts: (status) => apiClient.get(`/admin/payouts${status ? `?status=${status}` : ''}`),
+  approveAdminPayout: (id, data) => apiClient.put(`/admin/payouts/${id}/approve`, data),
+  rejectAdminPayout: (id, data) => apiClient.put(`/admin/payouts/${id}/reject`, data),
+  markPayoutAsPaid: (id, data) => apiClient.put(`/admin/payouts/${id}/mark-paid`, data),
+  getAdminFinancialReport: () => apiClient.get('/admin/financiar/report'),
 };
 
 export const taskAPI = {
@@ -127,4 +170,17 @@ export const taskAPI = {
   createAssignment: (taskId, data) => apiClient.post(`/tasks/${taskId}/assignments`, data),
   assignUserToAssignment: (taskId, assignmentId, data) => apiClient.put(`/tasks/${taskId}/assignments/${assignmentId}/assign`, data),
   getAssignmentDetail: (taskId, assignmentId) => apiClient.get(`/tasks/${taskId}/assignments/${assignmentId}`)
+};
+
+export const walletAPI = {
+  getBalance: () => apiClient.get('/wallet/balance'),
+  getEarnings: (params) => apiClient.get('/wallet/earnings', { params }),
+  requestPayout: (amount_ron) => apiClient.post('/wallet/payout', { amount_ron }),
+  getPayouts: () => apiClient.get('/wallet/payouts'),
+  cancelPayout: (id) => apiClient.delete(`/wallet/payout/${id}`),
+};
+
+export const stripeAPI = {
+  initiateOnboarding: () => apiClient.post('/stripe/onboarding'),
+  getStatus: () => apiClient.get('/stripe/status'),
 };

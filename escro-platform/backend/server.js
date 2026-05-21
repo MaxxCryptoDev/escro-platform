@@ -187,7 +187,7 @@ async function runMigrations() {
     `);
     await pool.query(`
       ALTER TABLE milestones ADD CONSTRAINT milestones_status_check CHECK (
-        status IN ('pending','in_progress','delivered','revision_requested','approved','released','disputed')
+        status IN ('pending','in_progress','delivered','revision_requested','approved','released','disputed','cancelled')
       )
     `);
     // Update status constraint to include pending_client_approval
@@ -801,7 +801,11 @@ app.post('/api/admin/terms', protect, adminOnly, termsPublishLimiter, termsContr
 
 app.use('/api/users', usersRoutes);
 app.use('/api/verification-calls', verificationRoutes);
-// /api/task-requests removed — bid flow not part of platform
+// Marketplace apply flow — prestator applies to an open project, admin approves/rejects
+app.post('/api/projects/:project_id/apply', protect, projectController.applyToProject);
+app.get('/api/admin/task-requests/pending', protect, adminOnly, adminController.getPendingTaskRequests);
+app.put('/api/admin/task-requests/:request_id/approve', protect, adminOnly, adminController.approveTaskRequest);
+app.put('/api/admin/task-requests/:request_id/reject', protect, adminOnly, adminController.rejectTaskRequest);
 app.use('/api/experts/posted-tasks', expertPostedTaskRoutes);
 app.use('/api/companies/posted-tasks', clientPostedTaskRoutes);
 app.use('/api/trust-profiles', trustProfileRoutes);
@@ -921,6 +925,7 @@ app.post('/api/escrow/project/:project_id/topup', protect, moneyLimiter, escrowC
 app.post('/api/escrow/project/:project_id/refund', protect, moneyLimiter, escrowController.refundEscrow);
 
 // Messages
+app.get('/api/messages/conversations', protect, messageController.getConversations);
 app.post('/api/messages', protect, messageLimiter, messageController.sendMessage);
 app.post('/api/messages/upload', protect, chatUpload.single('image'), async (req, res) => {
   try {
@@ -1218,9 +1223,9 @@ async function autoArchiveStaleDisputes() {
           }
         }
 
-        // Restore milestone status so project isn't stuck disputed forever
+        // Mark milestone as cancelled (not 'pending') after auto-refund — prevents re-approve/double-pay.
         await dbClient.query(
-          `UPDATE milestones SET status = 'pending' WHERE id = $1 AND status = 'disputed'`,
+          `UPDATE milestones SET status = 'cancelled' WHERE id = $1 AND status = 'disputed'`,
           [d.milestone_id]
         );
         await dbClient.query(

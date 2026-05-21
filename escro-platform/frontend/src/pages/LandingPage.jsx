@@ -1,850 +1,605 @@
-import React from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
+import { Icon } from '../components/ui';
+import '../styles/LandingPage.css';
 
-export default function LandingPage() {
-  const features = [
-    {
-      icon: '🛡️',
-      title: 'Plăți 100% Sigure',
-      description: 'Sistem escrow modern. Banii sunt retrași din contul beneficiarului și blocați într-un cont escrow sigur până la finalizarea cu succes a proiectului.'
-    },
-    {
-      icon: '✅',
-      title: 'Experți Verificați',
-      description: 'Fiecare expert trece printr-un proces strict de verificare KYC. Toate competențele și experiența sunt certificate și validate.'
-    },
-    {
-      icon: '📋',
-      title: 'Management Profesional',
-      description: 'Divide proiectul în milestone-uri clare. Fiecare etapă are obiective definite, termene și condiții de aprobare transparente.'
-    },
-    {
-      icon: '⚖️',
-      title: 'Litigii Rezolvate',
-      description: 'Dispute solutionate profesionist. mediatorii ESCRO analizează dovezile și eliberează fondurile echitabil.'
-    },
-    {
-      icon: '💼',
-      title: 'Contracte Automatizate',
-      description: 'Contracte generate automat între părți. Semnătură electronică și documentație completă pentru fiecare proiect.'
-    },
-    {
-      icon: '📊',
-      title: 'Urmărire Timp Real',
-      description: 'Dashboard intuitiv pentru ambele părți. Vezi statusul proiectului, milestone-urile și fluxul de plăți în timp real.'
-    }
-  ];
+const fmtRon = (n) => {
+  if (!n) return null;
+  if (n >= 1_000_000) return { num: (n / 1_000_000).toFixed(1).replace('.0', ''), unit: 'mil. RON' };
+  if (n >= 1_000) return { num: (n / 1_000).toFixed(1).replace('.0', '') + 'K', unit: 'RON' };
+  return { num: String(Math.round(n)), unit: 'RON' };
+};
 
-  const steps = [
-    { 
-      number: '1', 
-      title: 'Publică un Proiect', 
-      desc: 'Descrie detaliat ce ai nevoie, stabilește bugetul și termenul de livrare.',
-      icon: '📝'
-    },
-    { 
-      number: '2', 
-      title: 'Alege Expertul', 
-      desc: 'Analizează profilurile experților verificați, portofoliile și ratingurile acestora.',
-      icon: '👨‍💼'
-    },
-    { 
-      number: '3', 
-      title: 'Colaborează Secure', 
-      desc: 'Lucrați împreună prin milestone-uri. Banii sunt blocați escrow până la aprobare.',
-      icon: '🤝'
-    },
-    { 
-      number: '4', 
-      title: 'Finalizează cu Succes', 
-      desc: 'Aprobă deliverables și eliberează fondurile. Lasă o recenzie expertului.',
-      icon: '🎉'
-    }
-  ];
+const HERO = {
+  pill: 'Plată sigură pentru servicii',
+  h1Pre: 'Banii tăi stau la noi.',
+  h1Em: 'Pleacă doar când e treaba gata.',
+  sub: 'Spune-ne de ce ai nevoie. Îți recomandăm direct expertul potrivit — nu cauți printre mii de profile. Banii stau în siguranță la noi până când treaba e gata.',
+  cta1: 'Începe gratuit',
+  cta2: 'Vezi cum funcționează',
+  trust: ['Fără card la înregistrare', 'Plătești doar la final', 'Răspuns uman în 48h'],
+};
 
-  const stats = [
-    { number: '2,500+', label: 'Proiecte Finalizate' },
-    { number: '850+', label: 'Experți Verificați' },
-    { number: '98%', label: 'Rata de Succes' },
-    { number: '15M+', label: 'RON în Escrow' }
-  ];
+const NAV_LINKS = { how: 'Cum funcționează', who: 'Pentru cine', pricing: 'Cât costă', faq: 'Întrebări' };
 
-  const testimonials = [
-    {
-      name: 'Maria Ionescu',
-      role: 'CEO, TechStart SRL',
-      text: 'ESCRO a transformat modul în care colaborăm cu freelancerii. Fiecare proiect este transparent și sigur.',
-      avatar: '👩‍💼'
-    },
-    {
-      name: 'Alexandru Popa',
-      role: 'Expert IT',
-      text: 'Înainte pierdeam timp cu clienți neserioși. Acum primesc plăți garantate pentru munca mea.',
-      avatar: '👨‍💻'
-    },
-    {
-      name: 'Elena Dumitrescu',
-      role: 'Fondator, DesignLab',
-      text: 'Sistemul de milestone-uri este perfect. Pot să-mi concentrez energia pe creativitate, nu pe recuperarea banilor.',
-      avatar: '👩‍🎨'
-    }
-  ];
+const STEPS = [
+  { icon: 'edit', tag: '~2 minute', n: '01', title: 'Spui ce vrei', desc: 'Scrii ce ai nevoie, când îl vrei și cât oferi. Împărți munca pe pași dacă e proiect mai mare.' },
+  { icon: 'people', tag: 'Matching uman', n: '02', title: 'Îți recomandăm omul potrivit', desc: 'Nu cauți tu printre mii de profile. Discutăm cu tine despre nevoia exactă și îți recomandăm direct expertul care chiar poate face treaba — am vorbit cu fiecare, le știm punctele forte.' },
+  { icon: 'lock', tag: 'Banii blocați', n: '03', title: 'Depui banii în siguranță', desc: 'Plătești cu cardul. Banii NU ajung la expert — stau într-un cont separat, gestionat de Stripe.' },
+  { icon: 'check-circle', tag: 'Un click', n: '04', title: 'Aprobi, plata pleacă', desc: 'Verifici lucrarea. Dacă e bună, apeși "Aprobă" și banii merg automat. Dacă nu, deschidem o dispută.' },
+];
 
-  const faqs = [
-    {
-      q: 'Cum funcționează sistemul escrow?',
-      a: 'Când accepți un proiect, beneficiarul plătește suma într-un cont escrow. Banii rămân blocați până când livrabilele sunt aprobate. Dacă totul este în regulă, fondurile sunt eliberate expertului.'
-    },
-    {
-      q: 'Ce se întâmplă în caz de dispută?',
-      a: 'Dacă apar neînțelegeri, ambele părți pot deschide o dispută. mediatorii ESCRO vor analiza dovezile și vor lua o decizie echitabilă în max 48 de ore.'
-    },
-    {
-      q: 'Cât costă utilizarea platformei?',
-      a: 'ESCRO percepe o taxă de serviciu de 5% din valoarea proiectului, plătită de ambele părți. Aceasta acoperă costsurile de procesare și protecția oferită.'
-    },
-    {
-      q: 'Cum sunt verificați experții?',
-      a: 'Toți experții trec prin verificare KYC (identitate,documente), validarea competențelor și verificarea referințelor. Doar experții aprobați pot opera pe platformă.'
-    }
-  ];
+const TRUST_CARDS = [
+  { icon: 'wallet', title: 'Banii stau separat', desc: 'Nu în contul nostru. În conturi escrow gestionate de Stripe — același care procesează plăți pentru Uber, Booking și Glovo.', meta: 'Powered by Stripe' },
+  { icon: 'doc', title: 'Contract automat', desc: 'La fiecare lucrare se generează un contract cu valoare legală, semnat electronic. Documentul îți rămâne ție, oricând îl poți descărca.', meta: 'Validat legal RO/UE' },
+  { icon: 'people', title: 'Matching făcut de oameni', desc: 'Nu te lăsăm să cauți singur. Discutăm nevoia ta, înțelegem contextul, recomandăm expertul potrivit. Pe toți i-am verificat (KYC + interviu) — le știm punctele forte și unde au livrat.', meta: 'Recomandare directă' },
+  { icon: 'scale', title: 'Decizie umană', desc: 'Dacă apar neînțelegeri, echipa noastră se uită la mesaje, livrabile și contract. Decizie în maxim 48 de ore. Fără ping-pong.', meta: 'Răspuns < 48h' },
+];
+
+const FOR_WHO = [
+  {
+    tag: 'Pentru cine angajează',
+    title: 'Primești ce-ai cerut. Sau primești banii înapoi.',
+    sub: 'Gata cu plățile în avans care dispar. Cu ESCRO controlezi când și pentru ce eliberezi fiecare leu.',
+    list: [
+      'Primești recomandarea expertului potrivit, fără să cauți tu',
+      'Plătești pe pași — nu tot dintr-o dată',
+      'Aprobi tu fiecare etapă, înainte ca banii să plece',
+      'Dacă livrarea nu e bună, deschidem o dispută în 30 secunde',
+    ],
+    cta: 'Vreau o recomandare',
+    iconTag: 'people',
+  },
+  {
+    alt: true,
+    tag: 'Pentru cine prestează',
+    title: 'Banii există înainte să începi lucrul.',
+    sub: 'Niciun client care „te plătește săptămâna viitoare". Verificăm că banii sunt depuși înainte de prima oră de muncă.',
+    list: [
+      'Banii sunt blocați înainte să accepți proiectul',
+      'Sistem de reputație care îți crește valoarea în timp',
+      'Contracte care te protejează legal, nu doar pe hârtie',
+      'Plata pleacă automat la aprobare, fără să o ceri',
+    ],
+    cta: 'Sunt expert, vreau lucrări',
+    iconTag: 'briefcase',
+  },
+];
+
+const PRICING_LIST = [
+  { t: 'Înregistrarea e gratuită', s: 'Fără card cerut. Fără perioadă de probă cronometrată.' },
+  { t: 'Nu plătești nimic în plus', s: 'Fără abonament lunar, fără taxe ascunse, fără reînnoiri.' },
+  { t: 'Plătești doar dacă lucrarea reușește', s: 'Comisionul se reține din suma eliberată expertului — niciodată separat.' },
+];
+
+const TESTS = [
+  { quote: 'Am angajat 4 freelanceri prin alte platforme și am pierdut bani la 2. Cu ESCRO știu exact ce și când eliberez. Mai sigur decât transferul direct.', name: 'Alexandra Ionescu', role: 'Founder, MarketingLab', av: 'AI' },
+  { quote: 'Lucrez ca dezvoltator freelance de 7 ani. ESCRO e prima platformă care îmi garantează că banii există înainte să accept. Asta e tot ce-mi trebuia.', name: 'Mihai Pop', role: 'Senior Developer', av: 'MP', avClass: 'green' },
+  { quote: 'Am rulat un audit de securitate de 80.000 RON pe milestone-uri. Zero stres pe partea financiară — tot procesul transparent, totul documentat.', name: 'Cristina Stanciu', role: 'CTO, Fintech RO', av: 'CS', avClass: 'violet' },
+];
+
+const FAQ_ITEMS = [
+  { q: 'Unde stau banii mei până la finalizare?', a: 'Banii sunt depozitați în conturi escrow separate, gestionate de Stripe — același procesator folosit de Uber, Booking sau Glovo. Nu ajung niciodată în contul nostru operațional. Sunt protejați chiar și dacă platforma noastră ar dispărea mâine.' },
+  { q: 'Ce se întâmplă dacă nu sunt mulțumit de lucrare?', a: 'Apeși butonul "Deschide dispută" direct din proiect. Echipa noastră se uită la mesaje, livrabile și contract și ia o decizie în maxim 48 de ore. Banii sunt eliberați sau returnați în funcție de ce decidem. Nu există presiune — fiecare dispută e analizată de un om, nu de un algoritm.' },
+  { q: 'Cât costă să folosesc ESCRO?', a: 'Înregistrarea e gratuită și rămâne așa. Singurul cost este un comision de 10% reținut din suma eliberată expertului, doar când o lucrare se finalizează cu succes. Nu există abonamente, taxe de listare sau alte costuri ascunse.' },
+  { q: 'Pot folosi ESCRO pentru servicii fizice (renovări, livrări, etc)?', a: 'Da. Orice colaborare comercială care poate fi împărțită în etape cu condiții clare de acceptare poate fi gestionată prin ESCRO. De la dezvoltare software la zugrăvit apartament, de la consultanță fiscală la sesiuni foto.' },
+  { q: 'Aleg eu expertul sau îmi recomandați voi?', a: 'Noi îți recomandăm. Spui ce ai nevoie, vorbim cu tine ca să înțelegem contextul, și îți facem o recomandare directă — expertul potrivit pentru proiectul tău. Nu te lăsăm să cauți printre mii de profile. Pe toți experții i-am verificat în prealabil (KYC prin Stripe, portofoliu, interviu) și am vorbit personal cu ei — le știm stilul de lucru și unde excelează.' },
+  { q: 'Cât durează să primesc banii dacă sunt expert?', a: 'În momentul în care clientul aprobă o etapă, plata pleacă automat și ajunge în contul tău bancar în 2-3 zile lucrătoare (procesare standard Stripe). Nu trebuie să facturezi nimic în avans și nu trebuie să suni pe nimeni.' },
+];
+
+function Brand() {
+  return (
+    <Link to="/" className="brand" aria-label="ESCRO">
+      <div className="brand-mark">E</div>
+      <span className="brand-name">escro<span className="dot"></span></span>
+    </Link>
+  );
+}
+
+function Nav() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    document.body.classList.toggle('no-scroll', open);
+    return () => document.body.classList.remove('no-scroll');
+  }, [open]);
 
   return (
-    <div style={styles.container}>
-      {/* Navigation */}
-      <nav style={styles.nav}>
-        <div style={styles.navContent}>
-          <div style={styles.logo}>
-            <span style={styles.logoIcon}>🔒</span>
-            <span style={styles.logoText}>ESCRO</span>
+    <>
+      <nav className="nav">
+        <div className="nav-inner">
+          <Brand />
+          <div className="nav-links">
+            <a href="#cum" className="nav-link">{NAV_LINKS.how}</a>
+            <a href="#pentru" className="nav-link">{NAV_LINKS.who}</a>
+            <a href="#pret" className="nav-link">{NAV_LINKS.pricing}</a>
+            <a href="#faq" className="nav-link">{NAV_LINKS.faq}</a>
           </div>
-          <div style={styles.navLinks}>
-            <a href="#features" style={styles.navLink}>Funcționalități</a>
-            <a href="#how-it-works" style={styles.navLink}>Cum Funcționează</a>
-            <a href="#testimonials" style={styles.navLink}>Testimoniale</a>
-            <a href="#faq" style={styles.navLink}>Întrebări</a>
-          </div>
-          <div style={styles.navButtons}>
-            <Link to="/login" style={styles.loginBtn}>Login</Link>
-            <Link to="/register" style={styles.registerBtn}>Începe Gratuit</Link>
+          <div className="nav-cta">
+            <Link to="/login" className="btn btn-ghost">Intră în cont</Link>
+            <Link to="/register" className="btn btn-primary">
+              Începe gratuit <Icon name="arrow-right" size={14} />
+            </Link>
+            <button className="hamburger" onClick={() => setOpen(v => !v)} aria-label="Meniu">
+              <Icon name={open ? 'x' : 'menu'} size={20} />
+            </button>
           </div>
         </div>
       </nav>
+      <div className={`mobile-menu ${open ? 'open' : ''}`}>
+        <a href="#cum" onClick={() => setOpen(false)}>{NAV_LINKS.how} <Icon name="arrow-right" size={14} /></a>
+        <a href="#pentru" onClick={() => setOpen(false)}>{NAV_LINKS.who} <Icon name="arrow-right" size={14} /></a>
+        <a href="#pret" onClick={() => setOpen(false)}>{NAV_LINKS.pricing} <Icon name="arrow-right" size={14} /></a>
+        <a href="#faq" onClick={() => setOpen(false)}>{NAV_LINKS.faq} <Icon name="arrow-right" size={14} /></a>
+        <Link to="/login" className="btn btn-secondary" onClick={() => setOpen(false)}>Intră în cont</Link>
+        <Link to="/register" className="btn btn-primary" onClick={() => setOpen(false)}>
+          Începe gratuit <Icon name="arrow-right" size={14} />
+        </Link>
+      </div>
+    </>
+  );
+}
 
-      {/* Hero Section */}
-      <section style={styles.hero}>
-        <div style={styles.heroBackground}>
-          <div style={styles.heroGradient}></div>
-          <div style={styles.heroPattern}></div>
-        </div>
-        <div style={styles.heroContent}>
-          <div style={styles.badge}>
-            <span style={styles.badgeDot}></span>
-            Platformă Escrow #1 din România
-          </div>
-          <h1 style={styles.heroTitle}>
-            Colaborează în Siguranță cu<br />
-            <span style={styles.heroHighlight}>Experți Profesioniști</span>
-          </h1>
-          <p style={styles.heroSubtitle}>
-            ESCRO elimină riscul din fiecare tranzacție. Banii sunt protejați până când 
-            proiectul este livrat și aprobat. Fără înșelătorii, fără disputes nerezolvate.
-          </p>
-          <div style={styles.heroButtons}>
-            <Link to="/register" style={styles.primaryBtn}>
-              Creează Cont Gratuit
-              <span style={styles.btnArrow}>→</span>
-            </Link>
-            <a href="#how-it-works" style={styles.secondaryBtn}>
-              Vezi Cum Funcționează
-            </a>
-          </div>
-          <div style={styles.heroStats}>
-            {stats.map((stat, i) => (
-              <div key={i} style={styles.heroStat}>
-                <div style={styles.heroStatNumber}>{stat.number}</div>
-                <div style={styles.heroStatLabel}>{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+function FlowDemo() {
+  const stages = [
+    { icon: 'edit', step: 'Pasul 1', label: 'Sara publică „Site de prezentare cabinet"', amt: '8.500' },
+    { icon: 'lock', step: 'Pasul 2', label: 'Sara depune banii. Stau în siguranță.', amt: '8.500' },
+    { icon: 'briefcase', step: 'Pasul 3', label: 'Andrei (expert) livrează site-ul în 5 zile', amt: '8.500' },
+    { icon: 'check-circle', step: 'Pasul 4', label: 'Sara aprobă. Andrei primește banii.', amt: '8.500' },
+  ];
+  const [stage, setStage] = useState(0);
+  const [auto, setAuto] = useState(true);
+  const timerRef = useRef();
 
-      {/* Trust Badges */}
-      <section style={styles.trustSection}>
-        <div style={styles.trustContent}>
-          <div style={styles.trustItem}>
-            <span style={styles.trustIcon}>🏦</span>
-            <div>
-              <div style={styles.trustTitle}>Banii în Siguranță</div>
-              <div style={styles.trustDesc}>Cont escrow garantat bancar</div>
-            </div>
-          </div>
-          <div style={styles.trustDivider}></div>
-          <div style={styles.trustItem}>
-            <span style={styles.trustIcon}>🔐</span>
-            <div>
-              <div style={styles.trustTitle}>Datele Protejate</div>
-              <div style={styles.trustDesc}>Criptare end-to-end</div>
-            </div>
-          </div>
-          <div style={styles.trustDivider}></div>
-          <div style={styles.trustItem}>
-            <span style={styles.trustIcon}>⚡</span>
-            <div>
-              <div style={styles.trustTitle}>Suport 24/7</div>
-              <div style={styles.trustDesc}>Răspundem în max 1 oră</div>
-            </div>
-          </div>
-        </div>
-      </section>
+  useEffect(() => {
+    if (!auto) return;
+    timerRef.current = setTimeout(() => {
+      setStage(s => (s + 1) % (stages.length + 1));
+    }, stage === stages.length ? 1800 : 2200);
+    return () => clearTimeout(timerRef.current);
+  }, [stage, auto, stages.length]);
 
-      {/* Features Section */}
-      <section id="features" style={styles.features}>
-        <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>De Ce Să Alegi ESCRO?</h2>
-          <p style={styles.sectionSubtitle}>
-            Oferim cea mai completă și sigură platformă pentru colaborări profesionale din România
-          </p>
-        </div>
-        <div style={styles.featuresGrid}>
-          {features.map((feature, index) => (
-            <div key={index} style={styles.featureCard}>
-              <div style={styles.featureIcon}>{feature.icon}</div>
-              <h3 style={styles.featureTitle}>{feature.title}</h3>
-              <p style={styles.featureDesc}>{feature.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+  const restart = () => {
+    clearTimeout(timerRef.current);
+    setStage(0);
+    setAuto(true);
+  };
 
-      {/* How It Works */}
-      <section id="how-it-works" style={styles.howItWorks}>
-        <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>Cum Funcționează?</h2>
-          <p style={styles.sectionSubtitle}>
-            Proces simplu în 4 pași - de la idee la proiect finalizat
-          </p>
-        </div>
-        <div style={styles.stepsContainer}>
-          <div style={styles.stepsLine}></div>
-          <div style={styles.stepsGrid}>
-            {steps.map((step, index) => (
-              <div key={index} style={styles.stepCard}>
-                <div style={styles.stepIcon}>{step.icon}</div>
-                <div style={styles.stepNumber}>{step.number}</div>
-                <h3 style={styles.stepTitle}>{step.title}</h3>
-                <p style={styles.stepDesc}>{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+  const getState = (i) => {
+    const s = stage >= stages.length ? stages.length : stage;
+    if (i < s) return 'done';
+    if (i === s) return 'active';
+    return 'pending';
+  };
 
-      {/* Testimonials */}
-      <section id="testimonials" style={styles.testimonials}>
-        <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>Ce Spun Utilizatorii?</h2>
-          <p style={styles.sectionSubtitle}>
-            Mii de profesioniști au ales ESCRO pentru colaborările lor
-          </p>
+  return (
+    <div className="flow-demo">
+      <div className="flow-head">
+        <div className="flow-title">
+          <span className="live-dot"></span>
+          Exemplu live: cum funcționează
         </div>
-        <div style={styles.testimonialsGrid}>
-          {testimonials.map((testimonial, index) => (
-            <div key={index} style={styles.testimonialCard}>
-              <div style={styles.testimonialAvatar}>{testimonial.avatar}</div>
-              <p style={styles.testimonialText}>"{testimonial.text}"</p>
-              <div style={styles.testimonialAuthor}>
-                <div style={styles.testimonialName}>{testimonial.name}</div>
-                <div style={styles.testimonialRole}>{testimonial.role}</div>
+        <button className="flow-restart" onClick={restart} aria-label="Restart">
+          <Icon name="restart" size={11} />
+          Restart
+        </button>
+      </div>
+
+      {stages.map((s, i) => {
+        const state = getState(i);
+        return (
+          <div key={i}>
+            <div className={`flow-stage ${state}`}>
+              <div className="flow-row">
+                <div className="flow-icon">
+                  {state === 'done'
+                    ? <Icon name="check" size={18} />
+                    : <Icon name={s.icon} size={17} />}
+                </div>
+                <div className="flow-text">
+                  <div className="flow-step">{s.step}</div>
+                  <div className="flow-label">{s.label}</div>
+                </div>
+                <div className="flow-amt">
+                  {state === 'done'
+                    ? <><em>+</em>{s.amt}<span style={{ fontSize: 14, color: 'var(--fg-3)' }}> RON</span></>
+                    : state === 'pending'
+                      ? <span style={{ opacity: 0.4 }}>— RON</span>
+                      : <>{s.amt}<span style={{ fontSize: 14, color: 'var(--fg-3)' }}> RON</span></>}
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faq" style={styles.faq}>
-        <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>Întrebări Frecvente</h2>
-          <p style={styles.sectionSubtitle}>
-            Răspundem la cele mai importante întrebări despre ESCRO
-          </p>
-        </div>
-        <div style={styles.faqGrid}>
-          {faqs.map((faq, index) => (
-            <div key={index} style={styles.faqCard}>
-              <h3 style={styles.faqQuestion}>{faq.q}</h3>
-              <p style={styles.faqAnswer}>{faq.a}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section style={styles.cta}>
-        <div style={styles.ctaContent}>
-          <h2 style={styles.ctaTitle}>Pregătit să Începi?</h2>
-          <p style={styles.ctaText}>
-            Alătură-te celor peste 2,500 de proiecte finalizate cu succes pe ESCRO
-          </p>
-          <div style={styles.ctaButtons}>
-            <Link to="/register" style={styles.ctaButton}>
-              Creează Cont Gratuit
-            </Link>
-            <span style={styles.ctaNote}>Nu ai niciun cost ascuns</span>
+            {i < stages.length - 1 && (
+              <div className="flow-connector" style={{ '--fill': i < stage ? 1 : 0 }} />
+            )}
           </div>
-        </div>
-      </section>
+        );
+      })}
 
-      {/* Footer */}
-      <footer style={styles.footer}>
-        <div style={styles.footerContent}>
-          <div style={styles.footerMain}>
-            <div style={styles.footerLogo}>
-              <span style={styles.logoIcon}>🔒</span>
-              <span style={styles.logoText}>ESCRO</span>
-            </div>
-            <p style={styles.footerDesc}>
-              Platforma #1 de escrow din România. Conectează profesioniști 
-              și finalizează proiecte în siguranță absolută.
-            </p>
-            <div style={styles.footerSocial}>
-              <span style={styles.socialIcon}>📘</span>
-              <span style={styles.socialIcon}>📸</span>
-              <span style={styles.socialIcon}>💼</span>
-            </div>
-          </div>
-          <div style={styles.footerLinks}>
-            <div style={styles.footerCol}>
-              <h4 style={styles.footerColTitle}>Platformă</h4>
-              <a href="#features" style={styles.footerLink}>Funcționalități</a>
-              <a href="#how-it-works" style={styles.footerLink}>Cum Funcționează</a>
-              <a href="#testimonials" style={styles.footerLink}>Testimoniale</a>
-              <Link to="/register" style={styles.footerLink}>Înregistrare</Link>
-            </div>
-            <div style={styles.footerCol}>
-              <h4 style={styles.footerColTitle}>Legal</h4>
-              <Link to="/terms" style={styles.footerLink}>Termeni și Condiții</Link>
-              <a href="#" style={styles.footerLink}>Politica de Confidențialitate</a>
-              <a href="#" style={styles.footerLink}>Politica de Cookies</a>
-            </div>
-            <div style={styles.footerCol}>
-              <h4 style={styles.footerColTitle}>Contact</h4>
-              <a href="mailto:contact@escro.ro" style={styles.footerLink}>contact@escro.ro</a>
-              <a href="#" style={styles.footerLink}>Suport</a>
-              <a href="#" style={styles.footerLink}>Parteneriate</a>
-            </div>
-          </div>
+      <div className="flow-foot">
+        <div className="flow-foot-l">
+          {stage === stages.length
+            ? <>✓ Lucrare finalizată. <strong>Sara are site, Andrei are banii.</strong> Nimeni nu a riscat.</>
+            : <>Banii rămân blocați la fiecare pas. <strong>Eliberare doar la aprobarea ta.</strong></>}
         </div>
-        <div style={styles.footerBottom}>
-          <p style={styles.copyright}>© 2026 ESCRO Platform. Toate drepturile rezervate.</p>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }
 
-const styles = {
-  container: {
-    minHeight: '100vh',
-    backgroundColor: '#0a0a0f',
-    color: '#ffffff',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-  },
-  nav: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-    backgroundColor: 'rgba(10, 10, 15, 0.85)',
-    backdropFilter: 'blur(20px)',
-    borderBottom: '1px solid rgba(255,255,255,0.08)'
-  },
-  navContent: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '1rem 2rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  logo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem'
-  },
-  logoIcon: {
-    fontSize: '1.75rem'
-  },
-  logoText: {
-    fontSize: '1.5rem',
-    fontWeight: '800',
-    background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent'
-  },
-  navLinks: {
-    display: 'flex',
-    gap: '2rem'
-  },
-  navLink: {
-    color: 'rgba(255,255,255,0.7)',
-    textDecoration: 'none',
-    fontSize: '0.95rem',
-    fontWeight: '500',
-    transition: 'color 0.2s'
-  },
-  navButtons: {
-    display: 'flex',
-    gap: '1rem',
-    alignItems: 'center'
-  },
-  loginBtn: {
-    color: 'rgba(255,255,255,0.8)',
-    textDecoration: 'none',
-    fontSize: '0.95rem',
-    fontWeight: '500',
-    padding: '0.5rem 1.25rem'
-  },
-  registerBtn: {
-    backgroundColor: '#6366f1',
-    color: 'white',
-    textDecoration: 'none',
-    fontSize: '0.95rem',
-    fontWeight: '600',
-    padding: '0.625rem 1.5rem',
-    borderRadius: '10px',
-    transition: 'all 0.2s'
-  },
-  hero: {
-    position: 'relative',
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '8rem 2rem 6rem',
-    overflow: 'hidden'
-  },
-  heroBackground: {
-    position: 'absolute',
-    inset: 0,
-    zIndex: 0
-  },
-  heroGradient: {
-    position: 'absolute',
-    inset: 0,
-    background: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.3), transparent)'
-  },
-  heroPattern: {
-    position: 'absolute',
-    inset: 0,
-    backgroundImage: 'radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)',
-    backgroundSize: '32px 32px'
-  },
-  heroContent: {
-    position: 'relative',
-    zIndex: 1,
-    maxWidth: '900px',
-    textAlign: 'center'
-  },
-  badge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    backgroundColor: 'rgba(99, 102, 241, 0.15)',
-    border: '1px solid rgba(99, 102, 241, 0.3)',
-    borderRadius: '50px',
-    padding: '0.5rem 1rem',
-    fontSize: '0.875rem',
-    color: '#a5b4fc',
-    marginBottom: '2rem'
-  },
-  badgeDot: {
-    width: '8px',
-    height: '8px',
-    backgroundColor: '#6366f1',
-    borderRadius: '50%',
-    animation: 'pulse 2s infinite'
-  },
-  heroTitle: {
-    fontSize: 'clamp(2.5rem, 6vw, 4rem)',
-    fontWeight: '800',
-    lineHeight: 1.1,
-    marginBottom: '1.5rem',
-    letterSpacing: '-0.02em'
-  },
-  heroHighlight: {
-    background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent'
-  },
-  heroSubtitle: {
-    fontSize: '1.25rem',
-    color: 'rgba(255,255,255,0.65)',
-    maxWidth: '650px',
-    margin: '0 auto 2.5rem',
-    lineHeight: 1.7
-  },
-  heroButtons: {
-    display: 'flex',
-    gap: '1rem',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    marginBottom: '4rem'
-  },
-  primaryBtn: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    backgroundColor: '#6366f1',
-    color: 'white',
-    textDecoration: 'none',
-    fontSize: '1rem',
-    fontWeight: '600',
-    padding: '1rem 2rem',
-    borderRadius: '12px',
-    boxShadow: '0 4px 20px rgba(99, 102, 241, 0.4)',
-    transition: 'all 0.3s'
-  },
-  btnArrow: {
-    transition: 'transform 0.2s'
-  },
-  secondaryBtn: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    color: 'rgba(255,255,255,0.8)',
-    textDecoration: 'none',
-    fontSize: '1rem',
-    fontWeight: '500',
-    padding: '1rem 2rem',
-    borderRadius: '12px',
-    border: '1px solid rgba(255,255,255,0.15)',
-    transition: 'all 0.2s'
-  },
-  heroStats: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: '3rem',
-    flexWrap: 'wrap'
-  },
-  heroStat: {
-    textAlign: 'center'
-  },
-  heroStatNumber: {
-    fontSize: '2rem',
-    fontWeight: '800',
-    color: '#fff'
-  },
-  heroStatLabel: {
-    fontSize: '0.875rem',
-    color: 'rgba(255,255,255,0.5)',
-    marginTop: '0.25rem'
-  },
-  trustSection: {
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderTop: '1px solid rgba(255,255,255,0.06)',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-    padding: '2rem'
-  },
-  trustContent: {
-    maxWidth: '1000px',
-    margin: '0 auto',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '3rem',
-    flexWrap: 'wrap'
-  },
-  trustItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem'
-  },
-  trustIcon: {
-    fontSize: '2rem'
-  },
-  trustTitle: {
-    fontWeight: '600',
-    fontSize: '1rem',
-    marginBottom: '0.25rem'
-  },
-  trustDesc: {
-    fontSize: '0.875rem',
-    color: 'rgba(255,255,255,0.5)'
-  },
-  trustDivider: {
-    width: '1px',
-    height: '50px',
-    backgroundColor: 'rgba(255,255,255,0.1)'
-  },
-  features: {
-    padding: '8rem 2rem',
-    maxWidth: '1200px',
-    margin: '0 auto'
-  },
-  sectionHeader: {
-    textAlign: 'center',
-    marginBottom: '4rem'
-  },
-  sectionTitle: {
-    fontSize: '2.5rem',
-    fontWeight: '800',
-    marginBottom: '1rem',
-    letterSpacing: '-0.02em'
-  },
-  sectionSubtitle: {
-    fontSize: '1.125rem',
-    color: 'rgba(255,255,255,0.5)',
-    maxWidth: '600px',
-    margin: '0 auto'
-  },
-  featuresGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '1.5rem'
-  },
-  featureCard: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.06)',
-    borderRadius: '16px',
-    padding: '2rem',
-    transition: 'all 0.3s'
-  },
-  featureIcon: {
-    fontSize: '2.5rem',
-    marginBottom: '1.25rem'
-  },
-  featureTitle: {
-    fontSize: '1.25rem',
-    fontWeight: '700',
-    marginBottom: '0.75rem'
-  },
-  featureDesc: {
-    fontSize: '0.95rem',
-    color: 'rgba(255,255,255,0.6)',
-    lineHeight: 1.7
-  },
-  howItWorks: {
-    padding: '8rem 2rem',
-    backgroundColor: 'rgba(255,255,255,0.01)'
-  },
-  stepsContainer: {
-    maxWidth: '1100px',
-    margin: '0 auto',
-    position: 'relative'
-  },
-  stepsLine: {
-    position: 'absolute',
-    top: '60px',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: '70%',
-    height: '2px',
-    background: 'linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.5), transparent)',
-    display: 'none'
-  },
-  stepsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: '2rem'
-  },
-  stepCard: {
-    textAlign: 'center',
-    position: 'relative'
-  },
-  stepIcon: {
-    fontSize: '3rem',
-    marginBottom: '1rem'
-  },
-  stepNumber: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    backgroundColor: '#6366f1',
-    color: 'white',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: '700',
-    margin: '0 auto 1rem'
-  },
-  stepTitle: {
-    fontSize: '1.125rem',
-    fontWeight: '700',
-    marginBottom: '0.75rem'
-  },
-  stepDesc: {
-    fontSize: '0.9rem',
-    color: 'rgba(255,255,255,0.5)',
-    lineHeight: 1.6
-  },
-  testimonials: {
-    padding: '8rem 2rem',
-    maxWidth: '1200px',
-    margin: '0 auto'
-  },
-  testimonialsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '2rem'
-  },
-  testimonialCard: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.06)',
-    borderRadius: '16px',
-    padding: '2rem',
-    textAlign: 'center'
-  },
-  testimonialAvatar: {
-    fontSize: '3rem',
-    marginBottom: '1.5rem'
-  },
-  testimonialText: {
-    fontSize: '1rem',
-    color: 'rgba(255,255,255,0.8)',
-    lineHeight: 1.7,
-    marginBottom: '1.5rem',
-    fontStyle: 'italic'
-  },
-  testimonialAuthor: {},
-  testimonialName: {
-    fontWeight: '700',
-    fontSize: '1rem'
-  },
-  testimonialRole: {
-    fontSize: '0.875rem',
-    color: 'rgba(255,255,255,0.5)'
-  },
-  faq: {
-    padding: '8rem 2rem',
-    maxWidth: '900px',
-    margin: '0 auto'
-  },
-  faqGrid: {
-    display: 'grid',
-    gap: '1.5rem'
-  },
-  faqCard: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.06)',
-    borderRadius: '12px',
-    padding: '1.5rem 2rem'
-  },
-  faqQuestion: {
-    fontSize: '1.1rem',
-    fontWeight: '600',
-    marginBottom: '0.75rem'
-  },
-  faqAnswer: {
-    fontSize: '0.95rem',
-    color: 'rgba(255,255,255,0.6)',
-    lineHeight: 1.7
-  },
-  cta: {
-    padding: '8rem 2rem',
-    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
-    borderTop: '1px solid rgba(255,255,255,0.08)',
-    borderBottom: '1px solid rgba(255,255,255,0.08)'
-  },
-  ctaContent: {
-    maxWidth: '600px',
-    margin: '0 auto',
-    textAlign: 'center'
-  },
-  ctaTitle: {
-    fontSize: '2.5rem',
-    fontWeight: '800',
-    marginBottom: '1rem'
-  },
-  ctaText: {
-    fontSize: '1.125rem',
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: '2rem'
-  },
-  ctaButtons: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '1rem'
-  },
-  ctaButton: {
-    display: 'inline-block',
-    backgroundColor: '#6366f1',
-    color: 'white',
-    textDecoration: 'none',
-    fontSize: '1.125rem',
-    fontWeight: '600',
-    padding: '1rem 3rem',
-    borderRadius: '12px',
-    boxShadow: '0 4px 20px rgba(99, 102, 241, 0.4)'
-  },
-  ctaNote: {
-    fontSize: '0.875rem',
-    color: 'rgba(255,255,255,0.5)'
-  },
-  footer: {
-    padding: '4rem 2rem 2rem',
-    borderTop: '1px solid rgba(255,255,255,0.06)'
-  },
-  footerContent: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    display: 'grid',
-    gridTemplateColumns: '1fr 2fr',
-    gap: '4rem'
-  },
-  footerMain: {
-    maxWidth: '300px'
-  },
-  footerDesc: {
-    fontSize: '0.95rem',
-    color: 'rgba(255,255,255,0.5)',
-    lineHeight: 1.7,
-    marginTop: '1rem'
-  },
-  footerSocial: {
-    display: 'flex',
-    gap: '1rem',
-    marginTop: '1.5rem'
-  },
-  socialIcon: {
-    fontSize: '1.5rem',
-    cursor: 'pointer'
-  },
-  footerLinks: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '2rem'
-  },
-  footerCol: {},
-  footerColTitle: {
-    fontSize: '0.875rem',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: '1rem',
-    color: 'rgba(255,255,255,0.4)'
-  },
-  footerLink: {
-    display: 'block',
-    color: 'rgba(255,255,255,0.6)',
-    textDecoration: 'none',
-    fontSize: '0.95rem',
-    marginBottom: '0.5rem',
-    transition: 'color 0.2s'
-  },
-  footerBottom: {
-    maxWidth: '1200px',
-    margin: '3rem auto 0',
-    paddingTop: '2rem',
-    borderTop: '1px solid rgba(255,255,255,0.06)',
-    textAlign: 'center'
-  },
-  copyright: {
-    fontSize: '0.875rem',
-    color: 'rgba(255,255,255,0.4)'
-  }
-};
+function Hero() {
+  return (
+    <section className="hero">
+      <div className="hero-bg"></div>
+      <div className="hero-grid-bg"></div>
+      <div className="wrap hero-inner">
+        <div>
+          <div className="hero-pill">
+            <span className="pulse"></span>
+            {HERO.pill}
+          </div>
+          <h1 className="h-display hero-h1">
+            {HERO.h1Pre}<br />
+            <em>{HERO.h1Em}</em>
+          </h1>
+          <p className="hero-sub">{HERO.sub}</p>
+          <div className="hero-actions">
+            <Link to="/register" className="btn btn-primary btn-lg">
+              {HERO.cta1} <Icon name="arrow-right" size={16} />
+            </Link>
+            <a href="#cum" className="btn btn-secondary btn-lg">
+              <Icon name="play" size={14} /> {HERO.cta2}
+            </a>
+          </div>
+          <div className="hero-trust">
+            {HERO.trust.map((t, i) => (
+              <div key={i} className="hero-trust-item">
+                <Icon name="check" size={14} strokeWidth={2.4} />
+                {t}
+              </div>
+            ))}
+          </div>
+        </div>
+        <FlowDemo />
+      </div>
+    </section>
+  );
+}
+
+function Stats({ platformStats }) {
+  const items = [
+    {
+      raw: platformStats?.verified_experts,
+      fallback: { num: '850', prefix: 'peste' },
+      label: 'Experți verificați',
+    },
+    {
+      raw: platformStats?.completed_projects,
+      fallback: { num: '2.500', prefix: 'peste' },
+      label: 'Lucrări finalizate',
+    },
+    {
+      raw: platformStats?.total_volume_ron,
+      fallback: { num: '12,4', unit: 'mil. RON' },
+      label: 'Banii protejați',
+      formatted: true,
+    },
+    {
+      raw: null,
+      fallback: { num: '48', unit: 'ore' },
+      label: 'Răspuns dispute',
+    },
+  ];
+
+  return (
+    <section className="stats">
+      <div className="wrap">
+        <div className="stats-inner">
+          {items.map((s, i) => {
+            let prefix = s.fallback.prefix;
+            let num = s.fallback.num;
+            let unit = s.fallback.unit;
+            if (s.raw != null) {
+              if (s.formatted) {
+                const f = fmtRon(s.raw);
+                if (f) { num = f.num; unit = f.unit; prefix = undefined; }
+              } else {
+                num = String(s.raw);
+                prefix = undefined;
+              }
+            }
+            return (
+              <div key={i} className="stat-item">
+                <div className="stat-num">
+                  {prefix && <span className="num-unit">{prefix} </span>}
+                  <em>{num}</em>
+                  {unit && <span className="num-unit"> {unit}</span>}
+                </div>
+                <div className="stat-label">{s.label}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SectionHead({ eyebrow, title, sub }) {
+  const parts = title.split('.');
+  return (
+    <div className="section-head">
+      <span className="eyebrow"><span className="dot"></span>{eyebrow}</span>
+      <h2 className="h-section">{parts[0]}<em>.{parts.slice(1).join('.')}</em></h2>
+      {sub && <p className="lede">{sub}</p>}
+    </div>
+  );
+}
+
+function How() {
+  return (
+    <section className="section" id="cum">
+      <div className="wrap">
+        <SectionHead
+          eyebrow="Cum funcționează"
+          title="Patru pași. Niciun risc."
+          sub="Construit pentru oameni, nu pentru contabili. Procesul e clar de la primul click până la ultima plată."
+        />
+        <div className="steps-grid">
+          {STEPS.map((s) => (
+            <div key={s.n} className="step-card">
+              <div className="step-num">{s.n}</div>
+              <div className="step-icon"><Icon name={s.icon} size={22} /></div>
+              <h3 className="step-title">{s.title}</h3>
+              <p className="step-desc">{s.desc}</p>
+              <span className="step-tag"><Icon name="check" size={11} strokeWidth={2.4} />{s.tag}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Trust() {
+  return (
+    <section className="section trust-section">
+      <div className="wrap">
+        <SectionHead
+          eyebrow="De ce să ai încredere"
+          title="Patru garanții care contează."
+          sub="Nu vorbe. Mecanisme concrete, verificabile, în spatele fiecărui leu pe care îl pui aici."
+        />
+        <div className="trust-grid">
+          {TRUST_CARDS.map((c, i) => (
+            <div key={i} className="trust-card">
+              <div className="icon-wrap"><Icon name={c.icon} size={20} /></div>
+              <h3>{c.title}</h3>
+              <p>{c.desc}</p>
+              <div className="trust-meta">— {c.meta}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ForWho() {
+  return (
+    <section className="section" id="pentru">
+      <div className="wrap">
+        <SectionHead
+          eyebrow="Pentru cine"
+          title="Două părți. O singură certitudine."
+          sub="Indiferent că plătești sau încasezi, lucrezi cu siguranța că celălalt va face ce-a promis."
+        />
+        <div className="forwho-grid">
+          {FOR_WHO.map((c, i) => {
+            const parts = c.title.split('.');
+            return (
+              <div key={i} className={`forwho-card ${c.alt ? 'alt' : ''}`}>
+                <span className="forwho-tag"><Icon name={c.iconTag} size={12} />{c.tag}</span>
+                <h3 className="forwho-title">{parts[0]}<em>.{parts.slice(1).join('.')}</em></h3>
+                <p className="forwho-sub">{c.sub}</p>
+                <ul className="forwho-list">
+                  {c.list.map((li, j) => (
+                    <li key={j}><Icon name="check" size={16} strokeWidth={2.5} />{li}</li>
+                  ))}
+                </ul>
+                <Link to="/register" className="btn btn-primary btn-lg">
+                  {c.cta} <Icon name="arrow-right" size={15} />
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Pricing() {
+  return (
+    <section className="pricing-strip" id="pret">
+      <div className="pricing-inner">
+        <div>
+          <div className="pricing-cap">
+            <span className="eyebrow"><span className="dot"></span>Preț transparent</span>
+          </div>
+          <h2 className="h-section" style={{ marginBottom: 20 }}>
+            Un comision<em>. Plătit doar la final.</em>
+          </h2>
+          <div className="pricing-amount">
+            <em>5</em><span className="pricing-pct">%</span>
+          </div>
+          <div style={{
+            marginTop: 10,
+            fontFamily: 'var(--f-mono)',
+            fontSize: 11,
+            letterSpacing: '0.08em',
+            color: 'var(--fg-3)',
+            textTransform: 'uppercase',
+          }}>
+            COMISION UNIC · doar la finalizare
+          </div>
+        </div>
+        <ul className="pricing-list">
+          {PRICING_LIST.map((p, i) => (
+            <li key={i}>
+              <Icon name="check-circle" size={20} />
+              <div>
+                <div style={{ color: 'var(--fg-0)', fontWeight: 500 }}>{p.t}</div>
+                <small>{p.s}</small>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function Tests() {
+  return (
+    <section className="section section-tight">
+      <div className="wrap">
+        <div className="section-head">
+          <span className="eyebrow"><span className="dot"></span>Ce spun cei care folosesc</span>
+          <h2 className="h-section">Încrederea se câștigă proiect cu proiect.</h2>
+        </div>
+        <div className="tests-grid">
+          {TESTS.map((t, i) => (
+            <div key={i} className="test-card">
+              <div className="test-quote">{t.quote}</div>
+              <div className="test-meta">
+                <div className={`test-avatar ${t.avClass || ''}`}>{t.av}</div>
+                <div>
+                  <div className="test-name">{t.name}</div>
+                  <div className="test-role">{t.role}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FAQ() {
+  const [open, setOpen] = useState(0);
+  return (
+    <section className="section" id="faq">
+      <div className="wrap faq-wrap">
+        <div>
+          <span className="eyebrow"><span className="dot"></span>FAQ</span>
+          <h2 className="h-section" style={{ marginTop: 12, marginBottom: 14 }}>
+            Întrebări care apar des<em>.</em>
+          </h2>
+          <p className="lede">Nu găsești răspunsul? Scrie-ne la contact@escro.ro și răspundem în câteva ore.</p>
+        </div>
+        <div className="faq-list">
+          {FAQ_ITEMS.map((f, i) => (
+            <div key={i} className={`faq-item ${open === i ? 'open' : ''}`}>
+              <button className="faq-q" onClick={() => setOpen(open === i ? -1 : i)}>
+                <span>{f.q}</span>
+                <span className="faq-q-icon"><Icon name="plus" size={13} strokeWidth={2.4} /></span>
+              </button>
+              <div className="faq-a">
+                <div className="faq-a-inner">{f.a}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CTAFinal() {
+  return (
+    <section className="cta-final">
+      <div className="cta-inner">
+        <span className="eyebrow"><span className="dot"></span>Începe acum</span>
+        <h2 className="cta-title">Următoarea ta colaborare poate fi sigură<em>.</em></h2>
+        <p className="cta-sub">Înregistrarea durează un minut. Nu îți cerem card. Plătești doar când totul iese cum trebuie.</p>
+        <div className="cta-actions">
+          <Link to="/register" className="btn btn-primary btn-lg">
+            Creează cont gratuit <Icon name="arrow-right" size={16} />
+          </Link>
+          <Link to="/login" className="btn btn-secondary btn-lg">Am deja cont</Link>
+        </div>
+        <div className="cta-fine">Fără card · Fără abonament · Fără surprize</div>
+      </div>
+    </section>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="footer">
+      <div className="wrap">
+        <div className="footer-top">
+          <div className="footer-brand">
+            <Brand />
+            <p>Plată sigură pentru servicii. București · 2026. Făcută cu grijă în România.</p>
+          </div>
+          <div className="footer-col">
+            <h4>Platformă</h4>
+            <a href="#cum">Cum funcționează</a>
+            <a href="#pentru">Pentru cine</a>
+            <a href="#pret">Preț</a>
+            <a href="#faq">Întrebări</a>
+          </div>
+          <div className="footer-col">
+            <h4>Legal</h4>
+            <Link to="/terms">Termeni și Condiții</Link>
+            <a href="#">Confidențialitate</a>
+            <a href="#">GDPR</a>
+            <a href="#">Cookies</a>
+          </div>
+          <div className="footer-col col-contact">
+            <h4>Contact</h4>
+            <a href="mailto:contact@escro.ro">contact@escro.ro</a>
+            <a href="tel:+40000000000">+40 000 000 000</a>
+            <a href="#">LinkedIn</a>
+          </div>
+        </div>
+        <div className="footer-bot">
+          <span>© 2026 ESCRO Platform SRL · CUI 12345678 · J40/12345/2026</span>
+          <div className="badges">
+            <span><Icon name="lock" size={11} /> Plăți securizate Stripe</span>
+            <span><Icon name="shield" size={11} /> Conform GDPR</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+export default function LandingPage() {
+  const [platformStats, setPlatformStats] = useState(null);
+
+  useEffect(() => {
+    axios.get('/api/stats/platform').then(r => setPlatformStats(r.data)).catch(() => {});
+  }, []);
+
+  return (
+    <div className="landing">
+      <Nav />
+      <main>
+        <Hero />
+        <Stats platformStats={platformStats} />
+        <How />
+        <Trust />
+        <ForWho />
+        <Pricing />
+        <Tests />
+        <FAQ />
+        <CTAFinal />
+        <Footer />
+      </main>
+    </div>
+  );
+}

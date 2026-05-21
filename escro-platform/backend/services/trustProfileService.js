@@ -10,6 +10,8 @@ const REFERRAL_CONFIG = {
   REFERER_BONUS: 5,
   // Points for referrer when their referred user signs master contract
   CONTRACT_REFERER_BONUS: 5,
+  // Identity (type2) points awarded to the referred user on approval (referrer gets type1 only)
+  REFERRED_BONUS: 20,
   // Minimum requirements for referral bonus to be awarded
   REFERRAL_COMPLETION_REQUIREMENTS: ['profile_completed', 'kyc_verified']
 };
@@ -23,20 +25,14 @@ const VALIDATION_CONFIG = {
   PAYMENT_METHOD_POINTS: 10,
   VERIFICATION_CALL_APPROVED_POINTS: 15,
   EMAIL_VALIDATED_POINTS: 10,
-  REFERRED_BY_POINTS: 10,
-  PROJECT_COMPLETED_POINTS: 20,
+  REFERRED_BY_POINTS: 20,
   VALIDATED_PARTNERSHIP_POINTS: 10
 };
 
 // REFERRAL LEVEL MAPPING FUNCTION
-// - Level 5 → 4, Level 4 → 3, Level 3 → 2
-// - Level 2 → 2 (minimum with referral)
-// - No referral → stays at level 1
+// New user gets referrer_level - 1 (minimum 1)
 const REFERRAL_LEVEL_MAPPING = (referrerLevel) => {
-  if (referrerLevel >= 2) {
-    return Math.max(referrerLevel - 1, 2);
-  }
-  return 1; // No referral or very low level
+  return Math.max(referrerLevel - 1, 1);
 };
 
 // LEVEL THRESHOLDS
@@ -49,10 +45,10 @@ const VERIFICATION_LEVEL_THRESHOLDS = {
 };
 
 const TRUST_LEVEL_THRESHOLDS = {
-  1: 0,
-  2: 20,
-  3: 40,
-  4: 60,
+  1: 20,
+  2: 40,
+  3: 60,
+  4: 80,
   5: 100
 };
 
@@ -82,7 +78,7 @@ class TrustProfileService {
     if (result.rows.length === 0) {
       result = await pool.query(
         `INSERT INTO trust_profiles (user_id, profile_type, trust_level, trust_score)
-         VALUES ($1, $2, 1, 0)
+         VALUES ($1, $2, 1, 20)
          RETURNING *`,
         [userId, profileType]
       );
@@ -153,11 +149,7 @@ class TrustProfileService {
   }
 
   calculateTrustLevel(score) {
-    if (score >= TRUST_LEVEL_THRESHOLDS[5]) return 5;
-    if (score >= TRUST_LEVEL_THRESHOLDS[4]) return 4;
-    if (score >= TRUST_LEVEL_THRESHOLDS[3]) return 3;
-    if (score >= TRUST_LEVEL_THRESHOLDS[2]) return 2;
-    return 1;
+    return Math.min(Math.floor(score / 20), 5);
   }
 
   calculateVerificationLevel(score) {
@@ -247,49 +239,15 @@ class TrustProfileService {
       total_reviews_count: stats.reviewsCount
     };
 
-    // Calculate VERIFICATION SCORE (Type2 - Identity Validation)
-    // Uses type2_points as the authoritative source (updated by awardType2Points)
-    let verificationScore = profile.type2_points || 0;
-    
-    // Also check individual fields for accuracy
-    if (profile.kyc_verified && verificationScore < VALIDATION_CONFIG.KYC_VERIFIED_POINTS) {
-      verificationScore += VALIDATION_CONFIG.KYC_VERIFIED_POINTS;
-    }
-    if (profile.profile_completed && verificationScore < VALIDATION_CONFIG.PROFILE_COMPLETED_POINTS) {
-      verificationScore += VALIDATION_CONFIG.PROFILE_COMPLETED_POINTS;
-    }
-    if (profile.profile_photo_added && verificationScore < VALIDATION_CONFIG.PROFILE_PHOTO_POINTS) {
-      verificationScore += VALIDATION_CONFIG.PROFILE_PHOTO_POINTS;
-    }
-    if (profile.portfolio_approved_by_admin && verificationScore < VALIDATION_CONFIG.PORTFOLIO_APPROVED_POINTS) {
-      verificationScore += VALIDATION_CONFIG.PORTFOLIO_APPROVED_POINTS;
-    }
-    if (profile.email_validated && verificationScore < VALIDATION_CONFIG.EMAIL_VALIDATED_POINTS) {
-      verificationScore += VALIDATION_CONFIG.EMAIL_VALIDATED_POINTS;
-    }
-    if (profile.payment_method_added) verificationScore += VALIDATION_CONFIG.PAYMENT_METHOD_POINTS;
-    if (profile.has_verification_call) verificationScore += VALIDATION_CONFIG.VERIFICATION_CALL_POINTS;
-    
+    // type2_points is the sole authoritative accumulator — managed exclusively by awardType2Points.
+    // Non-referred users can only earn type2_points via admin actions; self-validations are blocked at source.
+    const verificationScore = profile.type2_points || 0;
     const verificationLevel = this.calculateVerificationLevel(verificationScore);
 
-    // Calculate TRUST LEVEL based on type2_points (identity points)
-    // 0-19 = level 1, 20-39 = level 2, 40-59 = level 3, 60-79 = level 4, 80+ = level 5
-    const type2Points = profile.type2_points || 0;
-    let trustLevel;
-    if (type2Points >= 80) trustLevel = 5;
-    else if (type2Points >= 60) trustLevel = 4;
-    else if (type2Points >= 40) trustLevel = 3;
-    else if (type2Points >= 20) trustLevel = 2;
-    else trustLevel = 1;
-    
-    // Trust score = 20 × trust_level
-    let trustScore = 20 * trustLevel;
-
-    // Bonus rating
-    const ratingBonus = stats.averageRating > 0 
-      ? (stats.averageRating - 3) * 5 
-      : 0;
-    trustScore = Math.min(trustScore + ratingBonus, 100);
+    // Trust level derived from accumulated trust_score (20/40/60/80/100 per level)
+    // Points accumulate beyond level 5 — trust_score is the source of truth
+    const trustScore = Math.max(profile.trust_score || 20, 20);
+    const trustLevel = this.calculateTrustLevel(trustScore);
 
     await pool.query(
       `UPDATE trust_profiles SET
@@ -311,7 +269,7 @@ class TrustProfileService {
        WHERE user_id = $14`,
        [
          trustLevel,
-         Math.round(trustScore * 100) / 100,
+         trustScore,
         verificationLevel,
         profile.type2_points || verificationScore,
         newTrustData.verified_identity,
@@ -322,7 +280,7 @@ class TrustProfileService {
         newTrustData.total_projects_completed,
         newTrustData.average_rating,
         newTrustData.total_reviews_count,
-        trustLevel === 1 ? Math.min(profile.type2_points || verificationScore, 90) : (profile.type2_points || verificationScore),
+        profile.type2_points || verificationScore,
         userId
       ]
     );
@@ -477,7 +435,12 @@ class TrustProfileService {
 
   async getAllTrustProfiles(filters = {}) {
     let query = `
-      SELECT tp.*, u.name, u.email, u.role, u.kyc_status
+      SELECT tp.*,
+             u.name AS user_name,
+             u.email AS user_email,
+             u.company AS user_company,
+             u.role AS user_role,
+             u.kyc_status
       FROM trust_profiles tp
       JOIN users u ON tp.user_id = u.id
       WHERE 1=1
@@ -594,13 +557,13 @@ class TrustProfileService {
       const newUserLevel = REFERRAL_LEVEL_MAPPING(referrerLevel);
       const newUserScore = newUserLevel * 20;
       
-      // Update new user's profile with referral info
-      // No type1_points awarded to the referred user (only trust level)
+      // Update new user's profile: set trust level from referrer + 20 identity points (known by someone)
       await pool.query(
-        `UPDATE trust_profiles SET 
+        `UPDATE trust_profiles SET
           referred_by = $1,
           trust_level = $2,
           trust_score = $4,
+          type2_points = type2_points + 20,
           updated_at = CURRENT_TIMESTAMP
          WHERE user_id = $3`,
         [referrerId, newUserLevel, newUserId, newUserScore]
@@ -631,17 +594,11 @@ class TrustProfileService {
     }
   }
 
-  // Apply referral benefits when admin approves user
+  // Apply referral benefits when verification call is completed
   async applyReferralOnApproval(userId) {
     try {
       const profile = await this.getOrCreateTrustProfile(userId);
-      
-      // If user already has referral benefits applied (trust_level > 1), skip
-      if (profile.trust_level > 1) {
-        console.log('[REFERRAL] Benefits already applied for user:', userId, 'level:', profile.trust_level);
-        return { success: false, reason: 'already_applied' };
-      }
-      
+
       // If user has no referrer, skip
       if (!profile.referred_by) {
         console.log('[REFERRAL] No referrer for user:', userId);
@@ -668,36 +625,19 @@ class TrustProfileService {
         const referrerProfile = await this.getOrCreateTrustProfile(profile.referred_by);
         const referrerLevel = referrerProfile.trust_level || 1;
         
-        // - Level 5 → 4, Level 4 → 3, Level 3 → 2
-        // - Level 2 → 2 (minimum with referral)
-        newUserLevel = Math.max(referrerLevel - 1, 2);
+        newUserLevel = REFERRAL_LEVEL_MAPPING(referrerLevel);
         console.log('[REFERRAL] Regular referral, referrer level:', referrerLevel, '-> new user level:', newUserLevel);
       }
       
-      const newUserScore = newUserLevel * 20;
-      
-      // Apply benefits to new user
+      // Only upgrade level. Type1 bonus (referrer) and type2 bonus (referred) already applied at signup
+      // via applyReferralOnSignup — verification approval just confirms the level.
       await pool.query(
-        `UPDATE trust_profiles SET 
-          trust_level = $1,
-          trust_score = $2,
-          type1_points = type1_points + $3,
-          type2_points = type2_points + $4,
+        `UPDATE trust_profiles SET
+          trust_level = GREATEST(trust_level, $1),
           updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $5`,
-        [newUserLevel, newUserScore, REFERRAL_CONFIG.REFERRED_BONUS, REFERRAL_CONFIG.REFERRED_BONUS, userId]
+         WHERE user_id = $2`,
+        [newUserLevel, userId]
       );
-      
-      // Award bonus to referrer
-      if (referrerId) {
-        await pool.query(
-          `UPDATE trust_profiles SET 
-            type1_points = type1_points + $1,
-            updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = $2`,
-          [REFERRAL_CONFIG.REFERER_BONUS, referrerId]
-        );
-      }
       
       console.log(`[REFERRAL] Benefits applied on approval: User=${userId}, Level=${newUserLevel}, Referrer=${referrerId}`);
       
@@ -764,9 +704,10 @@ class TrustProfileService {
 
   async awardType2Points(userId, validationType) {
     try {
+
       let pointsToAdd = 0;
       let fieldToUpdate = null;
-      
+
       switch (validationType) {
         case 'kyc_verified':
           pointsToAdd = VALIDATION_CONFIG.KYC_VERIFIED_POINTS;
@@ -797,8 +738,8 @@ class TrustProfileService {
           fieldToUpdate = 'email_validated';
           break;
         case 'project_completed':
-          pointsToAdd = VALIDATION_CONFIG.PROJECT_COMPLETED_POINTS;
-          break;
+          // Project completion awards trust_score (not identity points) — handled by trustProfileHooks
+          return { success: false, reason: 'use_awardProjectCompletion_instead' };
         default:
           return { success: false, reason: 'unknown_validation_type' };
       }

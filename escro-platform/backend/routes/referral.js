@@ -2,6 +2,7 @@ import express from 'express';
 import { protect, adminOnly } from '../middleware/auth.js';
 import referralService from '../services/referralService.js';
 import pool from '../config/database.js';
+import { logAdminAction } from '../services/adminAuditService.js';
 
 const router = express.Router();
 
@@ -139,8 +140,7 @@ router.get('/admin/stats', protect, adminOnly, async (req, res) => {
 router.get('/admin/all-codes', protect, adminOnly, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM referral_codes WHERE user_id = $1 ORDER BY trust_level_bonus DESC',
-      [req.user.id]
+      'SELECT * FROM referral_codes ORDER BY trust_level_bonus DESC NULLS LAST, created_at DESC'
     );
     res.json({ codes: result.rows });
   } catch (err) {
@@ -181,14 +181,17 @@ router.post('/admin/generate-vip-code', protect, adminOnly, async (req, res) => 
     // Create new referral code with trust level bonus
     const adminId = req.user.id;
     
+    // Codurile generate de admin sunt single-use: o singură înregistrare per cod
     await pool.query(
-      'INSERT INTO referral_codes (user_id, code, is_active, max_uses, trust_level_bonus) VALUES ($1, $2, true, 1000, $3)',
+      'INSERT INTO referral_codes (user_id, code, is_active, max_uses, trust_level_bonus) VALUES ($1, $2, true, 1, $3)',
       [adminId, code, trust_level]
     );
-    
-    res.json({ 
-      success: true, 
-      code, 
+
+    await logAdminAction(req, 'vip_code_generate', 'referral_code', code, { trust_level });
+
+    res.json({
+      success: true,
+      code,
       trust_level,
       message: `Cod generat pentru Nivel ${trust_level}: ${code}`
     });

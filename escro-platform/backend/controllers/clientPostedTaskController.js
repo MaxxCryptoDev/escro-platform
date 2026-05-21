@@ -43,12 +43,12 @@ export const createClientPostedTask = async (req, res) => {
       milestones_count: milestones.length
     });
 
-    // Start transaction
-    await pool.query('BEGIN');
-
+    // Start transaction on a dedicated client (pool.query uses different connections per call)
+    const client = await pool.connect();
     try {
-      // Create project with posted_by_client flag
-      const projectResult = await pool.query(
+      await client.query('BEGIN');
+
+      const projectResult = await client.query(
         `INSERT INTO projects (
           posted_by_client,
           client_id,
@@ -68,19 +68,15 @@ export const createClientPostedTask = async (req, res) => {
       );
 
       const project_id = projectResult.rows[0].id;
-      console.log('[DEBUG] Client-posted project created with ID:', project_id);
 
-      // Create milestones
       for (let index = 0; index < milestones.length; index++) {
         const milestone = milestones[index];
-        
+
         if (!milestone.title || milestone.percentage_of_budget === undefined) {
           throw new Error(`Milestone ${index + 1} missing required fields: title, percentage_of_budget`);
         }
 
-        console.log(`[DEBUG] Creating milestone ${index + 1}:`, milestone.title);
-
-        await pool.query(
+        await client.query(
           `INSERT INTO milestones (
             project_id,
             order_number,
@@ -105,8 +101,7 @@ export const createClientPostedTask = async (req, res) => {
         );
       }
 
-      // Commit transaction
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
 
       res.status(201).json({
         success: true,
@@ -115,10 +110,11 @@ export const createClientPostedTask = async (req, res) => {
         client_posting_status: 'pending',
         status: 'pending_admin_approval'
       });
-
     } catch (error) {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(e => console.warn('[rollback]', e.message));
       throw error;
+    } finally {
+      client.release();
     }
 
   } catch (error) {

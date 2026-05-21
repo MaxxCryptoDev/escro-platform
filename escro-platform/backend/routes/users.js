@@ -26,7 +26,15 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+const ALLOWED_PROFILE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_PROFILE_MIMES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Doar fotografii JPG/PNG/WebP/GIF sunt acceptate.'));
+  },
+});
 
 const router = express.Router();
 
@@ -70,30 +78,20 @@ const portfolioUpload = multer({
 // Get current user profile
 router.get('/profile', protect, getProfile);
 
-// Get public profile (no auth required) - MUST be before /:userId to avoid parameter matching
-router.get('/:userId/public-profile', async (req, res) => {
+// Get public profile — requires auth; strips email/phone for non-admins/non-self
+router.get('/:userId/public-profile', protect, async (req, res) => {
   try {
     const { userId } = req.params;
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    let isAdmin = false;
-    
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-        if (decoded.role === 'admin') {
-          isAdmin = true;
-        }
-      } catch (e) {
-        // Not a valid token, continue without admin
-      }
-    }
+    const isAdmin = req.user?.role === 'admin';
+    const isSelf = String(req.user?.id) === String(userId);
+    const showSensitive = isAdmin || isSelf;
+    const sensitiveCols = showSensitive ? 'email, phone,' : '';
 
     const query = `
-      SELECT 
+      SELECT
         id,
         name,
-        email,
-        phone,
+        ${sensitiveCols}
         profile_image_url,
         role,
         industry,
@@ -104,13 +102,15 @@ router.get('/:userId/public-profile', async (req, res) => {
         kyc_status,
         verification_date,
         created_at,
+        COALESCE(email_notifications, TRUE) AS email_notifications,
+        COALESCE(in_app_notifications, TRUE) AS in_app_notifications,
         COALESCE(
-          (SELECT COUNT(*) FROM projects p 
-           WHERE (p.client_id = $1 OR p.expert_id = $1 OR p.company_id = $1) 
+          (SELECT COUNT(*) FROM projects p
+           WHERE (p.client_id = $1 OR p.expert_id = $1 OR p.company_id = $1)
            AND p.status = 'completed'), 0
         ) as completed_projects
       FROM users
-      WHERE id = $1
+      WHERE id = $1 AND deleted_at IS NULL
     `;
 
     const result = await pool.query(query, [userId]);
@@ -119,14 +119,12 @@ router.get('/:userId/public-profile', async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Get portfolio items
     const portfolioResult = await pool.query(
       `SELECT id, title, description, file_url, file_type, media_type, thumbnail_url, display_order, created_at, client_name, project_year, results, technologies, category, is_featured
        FROM portfolio_items WHERE user_id = $1 ORDER BY is_featured DESC, display_order ASC, created_at DESC`,
       [userId]
     );
 
-    // Add placeholder stats that can be populated later
     const user = result.rows[0];
     res.json({
       ...user,
@@ -141,7 +139,7 @@ router.get('/:userId/public-profile', async (req, res) => {
 });
 
 // Get completed projects for a user
-router.get('/:userId/completed-projects', async (req, res) => {
+router.get('/:userId/completed-projects', protect, async (req, res) => {
   try {
     const { userId } = req.params;
     
@@ -170,8 +168,8 @@ router.get('/:userId/completed-projects', async (req, res) => {
   }
 });
 
-// Get all users (for directory) - public endpoint
-router.get('/', getAllUsers);
+// Get all users (for directory) - requires auth
+router.get('/', protect, getAllUsers);
 
 // Upload profile image
 router.post('/profile-image', protect, upload.single('profile_image'), async (req, res) => {
@@ -180,7 +178,7 @@ router.post('/profile-image', protect, upload.single('profile_image'), async (re
   }
   
   try {
-    const imageUrl = `http://localhost:5000/uploads/profiles/${req.file.filename}`;
+    const imageUrl = `${process.env.SERVER_URL || 'http://localhost:5000'}/uploads/profiles/${req.file.filename}`;
     
     // Check if user already has a profile photo
     const userCheck = await pool.query('SELECT profile_image_url FROM users WHERE id = $1', [req.user.id]);
@@ -314,7 +312,7 @@ router.post('/portfolio', protect, portfolioUpload.single('file'), async (req, r
     if (req.file) {
       fileType = req.file.mimetype.startsWith('video') ? 'video' : 'image';
       mediaType = req.file.mimetype;
-      fileUrl = `http://localhost:5000/uploads/portfolio/${req.file.filename}`;
+      fileUrl = `${process.env.SERVER_URL || 'http://localhost:5000'}/uploads/portfolio/${req.file.filename}`;
       fileSize = req.file.size;
     }
     
@@ -331,6 +329,24 @@ router.post('/portfolio', protect, portfolioUpload.single('file'), async (req, r
   } catch (err) {
     console.error('Error uploading portfolio item:', err);
     res.status(500).json({ error: 'Failed to upload portfolio item' });
+  }
+});
+
+// Reorder MUST be defined before /portfolio/:itemId (Express matches first)
+router.put('/portfolio/reorder', protect, async (req, res) => {
+  try {
+    const { items } = req.body;
+    const userId = req.user.id;
+    for (const item of items) {
+      await pool.query(
+        `UPDATE portfolio_items SET display_order = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3`,
+        [item.display_order, item.id, userId]
+      );
+    }
+    res.json({ success: true, message: 'Portfolio reordered' });
+  } catch (err) {
+    console.error('Error reordering portfolio:', err);
+    res.status(500).json({ error: 'Failed to reorder portfolio' });
   }
 });
 
@@ -384,7 +400,8 @@ router.delete('/portfolio/:itemId', protect, async (req, res) => {
     
     // Try to delete the file
     try {
-      const filePath = result.rows[0].file_url.replace('http://localhost:5000/', '');
+      const rawUrl = result.rows[0].file_url || '';
+      const filePath = rawUrl.replace(/^https?:\/\/[^/]+\//, '');
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
@@ -399,22 +416,123 @@ router.delete('/portfolio/:itemId', protect, async (req, res) => {
   }
 });
 
-router.put('/portfolio/reorder', protect, async (req, res) => {
+router.put('/notification-preferences', protect, async (req, res) => {
   try {
-    const { items } = req.body; // Array of { id, display_order }
-    const userId = req.user.id;
-    
-    for (const item of items) {
-      await pool.query(
-        `UPDATE portfolio_items SET display_order = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3`,
-        [item.display_order, item.id, userId]
-      );
-    }
-    
-    res.json({ success: true, message: 'Portfolio reordered' });
+    const { email_notifications, in_app_notifications } = req.body;
+    await pool.query(
+      `UPDATE users SET email_notifications = $1, in_app_notifications = $2 WHERE id = $3`,
+      [email_notifications !== false, in_app_notifications !== false, req.user.id]
+    );
+    res.json({ success: true });
   } catch (err) {
-    console.error('Error reordering portfolio:', err);
-    res.status(500).json({ error: 'Failed to reorder portfolio' });
+    res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
+// GDPR — export all data
+router.get('/me/export-data', protect, async (req, res) => {
+  try {
+    const uid = req.user.id;
+    // GDPR export caps: hard limits per category to prevent OOM on heavy users
+    const CAP = { projects: 5000, messages: 5000, notifications: 1000, payouts: 5000, reviews: 5000, disputes: 5000 };
+
+    const [userRes, projectsRes, messagesRes, notifRes, payoutsRes, reviewsRes, disputesRes] = await Promise.all([
+      pool.query(
+        `SELECT id, name, email, role, phone, company, bio, expertise, industry, experience, kyc_status, created_at FROM users WHERE id = $1`,
+        [uid]
+      ),
+      pool.query(
+        `SELECT p.id, p.title, p.description, p.budget_ron, p.status, p.created_at
+         FROM projects p WHERE p.client_id = $1 OR p.expert_id = $1 OR p.company_id = $1
+         ORDER BY p.created_at DESC LIMIT ${CAP.projects}`,
+        [uid]
+      ),
+      pool.query(
+        `SELECT m.content, m.created_at, p.title AS project FROM messages m
+         JOIN projects p ON m.project_id = p.id WHERE m.sender_id = $1
+         ORDER BY m.created_at DESC LIMIT ${CAP.messages}`,
+        [uid]
+      ),
+      pool.query(
+        `SELECT type, title, message, created_at FROM notifications WHERE user_id = $1
+         ORDER BY created_at DESC LIMIT ${CAP.notifications}`,
+        [uid]
+      ),
+      pool.query(
+        `SELECT amount_ron, status, requested_at FROM payout_requests WHERE user_id = $1
+         ORDER BY requested_at DESC LIMIT ${CAP.payouts}`,
+        [uid]
+      ),
+      pool.query(
+        `SELECT rating, review_text, created_at FROM reviews WHERE reviewer_id = $1
+         ORDER BY created_at DESC LIMIT ${CAP.reviews}`,
+        [uid]
+      ),
+      pool.query(
+        `SELECT md.reason, md.status, md.created_at FROM milestone_disputes md
+         JOIN milestones m ON md.milestone_id = m.id
+         JOIN projects p ON m.project_id = p.id
+         WHERE md.raised_by = $1 OR p.client_id = $1 OR p.expert_id = $1 OR p.company_id = $1
+         ORDER BY md.created_at DESC LIMIT ${CAP.disputes}`,
+        [uid]
+      ),
+    ]);
+
+    const truncated = [];
+    if (projectsRes.rows.length === CAP.projects) truncated.push('projects');
+    if (messagesRes.rows.length === CAP.messages) truncated.push('messages_sent');
+    if (notifRes.rows.length === CAP.notifications) truncated.push('notifications');
+    if (disputesRes.rows.length === CAP.disputes) truncated.push('disputes');
+
+    const exportData = {
+      exported_at: new Date().toISOString(),
+      truncated_categories: truncated, // empty array if everything fit
+      limits: CAP,
+      user: userRes.rows[0],
+      projects: projectsRes.rows,
+      messages_sent: messagesRes.rows,
+      notifications: notifRes.rows,
+      payout_requests: payoutsRes.rows,
+      reviews_given: reviewsRes.rows,
+      disputes: disputesRes.rows,
+    };
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="escro-date-personale-${uid.substring(0, 8)}.json"`);
+    res.send(JSON.stringify(exportData, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: 'Export eșuat.' });
+  }
+});
+
+// GDPR — delete / anonymize account
+router.delete('/me/account', protect, async (req, res) => {
+  try {
+    const uid = req.user.id;
+    const userRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [uid]);
+    if (!userRes.rows.length) return res.status(404).json({ error: 'User not found.' });
+
+    // Block deletion if user has active escrow funds
+    const escrowCheck = await pool.query(
+      `SELECT COUNT(*) FROM escrow_accounts ea JOIN projects p ON ea.project_id = p.id
+       WHERE (p.client_id = $1 OR p.expert_id = $1 OR p.company_id = $1) AND ea.status = 'held'`,
+      [uid]
+    );
+    if (parseInt(escrowCheck.rows[0].count) > 0) {
+      return res.status(400).json({ error: 'Nu poți șterge contul dacă există fonduri active în escrow.' });
+    }
+
+    const anon = `deleted_${uid.substring(0, 8)}`;
+    await pool.query(
+      `UPDATE users SET
+         name = $1, email = $2, phone = NULL, bio = NULL, company = NULL,
+         profile_image_url = NULL, cui = NULL,
+         deleted_at = NOW(), kyc_status = 'rejected'
+       WHERE id = $3`,
+      [anon, `${anon}@deleted.escro`, uid]
+    );
+    res.json({ success: true, message: 'Contul a fost anonimizat și dezactivat.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Ștergere eșuată.' });
   }
 });
 

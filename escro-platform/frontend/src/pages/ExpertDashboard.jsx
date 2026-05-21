@@ -1,1832 +1,1285 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Header from '../components/Header';
-import VerificationModal from '../components/VerificationModal';
-import PostTaskModal from '../components/PostTaskModal';
+import { Icon, Avatar, StatusBadge, EmptyState, Spinner } from '../components/ui';
+import { fmtRON, fmtDate, avatarColor, serviceLabel } from '../utils/format';
 import axios from 'axios';
 
-const getInitials = (name) => {
-  if (!name) return '?';
-  const firstName = name.split(' ')[0];
-  return firstName[0].toUpperCase();
+function Sparkline({ data, width = 320, height = 70, color }) {
+  if (!data || data.length === 0) return null;
+  const values = data.map(d => (typeof d === 'object' ? d.v : d));
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / Math.max(1, values.length - 1)) * width;
+    const y = height - ((v - min) / range) * (height - 4) - 2;
+    return [x, y];
+  });
+  const linePath = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+  const areaPath = `${linePath} L${width},${height} L0,${height} Z`;
+  const last = pts[pts.length - 1];
+  const stroke = color || 'var(--accent-hi)';
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="expert-spark-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill="url(#expert-spark-grad)" />
+      <path d={linePath} stroke={stroke} fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={last[0]} cy={last[1]} r="6" fill="none" stroke={stroke} strokeWidth="1" opacity="0.4" />
+      <circle cx={last[0]} cy={last[1]} r="2.5" fill={stroke} />
+    </svg>
+  );
+}
+
+function UrgentBanner({ items, kind, onClick }) {
+  if (!items || items.length === 0) return null;
+  const isOne = items.length === 1;
+  const title = kind === 'deliveries'
+    ? (isOne ? 'Un milestone așteaptă livrarea ta urgent' : `${items.length} milestone-uri așteaptă livrarea ta urgent`)
+    : (isOne ? 'O acțiune urgentă' : `${items.length} acțiuni urgente`);
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '1rem',
+        padding: '1rem 1.25rem',
+        marginBottom: '1.25rem',
+        background: 'linear-gradient(135deg, var(--warning-bg) 0%, var(--accent-bg) 100%)',
+        border: '2px solid var(--warning)',
+        borderRadius: 'var(--r-md)',
+        cursor: 'pointer',
+        transition: 'all .15s',
+        boxShadow: '0 4px 16px rgba(245, 158, 11, .25)',
+      }}
+      onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+      onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+    >
+      <span style={{
+        width: 12, height: 12, borderRadius: '50%',
+        background: 'var(--warning)',
+        animation: 'urgent-pulse 1.6s infinite',
+        flexShrink: 0,
+      }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--fg-0)', marginBottom: 2 }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {items.slice(0, 3).map(p => p.title).join(' · ')}
+          {items.length > 3 ? ` +${items.length - 3} alte` : ''}
+        </div>
+      </div>
+      <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); onClick?.(); }}>
+        Livrează acum →
+      </button>
+    </div>
+  );
+}
+
+function KycBanner({ state, onboardingLoading, onStart }) {
+  if (state === 'done') return null;
+
+  const waitingForCall = state === 'awaiting_call';
+  const ready = state === 'ready';
+  const inProgress = state === 'in_progress';
+
+  const bg = waitingForCall || inProgress ? 'var(--bg-1)' : 'var(--warning-bg)';
+  const borderColor = waitingForCall || inProgress ? 'var(--border-1)' : 'var(--warning-border)';
+  const iconName = waitingForCall ? 'phone' : (inProgress ? 'clock' : 'shield');
+  const iconColor = waitingForCall || inProgress ? 'var(--fg-3)' : 'var(--warning)';
+  const iconBg = waitingForCall || inProgress ? 'var(--border-2)' : '#f59e0b22';
+
+  const title = waitingForCall
+    ? 'Așteaptă apelul de verificare cu administratorul'
+    : (inProgress ? 'Verificare KYC — în procesare' : 'Verifică-ți identitatea (KYC)');
+  const description = waitingForCall
+    ? 'După apelul de verificare cu adminul, poți începe verificarea KYC: identitate, document, IBAN.'
+    : (inProgress
+      ? 'Verificarea ta este în procesare la Stripe. Vei fi notificat când e completă și poți primi plăți.'
+      : 'Pornește verificarea KYC prin Stripe: identitate (CNP/CUI + document), apoi IBAN pentru a primi banii din milestone-uri.');
+
+  const stepStates = waitingForCall ? ['attention', 'pending', 'pending']
+    : (ready ? ['done', 'active', 'pending']
+      : (inProgress ? ['done', 'active', 'pending']
+        : ['done', 'done', 'done']));
+  const steps = ['Apel admin', 'KYC Stripe', 'IBAN'];
+
+  return (
+    <div style={{
+      marginBottom: '1.25rem', padding: '1rem 1.25rem',
+      background: bg, border: `1px solid ${borderColor}`,
+      borderRadius: 'var(--r-md)',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '1rem', flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 240 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+            background: iconBg, border: `1px solid ${borderColor}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Icon name={iconName} size={16} style={{ color: iconColor }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg-0)', marginBottom: 2 }}>{title}</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-2)' }}>{description}</div>
+          </div>
+        </div>
+        {ready && (
+          <button
+            className="btn btn-sm"
+            style={{ whiteSpace: 'nowrap', gap: 6, background: 'var(--warning)', color: '#fff', border: 'none', flexShrink: 0 }}
+            onClick={onStart}
+            disabled={onboardingLoading}
+          >
+            {onboardingLoading ? <Spinner size={12} inline /> : <Icon name="shield" size={13} />}
+            {onboardingLoading ? 'Se procesează...' : 'Începe verificarea KYC'}
+          </button>
+        )}
+      </div>
+
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        marginTop: '.875rem', paddingTop: '.875rem',
+        borderTop: `1px dashed ${borderColor}`,
+        flexWrap: 'wrap',
+      }}>
+        {steps.map((label, i) => {
+          const st = stepStates[i];
+          const stBg = st === 'done' ? 'var(--success-bg)'
+            : st === 'active' ? 'var(--accent-bg)'
+              : st === 'attention' ? 'var(--warning-bg)'
+                : 'var(--bg-2)';
+          const stColor = st === 'done' ? 'var(--success)'
+            : st === 'active' ? 'var(--accent-hi)'
+              : st === 'attention' ? 'var(--warning)'
+                : 'var(--fg-4)';
+          return (
+            <Fragment key={i}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 10px',
+                background: stBg,
+                color: stColor,
+                borderRadius: 99,
+                fontSize: 11,
+                fontFamily: 'var(--f-mono)',
+                letterSpacing: '.02em',
+                fontWeight: 600,
+              }}>
+                <span style={{
+                  width: 14, height: 14, borderRadius: '50%',
+                  display: 'inline-grid', placeItems: 'center',
+                  background: st === 'done' ? 'var(--success)' : st === 'active' ? 'var(--accent)' : st === 'attention' ? 'var(--warning)' : 'var(--border-2)',
+                  color: '#fff',
+                  fontSize: 8, fontWeight: 700,
+                }}>
+                  {st === 'done' ? <Icon name="check" size={7} /> : (i + 1)}
+                </span>
+                {label}
+              </div>
+              {i < 2 && <Icon name="chevron-right" size={10} style={{ color: 'var(--fg-4)' }} />}
+            </Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StackBanner({ tone, icon, title, items, onItemClick }) {
+  if (!items || items.length === 0) return null;
+  const bg = tone === 'warning' ? 'var(--warning-bg)' : tone === 'violet' ? 'var(--violet-bg)' : 'var(--accent-bg)';
+  const border = tone === 'warning' ? 'var(--warning-border)' : tone === 'violet' ? 'var(--violet-border)' : 'var(--accent-border)';
+  const color = tone === 'warning' ? 'var(--warning)' : tone === 'violet' ? 'var(--violet)' : 'var(--accent-hi)';
+  const btnBg = tone === 'warning' ? 'var(--warning)' : tone === 'violet' ? 'var(--violet)' : 'var(--accent-hi)';
+  return (
+    <div style={{
+      marginBottom: '1rem', padding: '0.875rem 1rem',
+      background: bg, border: `1px solid ${border}`,
+      borderRadius: 'var(--r-md)', display: 'flex', gap: '0.875rem', alignItems: 'flex-start',
+    }}>
+      <Icon name={icon} size={16} style={{ color, flexShrink: 0, marginTop: 1 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color, marginBottom: '0.375rem' }}>
+          {title}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+          {items.map((p, i) => (
+            <button
+              key={p.id || i}
+              onClick={() => onItemClick?.(p)}
+              style={{
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                background: btnBg, color: '#fff',
+                border: 'none', borderRadius: 'var(--r-sm)', padding: '3px 10px',
+              }}
+            >
+              {p.title} →
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VaultHero({ wallet, spark, completedCount, trustLevel, trustScore, monthlyLabels, onPayout, onWallet }) {
+  const deltaUp = wallet.this_month >= wallet.last_month;
+  const fmtNum = (v) => new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 }).format(Math.round(v || 0));
+
+  return (
+    <div className="vault" style={{ marginBottom: '2rem' }}>
+      <div className="vault-content" style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '2rem', alignItems: 'center' }}>
+        <div>
+          <div className="h-eyebrow" style={{ marginBottom: '1rem' }}>
+            <Icon name="trending-up" size={11} /> Câștiguri ESCRO · Total
+          </div>
+          <div className="vault-num">
+            <em>{Math.round(wallet.total_earned).toLocaleString('ro-RO')}</em>
+            <span className="vault-cur">RON</span>
+          </div>
+          <p style={{ marginTop: '1rem', maxWidth: '46ch', fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.55 }}>
+            Câștiguri din proiecte finalizate. Fondurile sunt debursate automat la aprobarea fiecărui milestone.
+          </p>
+          <div style={{ display: 'flex', gap: '1.25rem', marginTop: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div>
+              <div className="h-eyebrow" style={{ marginBottom: '.25rem', fontSize: 9 }}>
+                <Icon name="check" size={9} style={{ color: 'var(--success)' }} /> Net disponibil
+              </div>
+              <div style={{ fontSize: 16, color: 'var(--success)', fontFamily: 'var(--f-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtNum(wallet.net_available)} RON
+              </div>
+            </div>
+            <div className="v-divider" />
+            <div>
+              <div className="h-eyebrow" style={{ marginBottom: '.25rem', fontSize: 9 }}>
+                <Icon name="clock" size={9} style={{ color: 'var(--warning)' }} /> În procesare
+              </div>
+              <div style={{ fontSize: 16, color: 'var(--warning)', fontFamily: 'var(--f-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtNum(wallet.in_processing)} RON
+              </div>
+            </div>
+            <div className="v-divider" />
+            <div>
+              <div className="h-eyebrow" style={{ marginBottom: '.25rem', fontSize: 9 }}>
+                <Icon name="x" size={9} style={{ color: 'var(--danger)' }} /> Eșuate
+              </div>
+              <div style={{ fontSize: 16, color: wallet.failed > 0 ? 'var(--danger)' : 'var(--fg-1)', fontFamily: 'var(--f-mono)' }}>
+                {fmtNum(wallet.failed)} RON
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: '1.25rem', display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+            <button className="btn btn-primary btn-sm" onClick={onPayout} disabled={wallet.net_available < 50}>
+              <Icon name="credit-card" size={12} /> Retrage net disponibil
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={onWallet}>
+              <Icon name="wallet" size={12} /> Portofel & istoric
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '.5rem' }}>
+            <div className="h-eyebrow" style={{ margin: 0 }}>Ultimele 30 zile</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 18, color: 'var(--fg-0)', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtNum(wallet.this_month)} <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>RON</span>
+              </span>
+              {wallet.last_month > 0 && (
+                <span style={{
+                  fontFamily: 'var(--f-mono)', fontSize: 10.5,
+                  color: deltaUp ? 'var(--success)' : 'var(--danger)',
+                  fontWeight: 600,
+                }}>
+                  <Icon name={deltaUp ? 'arrow-up' : 'arrow-down'} size={9} style={{ verticalAlign: '-1px' }} /> {Math.abs(wallet.delta_pct).toFixed(1)}% vs luna trecută
+                </span>
+              )}
+            </div>
+          </div>
+          <Sparkline data={spark} width={320} height={70} />
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--fg-4)',
+            marginTop: '.25rem', marginBottom: '1rem',
+          }}>
+            <span>{monthlyLabels.start}</span>
+            <span>azi · {monthlyLabels.end}</span>
+          </div>
+
+          <div style={{ paddingTop: '1rem', borderTop: '1px solid var(--border-1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '.5rem' }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--fg-3)' }}>Trust profile</span>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11.5, color: 'var(--accent-hi)', fontWeight: 600 }}>
+                L{trustLevel} · {trustScore} pts
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1, 2, 3, 4, 5].map(n => (
+                <div key={n} style={{
+                  flex: 1, height: 6, borderRadius: 3,
+                  background: n <= trustLevel ? 'linear-gradient(90deg, var(--accent-lo), var(--accent-hi))' : 'var(--border-1)',
+                  boxShadow: n <= trustLevel ? '0 0 8px var(--accent-glow)' : 'none',
+                }} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--fg-2)', marginTop: '.75rem' }}>
+              <span style={{ color: 'var(--fg-3)' }}>Proiecte finalizate</span>
+              <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--fg-0)' }}>{completedCount}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon, delta, deltaDir, sublabel, isText }) {
+  return (
+    <div className="stat">
+      <div className="stat-h">
+        <div className="stat-l">{label}</div>
+        <div className="stat-i"><Icon name={icon} size={13} /></div>
+      </div>
+      {isText ? (
+        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 18, fontVariantNumeric: 'tabular-nums', color: 'var(--fg-0)', margin: '0.25rem 0 0.5rem' }}>
+          {value}
+        </div>
+      ) : (
+        <div className="stat-v"><em>{value}</em></div>
+      )}
+      <div className="stat-f">
+        {delta && (
+          <span className={`stat-delta ${deltaDir === 'down' ? 'down' : ''}`}>
+            <Icon name={deltaDir === 'down' ? 'arrow-down' : 'arrow-up'} size={10} /> {delta}
+          </span>
+        )}
+        {sublabel && <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{sublabel}</span>}
+      </div>
+    </div>
+  );
+}
+
+function PmGroupCard({ pm, subTasks, onClick, onSubClick }) {
+  const budget = parseFloat(pm.budget_ron) || 0;
+  const completed = subTasks.filter(st => st.status === 'completed').length;
+  const idStr = pm.id ? String(pm.id).replace(/\D/g, '').slice(0, 4).padStart(4, '0') : '0000';
+
+  return (
+    <div className="proj" onClick={onClick} style={{ cursor: 'pointer' }}>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        fontSize: 10.5, fontFamily: 'var(--f-mono)', fontWeight: 600,
+        color: 'var(--accent-hi)', background: 'var(--accent-bg)',
+        border: '1px solid var(--accent-border)', borderRadius: 4,
+        padding: '2px 7px', textTransform: 'uppercase', letterSpacing: '0.06em',
+        marginBottom: 10,
+      }}>
+        <Icon name="layers" size={10} /> Proiect PM · {subTasks.length} task{subTasks.length === 1 ? '' : 'uri'}
+        {pm.synthetic && (
+          <span style={{ marginLeft: 8, color: 'var(--fg-3)', fontWeight: 500 }}>
+            · context client
+          </span>
+        )}
+      </div>
+
+      <div className="proj-h">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="proj-id">PM-{idStr}</div>
+          <div className="proj-t" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {pm.title}
+          </div>
+        </div>
+        <StatusBadge status={pm.status} />
+      </div>
+
+      <div className="proj-d">{pm.description || pm.brief || 'Proiect Project Management.'}</div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: subTasks.length > 0 ? 12 : 0 }}>
+        <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+          {completed}/{subTasks.length} task{subTasks.length === 1 ? '' : '-uri'} finalizate
+        </span>
+        <div className="proj-amt">
+          <em>{Math.round(budget).toLocaleString('ro-RO')}</em>
+          <span className="proj-cur">RON</span>
+        </div>
+      </div>
+
+      {subTasks.length > 0 && (
+        <div style={{
+          background: 'var(--bg-1)',
+          border: '1px solid var(--border-1)',
+          borderRadius: 'var(--r-sm)',
+          padding: '0.5rem 0.75rem',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          <div style={{ fontSize: 10, fontFamily: 'var(--f-mono)', color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
+            Task-uri în proiect
+          </div>
+          {subTasks.map((st, i) => {
+            const partner = st.expert_name || st.company_name || st.assigned_expert_name;
+            return (
+              <div
+                key={st.id}
+                onClick={(e) => { e.stopPropagation(); onSubClick?.(st); }}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  gap: 8, padding: '6px 0',
+                  borderTop: i > 0 ? '1px solid var(--border-1)' : 'none',
+                  cursor: 'pointer', fontSize: 12.5,
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                  <Icon name="flag" size={11} style={{ color: 'var(--accent-hi)', flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--fg-1)', fontWeight: 500 }}>
+                    {st.title || `Task ${i + 1}`}
+                  </span>
+                </span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                  {partner && (
+                    <span style={{ fontSize: 11, color: 'var(--fg-3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Avatar user={{ name: partner, color: avatarColor('expert') }} size="sm" />
+                      <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{partner}</span>
+                    </span>
+                  )}
+                  <StatusBadge status={st.status} />
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-2)', minWidth: 70, textAlign: 'right' }}>
+                    {fmtRON(st.budget_ron)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectCard({ p, userId, onClick }) {
+  const budget = p.budget_ron || p.budget || 0;
+  const progress = p.progress || 0;
+  const isPrestator = String(p.expert_id) === String(userId)
+    || String(p.assigned_expert_id) === String(userId)
+    || String(p.company_id) === String(userId);
+  const isExpert = isPrestator; // back-compat alias used below
+  const partnerName = isExpert
+    ? (p.client_name || p.company_name || null)
+    : (p.expert_name || p.assigned_expert_name || null);
+
+  // Livrare e responsabilitatea prestatorului — afișează badge doar dacă userul curent
+  // chiar este prestatorul asignat pe proiect. Pentru ceilalți (vizualizare ecosystem
+  // sau client) e doar zgomot vizual.
+  const needsDeliver = parseInt(p.pending_deliveries) > 0 && isPrestator;
+  const needsSign = parseInt(p.pending_contracts_for_me) > 0;
+  const idStr = p.id ? String(p.id).replace(/\D/g, '').slice(0, 4).padStart(4, '0') : '0000';
+
+  return (
+    <div className="proj" onClick={onClick} style={{ position: 'relative', cursor: 'pointer' }}>
+      {(needsDeliver || needsSign) && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+          {needsDeliver && (
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+              background: 'var(--warning-bg)', color: 'var(--warning)',
+              border: '1px solid var(--warning-border)', letterSpacing: '.02em',
+            }}>↑ LIVREAZĂ</span>
+          )}
+          {needsSign && (
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+              background: 'var(--warning-bg)', color: 'var(--warning)',
+              border: '1px solid var(--warning-border)', letterSpacing: '.02em',
+            }}>✍ SEMNEAZĂ</span>
+          )}
+        </div>
+      )}
+      <div className="proj-h">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="proj-id">ESC-{idStr}</div>
+          <div className="proj-t" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.title}</div>
+        </div>
+        <StatusBadge status={p.status} />
+      </div>
+      <div className="proj-d">{p.description || p.brief || 'Proiect în desfășurare.'}</div>
+      {p.service_type && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: '0.875rem' }}>
+          <span className="tag">{serviceLabel(p.service_type)}</span>
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.625rem' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: 'var(--fg-2)', minWidth: 0 }}>
+          {partnerName ? (
+            <>
+              <Avatar user={{ name: partnerName, color: avatarColor('company') }} size="sm" />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{partnerName}</span>
+            </>
+          ) : (
+            <span style={{ color: 'var(--fg-3)' }}>Client</span>
+          )}
+        </div>
+        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{progress}%</span>
+      </div>
+      <div className="bar"><div className="bar-fill" style={{ width: `${progress}%` }} /></div>
+      <div className="proj-foot">
+        <div>
+          <div className="proj-amt">
+            <em>{Math.round(budget).toLocaleString('ro-RO')}</em>
+            <span className="proj-cur">RON</span>
+          </div>
+        </div>
+        {p.milestones_total != null && (
+          <span style={{ fontSize: 10.5, fontFamily: 'var(--f-mono)', color: 'var(--fg-3)' }}>
+            {p.milestones_done || 0}/{p.milestones_total} ms
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const EVENT_META = {
+  milestone_delivered: { icon: 'upload',        color: 'var(--accent-hi)', bg: 'var(--accent-bg)',  label: 'a livrat milestone-ul' },
+  milestone_approved:  { icon: 'check',         color: 'var(--success)',   bg: 'var(--success-bg)', label: 'a aprobat milestone-ul' },
+  funds_released:      { icon: 'trending-up',   color: 'var(--success)',   bg: 'var(--success-bg)', label: 'a eliberat fondurile' },
+  escrow_deposit:      { icon: 'lock',          color: 'var(--warning)',   bg: 'var(--warning-bg)', label: 'a depus fonduri în escrow' },
+  escrow_funded:       { icon: 'lock',          color: 'var(--warning)',   bg: 'var(--warning-bg)', label: 'a depus fonduri în escrow pentru' },
+  project_completed:   { icon: 'flag',          color: 'var(--accent-hi)', bg: 'var(--accent-bg)',  label: 'a finalizat proiectul' },
+  message_sent:        { icon: 'message-circle',color: 'var(--fg-2)',      bg: 'var(--border-1)',   label: 'a trimis un mesaj pe' },
+  project_created:     { icon: 'plus',          color: 'var(--fg-2)',      bg: 'var(--border-1)',   label: 'Proiect nou creat:' },
+  expert_assigned:     { icon: 'user-check',    color: 'var(--accent-hi)', bg: 'var(--accent-bg)',  label: 'te-a asignat pe' },
+  company_assigned:    { icon: 'building',      color: 'var(--accent-hi)', bg: 'var(--accent-bg)',  label: 'te-a asignat pe' },
+  task_assigned:       { icon: 'briefcase',     color: 'var(--accent-hi)', bg: 'var(--accent-bg)',  label: 'te-a asignat pe' },
+  project_approved:    { icon: 'check',         color: 'var(--success)',   bg: 'var(--success-bg)', label: 'a aprobat proiectul' },
+  project_rejected:    { icon: 'x',             color: 'var(--danger)',    bg: 'var(--danger-bg)',  label: 'a respins proiectul' },
+  account_approved:    { icon: 'shield',        color: 'var(--success)',   bg: 'var(--success-bg)', label: 'a aprobat contul tău' },
+  account_rejected:    { icon: 'x',             color: 'var(--danger)',    bg: 'var(--danger-bg)',  label: 'a respins contul tău' },
+  admin_edit:          { icon: 'edit',          color: 'var(--warning)',   bg: 'var(--warning-bg)', label: 'a modificat proiectul' },
+  contract_ready:      { icon: 'file-text',     color: 'var(--accent-hi)', bg: 'var(--accent-bg)',  label: 'Contract de semnat pe' },
+  contract_signed:     { icon: 'check-circle',  color: 'var(--success)',   bg: 'var(--success-bg)', label: 'Contract semnat pe' },
+  task_acceptance_required: { icon: 'briefcase', color: 'var(--accent-hi)', bg: 'var(--accent-bg)', label: 'te-a invitat pe' },
+  task_accepted:       { icon: 'check-circle',  color: 'var(--success)',   bg: 'var(--success-bg)', label: 'a acceptat task-ul' },
+  task_rejected_by_expert: { icon: 'x',         color: 'var(--danger)',    bg: 'var(--danger-bg)',  label: 'a refuzat task-ul' },
+  task_rejected_by_client: { icon: 'x',         color: 'var(--danger)',    bg: 'var(--danger-bg)',  label: 'a respins task-ul' },
+  task_approval_required:  { icon: 'flag',      color: 'var(--warning)',   bg: 'var(--warning-bg)', label: 'Task de aprobat pe' },
+  milestone_disputed:  { icon: 'alert-triangle', color: 'var(--danger)',   bg: 'var(--danger-bg)',  label: 'a deschis o dispută pe' },
+  modification_proposed: { icon: 'edit',        color: 'var(--warning)',   bg: 'var(--warning-bg)', label: 'a propus modificări pe' },
+  dispute_resolved:    { icon: 'shield',        color: 'var(--success)',   bg: 'var(--success-bg)', label: 'Dispută rezolvată pe' },
 };
 
-const getFirstName = (name) => {
-  if (!name) return '?';
-  return name.split(' ')[0];
-};
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins || 1} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'ieri';
+  if (days < 7) return `${days}z`;
+  return new Date(dateStr).toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' });
+}
+
+function ActivityPanel({ activity, navigate }) {
+  return (
+    <div className="card">
+      <div style={{ padding: '0.5rem 0' }}>
+        {activity.length === 0 ? (
+          <div style={{ padding: '2.5rem 1.25rem', textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
+            Nicio activitate recentă
+          </div>
+        ) : activity.slice(0, 10).map((ev, i) => {
+          const meta = EVENT_META[ev.event_type] || EVENT_META.message_sent;
+          const isLast = i === Math.min(activity.length, 10) - 1;
+          const clickable = !!ev.project_id;
+          return (
+            <div
+              key={i}
+              onClick={() => {
+                if (!ev.project_id) return;
+                if (ev.task_id) navigate(`/project/${ev.task_id}/assignment/${ev.project_id}`);
+                else navigate(`/project/${ev.project_id}`);
+              }}
+              className="activity-row"
+              style={{
+                borderBottom: isLast ? 'none' : undefined,
+                cursor: clickable ? 'pointer' : 'default',
+              }}
+              onMouseEnter={e => { if (clickable) e.currentTarget.style.background = 'var(--bg-2)'; }}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <div style={{
+                flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
+                background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Icon name={meta.icon} size={14} style={{ color: meta.color }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-1)', lineHeight: 1.4 }}>
+                  {ev.actor_name
+                    ? <><b style={{ fontWeight: 600 }}>{ev.actor_name}</b>{' '}<span style={{ color: 'var(--fg-2)' }}>{meta.label}</span></>
+                    : <span style={{ color: 'var(--fg-2)' }}>{meta.label}</span>
+                  }
+                </div>
+                <div style={{
+                  fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--fg-3)',
+                  marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {ev.milestone_title ? `${ev.milestone_title} · ` : ''}{ev.project_title}
+                  {ev.amount ? ` · ${parseFloat(ev.amount).toLocaleString('ro-RO')} RON` : ''}
+                </div>
+              </div>
+              <div style={{ flexShrink: 0, fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--fg-4)' }}>
+                {timeAgo(ev.event_time)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="card-foot">
+        <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>Ultimele 24 ore</span>
+      </div>
+    </div>
+  );
+}
+
+function buildEarningsStats(earnings) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const dayBucket = new Map();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    dayBucket.set(d.toISOString().slice(0, 10), 0);
+  }
+
+  let thisMonth = 0;
+  let lastMonth = 0;
+  const tm = today.getMonth();
+  const ty = today.getFullYear();
+  const lm = tm === 0 ? 11 : tm - 1;
+  const ly = tm === 0 ? ty - 1 : ty;
+
+  earnings.forEach(e => {
+    if (!e.released_at) return;
+    const d = new Date(e.released_at);
+    const amount = parseFloat(e.expert_amount_ron) || 0;
+    const k = d.toISOString().slice(0, 10);
+    if (dayBucket.has(k)) dayBucket.set(k, dayBucket.get(k) + amount);
+    if (d.getMonth() === tm && d.getFullYear() === ty) thisMonth += amount;
+    else if (d.getMonth() === lm && d.getFullYear() === ly) lastMonth += amount;
+  });
+
+  const spark = Array.from(dayBucket.values());
+  const deltaPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : (thisMonth > 0 ? 100 : 0);
+
+  const months = ['ian', 'feb', 'mar', 'apr', 'mai', 'iun', 'iul', 'aug', 'sep', 'oct', 'noi', 'dec'];
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - 29);
+  const monthlyLabels = {
+    start: `${startDate.getDate()} ${months[startDate.getMonth()]}`,
+    end: `${today.getDate()} ${months[today.getMonth()]}`,
+  };
+
+  return { spark, thisMonth, lastMonth, deltaPct, monthlyLabels };
+}
 
 export default function ExpertDashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const { user, logout } = useAuth();
-  
-  console.log('[DEBUG ExpertDashboard] Current user from context:', user);
-  
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'projects');
-  const [statusFilter, setStatusFilter] = useState('all');
-  
-  // Check verification status from user context
-  const [userVerificationStatus, setUserVerificationStatus] = useState('pending');
-  
-  // Update verification status when user changes
-  useEffect(() => {
-    if (user?.kyc_status) {
-      setUserVerificationStatus(user.kyc_status);
-    }
-  }, [user]);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [selectedMilestone, setSelectedMilestone] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview');
   const [projects, setProjects] = useState([]);
-  const [myProjects, setMyProjects] = useState([]);
-  const [myPostedTasks, setMyPostedTasks] = useState([]);
-  const [showPostTaskModal, setShowPostTaskModal] = useState(false);
+  const [trustProfile, setTrustProfile] = useState(null);
+  const [activity, setActivity] = useState([]);
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [stripeStatus, setStripeStatus] = useState(null);
+  const [earnings, setEarnings] = useState([]);
+  const [onboardingLoading, setOnboardingLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [profileData, setProfileData] = useState({
-    firstName: '',
-    lastName: '',
-    email: user?.email || '',
-    phone: '',
-    company: '',
-    profile_image_url: '',
-    expertise: '',
-    bio: '',
-    portfolio_description: '',
-    industry: '',
-    experience: '',
-    role: 'expert'
-  });
-  const [profileImagePreview, setProfileImagePreview] = useState(null);
-  const [portfolio, setPortfolio] = useState([]);
-  const [portfolioFile, setPortfolioFile] = useState(null);
-  const [portfolioPreview, setPortfolioPreview] = useState(null);
-  const [portfolioTitle, setPortfolioTitle] = useState('');
-  const [portfolioDesc, setPortfolioDesc] = useState('');
-  const [uploadingPortfolio, setUploadingPortfolio] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [trustProfile, setTrustProfile] = useState(null);
-  const isModalOpenRef = useRef(false);
-  const isFirstLoadRef = useRef(true);
-  const containerRef = useRef(null);
-
-  // Track when modal is open to prevent unnecessary resets
-  useEffect(() => {
-    isModalOpenRef.current = showVerificationModal;
-  }, [showVerificationModal]);
-
-  // Auto-refresh verification status every 60 seconds to catch admin approvals
-  useEffect(() => {
-    const checkVerification = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('/api/users/profile', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        const kyc_status = response.data.user?.kyc_status || 'pending';
-        console.log('[DEBUG] KYC Status:', kyc_status);
-        setUserVerificationStatus(kyc_status);
-        
-        // Only show modal if not already verified and modal is not already open
-        if (kyc_status !== 'verified' && !isModalOpenRef.current) {
-          console.log('[DEBUG] User not verified, checking for existing call...');
-          try {
-            const callResponse = await axios.get('/api/verification-calls/my-call', {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            console.log('[DEBUG] Verification call response:', callResponse.data.data);
-            if (!callResponse.data.data) {
-              console.log('[DEBUG] No verification call found, showing modal');
-              setShowVerificationModal(true);
-            } else {
-              console.log('[DEBUG] Verification call already exists');
-            }
-          } catch (err) {
-            console.error('[DEBUG] Error checking verification calls:', err.message);
-            console.log('[DEBUG] Showing modal due to error');
-            setShowVerificationModal(true);
-          }
-        } else if (kyc_status === 'verified') {
-          console.log('[DEBUG] User already verified, no modal needed');
-        }
-      } catch (err) {
-        console.error('[DEBUG] Failed to check verification status:', err.message);
-      }
-    };
-
-    // Check immediately on mount (after a small delay to ensure token is available)
-    console.log('[DEBUG] ExpertDashboard mounted, checking verification...');
-    setTimeout(() => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        checkVerification();
-      }
-    }, 500);
-    
-    // Then check every 60 seconds to give users time to complete forms
-    const verificationInterval = setInterval(checkVerification, 60000);
-    return () => clearInterval(verificationInterval);
-  }, []);
+  const [pendingReviews, setPendingReviews] = useState([]);
 
   useEffect(() => {
-    fetchProjects();
-    fetchMyPostedTasks();
-    loadProfileFromBackend();
-    fetchPortfolio();
-    fetchTrustProfile();
-  }, []);
-
-  useEffect(() => {
-    if (user?.id) {
-      fetchMyProjects();
-    }
-  }, [user?.id]);
-
-  // Sync activeTab with URL query params from Header dropdown navigation
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab && ['projects', 'myprojects', 'post-task', 'profile', 'pending-approval'].includes(tab)) {
-      setActiveTab(tab);
-    } else {
-      // If no tab param, default to projects
-      setActiveTab('projects');
-    }
+    setActiveTab(searchParams.get('tab') || 'overview');
   }, [searchParams]);
 
-  // Fetch messages when project is selected
-  useEffect(() => {
-    if (selectedProject && (selectedProject.company_id || selectedProject.expert_id || (selectedProject.client_id && selectedProject.client_id !== selectedProject.company_id))) {
-      console.log('[DEBUG ExpertDashboard] Fetching messages for project:', selectedProject.id, 'company_id:', selectedProject.company_id, 'expert_id:', selectedProject.expert_id, 'client_id:', selectedProject.client_id);
-      fetchProjectMessages(selectedProject.id);
-    }
-  }, [selectedProject?.id]);
+  const setTab = useCallback((id) => {
+    setActiveTab(id);
+    const next = new URLSearchParams(searchParams);
+    if (id === 'overview') next.delete('tab'); else next.set('tab', id);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
-  const loadProfileFromBackend = async () => {
+  const token = localStorage.getItem('token');
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
+
+  const fetchData = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/users/profile', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.data.user) {
-        const fullName = response.data.user.name || '';
-        const nameParts = fullName.split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
-        setProfileData(prev => ({
-          ...prev,
-          firstName: firstName,
-          lastName: lastName,
-          email: response.data.user.email || '',
-          phone: response.data.user.phone || '',
-          company: response.data.user.company || '',
-          profile_image_url: response.data.user.profile_image_url || '',
-          expertise: response.data.user.expertise || '',
-          bio: response.data.user.bio || '',
-          portfolio_description: response.data.user.portfolio_description || '',
-          industry: response.data.user.industry || '',
-          experience: response.data.user.experience || '',
-          role: response.data.user.role || 'company'
-        }));
+      const [projRes, trustRes, actRes, walletRes, earnRes] = await Promise.allSettled([
+        axios.get('/api/projects', { headers }),
+        axios.get('/api/trust-profiles/my-trust-profile', { headers }),
+        axios.get('/api/activity', { headers }),
+        axios.get('/api/wallet/balance', { headers }),
+        axios.get('/api/wallet/earnings?limit=100', { headers }),
+      ]);
+      if (projRes.status === 'fulfilled') {
+        const data = projRes.value.data;
+        setProjects(data.projects || data || []);
       }
-    } catch (error) {
-      console.error('Failed to load profile:', error);
-    }
-  };
-
-  const fetchPortfolio = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/users/portfolio', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setPortfolio(response.data.portfolio || []);
-    } catch (err) {
-      console.error('Failed to load portfolio:', err);
-    }
-  };
-
-  const fetchTrustProfile = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/trust-profiles/my-trust-profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setTrustProfile(response.data);
-    } catch (err) {
-      console.error('Failed to load trust profile:', err);
-    }
-  };
-
-  const handlePortfolioFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setPortfolioFile(file);
-      setPortfolioPreview(URL.createObjectURL(file));
-    }
-  };
-
-  const handleUploadPortfolio = async () => {
-    if (!portfolioFile) return;
-    setUploadingPortfolio(true);
-    try {
-      const token = localStorage.getItem('token');
-      const formData = new FormData();
-      formData.append('file', portfolioFile);
-      formData.append('title', portfolioTitle || 'Untitled');
-      formData.append('description', portfolioDesc);
-      
-      await axios.post('/api/users/portfolio', formData, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      
-      setPortfolioFile(null);
-      setPortfolioPreview(null);
-      setPortfolioTitle('');
-      setPortfolioDesc('');
-      fetchPortfolio();
-      setSuccess('Portfolio item uploaded!');
-    } catch (err) {
-      console.error('Failed to upload portfolio:', err);
-      setError('Failed to upload portfolio item');
-    } finally {
-      setUploadingPortfolio(false);
-    }
-  };
-
-  const handleDeletePortfolio = async (itemId) => {
-    if (!confirm('Delete this portfolio item?')) return;
-    try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`/api/users/portfolio/${itemId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      fetchPortfolio();
-      setSuccess('Portfolio item deleted!');
-    } catch (err) {
-      console.error('Failed to delete portfolio:', err);
-    }
-  };
-
-  const fetchProjects = async () => {
-    try {
-      // Only set loading on first load
-      if (isFirstLoadRef.current) {
-        setLoading(true);
+      if (trustRes.status === 'fulfilled') setTrustProfile(trustRes.value.data);
+      if (actRes.status === 'fulfilled') setActivity(actRes.value.data.activity || []);
+      if (walletRes.status === 'fulfilled') {
+        setWalletBalance(walletRes.value.data.balance);
+        setStripeStatus(walletRes.value.data.stripe);
       }
-      
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/projects', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      const projectsData = response.data.projects || response.data;
-      const projectsArray = Array.isArray(projectsData) ? projectsData : [];
-      
-      // Debug: show all PM tasks statuses
-      const pmTasksDebug = projectsArray.filter(p => p.is_pm_task).map(p => ({ title: p.title, status: p.status, task_id: p.task_id }));
-      console.log('[DEBUG] All PM tasks from API:', JSON.stringify(pmTasksDebug, null, 2));
-      
-      // Filter logic:
-      // 1. Keep all regular projects (matching, direct)
-      // 2. Keep PM tasks from tasks table (is_pm_task = true) - show both PM and matching
-      const assignmentProjects = projectsArray.filter((p, index, self) => {
-        // Keep regular projects (not PM from tasks table, but PM standalone projects are OK)
-        if (!p.is_pm_task) {
-          return true;
-        }
-        
-        // For PM entries from tasks table - ALWAYS keep them (don't remove duplicates)
-        // Show both PM task AND matching collaboration
-        return true;
-      });
-      
-      console.log('[DEBUG] Projects after filter:', assignmentProjects.length);
-      
-      // Show only regular projects (PM tasks are pending projects from the projects table)
-      setProjects(assignmentProjects);
-      setError('');
-      
-      // Mark first load as done
-      if (isFirstLoadRef.current) {
-        isFirstLoadRef.current = false;
-        setLoading(false);
-      }
-    } catch (err) {
-      setError('Failed to fetch projects');
-      console.error(err);
-      if (isFirstLoadRef.current) {
-        setLoading(false);
-      }
-    }
-  };
-
-  const fetchMyProjects = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/projects', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      const projectsData = response.data.projects || response.data;
-      const projectsArray = Array.isArray(projectsData) ? projectsData : [];
-      
-      console.log('[DEBUG] ExpertDashboard.fetchMyProjects - ALL projects from API:', projectsArray.length);
-      console.log('[DEBUG] ExpertDashboard - user.id:', user?.id);
-      
-      // Filter: show only projects where user is involved
-      // Keep ALL projects including PM tasks (don't remove duplicates)
-      const userId = user?.id;
-      if (!userId) {
-        setMyProjects([]);
-        return;
-      }
-      const myProjectsOnly = projectsArray.filter(p => {
-        // Check if user is involved
-        const isInvolved = 
-          String(p.expert_id) === String(userId) ||
-          String(p.company_id) === String(userId) ||
-          String(p.client_id) === String(userId) ||
-          String(p.posted_by_expert) === String(userId);
-        
-        return isInvolved;
-      }).filter((p, index, self) => index === self.findIndex(x => x.id === p.id));
-      console.log('[DEBUG] ExpertDashboard.fetchMyProjects - filtered myProjectsOnly:', myProjectsOnly.length, 'userId:', userId);
-      
-      setMyProjects(myProjectsOnly);
-      setError('');
-    } catch (err) {
-      console.error('Failed to fetch my projects:', err);
-      setMyProjects([]);
-    }
-  };
-
-  const fetchProjectMessages = async (projectId) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/projects/${projectId}/messages`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      setMessages(response.data.messages || []);
-    } catch (err) {
-      console.error('Failed to fetch messages:', err);
-    }
-  };
-
-  const sendProjectMessage = async (projectId, recipientId, content) => {
-    try {
-      const token = localStorage.getItem('token');
-      await axios.post('/api/messages', 
-        { project_id: projectId, recipient_id: recipientId, content },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      fetchProjectMessages(projectId);
-      setNewMessage('');
-    } catch (err) {
-      console.error('Failed to send message:', err);
-    }
-  };
-
-  const fetchMyPostedTasks = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/experts/posted-tasks/my-tasks', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      console.log('[DEBUG] fetchMyPostedTasks:', response.data.data.length, 'tasks');
-      setMyPostedTasks(response.data.data || []);
-    } catch (err) {
-      console.error('Failed to fetch my posted tasks:', err);
-      setMyPostedTasks([]);
-    }
-  };
-
-  const handleProfileChange = (field, value) => {
-    setProfileData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleProfileImageChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    // Show preview immediately
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setProfileImagePreview(reader.result);
-    };
-    reader.readAsDataURL(file);
-
-    try {
-      const formData = new FormData();
-      formData.append('profile_image', file);
-
-      const response = await axios.post('/api/users/profile-image', formData, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-
-      if (response.data.profile_image_url) {
-        setProfileData(prev => ({
-          ...prev,
-          profile_image_url: response.data.profile_image_url
-        }));
-        setSuccess('✓ Profile picture updated successfully!');
-        setProfileImagePreview(null); // Only clear on success
-        setTimeout(() => setSuccess(''), 3000);
-      }
-    } catch (err) {
-      setError('Failed to upload profile picture: ' + err.message);
-      // Keep preview visible on error so user can retry
-    }
-  };
-
-  const handleSaveProfile = async () => {
-    try {
-      setLoading(true);
-      const submitData = {
-        ...profileData,
-        name: `${profileData.firstName} ${profileData.lastName}`.trim()
-      };
-      delete submitData.firstName;
-      delete submitData.lastName;
-      delete submitData.role;
-      const response = await axios.put('/api/users/profile', submitData, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      setSuccess('✓ Profile saved successfully!');
-      // Scroll to top
-      if (containerRef.current) {
-        containerRef.current.scrollTop = 0;
-      }
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError('Failed to save profile: ' + (err.response?.data?.error || err.message));
+      if (earnRes.status === 'fulfilled') setEarnings(earnRes.value.data.earnings || []);
+    } catch {
+      setError('Nu s-au putut încărca datele.');
     } finally {
       setLoading(false);
     }
+  }, [headers]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    axios.get('/api/reviews/pending', { headers })
+      .then(r => setPendingReviews(r.data.pending_reviews || []))
+      .catch(() => {});
+  }, [headers]);
+
+  // Dashboard "Proiecte & Taskuri" bucket: all non-marketplace items (global ecosystem view).
+  // Action panels below still filter to user-specific items (pending deliveries / approvals
+  // / contracts to sign), so each user sees only their own actionable work in the action lists.
+  const myProjects = useMemo(() => projects.filter(p =>
+    !p.is_marketplace &&
+    p.status !== 'pending_assignment'
+  ), [projects]);
+
+  // Party-scoped slice for the Overview tab — "Proiecte active", trust stats, completion
+  // counts show only projects the user is involved in (expert, client, company, or poster).
+  const ownProjects = useMemo(() => myProjects.filter(p =>
+    String(p.expert_id) === String(user?.id) ||
+    String(p.assigned_expert_id) === String(user?.id) ||
+    String(p.client_id) === String(user?.id) ||
+    String(p.company_id) === String(user?.id) ||
+    String(p.posted_by_expert) === String(user?.id) ||
+    String(p.posted_by_client) === String(user?.id)
+  ), [myProjects, user?.id]);
+  const ACTIVE_STATUSES = ['active', 'in_progress', 'assigned', 'pending_expert_approval', 'pending_client_approval', 'pending_admin_approval', 'open', 'review'];
+  const activeProjects = ownProjects.filter(p => ACTIVE_STATUSES.includes(p.status));
+  const reviewProjects = ownProjects.filter(p => p.status === 'review');
+  const completedCount = ownProjects.filter(p => p.status === 'completed').length;
+  const activeCount = activeProjects.length;
+
+  // Group projects for Lucrari tab: PM tasks gather their sub-tasks; standalone shows individually.
+  // For sub-tasks whose parent PM is NOT in myProjects (e.g., admin assigned the user as
+  // prestator on a task under another client's PM), we build a synthetic parent group
+  // from the joined task_* fields so the sub-task still appears nested under its PM context.
+  const groupedLucrari = useMemo(() => {
+    const pmMap = new Map();
+    const standalone = [];
+    myProjects.forEach(p => {
+      if (p.is_pm_task || p.assignment_type === 'pm_task') {
+        pmMap.set(p.id, { ...p, sub_tasks: [], synthetic: false });
+      }
+    });
+    myProjects.forEach(p => {
+      const isSubTask = p.task_id && p.assignment_type === 'task_assignment';
+      if (isSubTask) {
+        if (!pmMap.has(p.task_id)) {
+          pmMap.set(p.task_id, {
+            id: p.task_id,
+            title: p.task_title || 'Proiect PM',
+            description: p.task_description || '',
+            budget_ron: parseFloat(p.task_budget) || 0,
+            timeline_days: p.task_timeline,
+            status: 'in_progress',
+            is_pm_task: true,
+            assignment_type: 'pm_task',
+            client_id: p.client_id,
+            client_name: p.client_name,
+            synthetic: true,
+            sub_tasks: [],
+          });
+        }
+        pmMap.get(p.task_id).sub_tasks.push(p);
+      } else if (!(p.is_pm_task || p.assignment_type === 'pm_task')) {
+        standalone.push(p);
+      }
+    });
+    // PMs with NO worked-on sub-tasks (only pending_assignment ones) belong on the Marketplace
+    // until a prestator is assigned. Once at least one sub-task is in worked-on state
+    // (assigned / in_progress / completed / etc.), the PM appears here.
+    const pmGroups = [...pmMap.values()].filter(g => g.sub_tasks.length > 0);
+    return { pmGroups, standalone };
+  }, [myProjects]);
+
+  const pendingDeliveryProjects = useMemo(() =>
+    myProjects.filter(p =>
+      parseInt(p.pending_deliveries) > 0 &&
+      (String(p.expert_id) === String(user?.id) || String(p.company_id) === String(user?.id))
+    ),
+    [myProjects, user?.id]
+  );
+  const pendingApprovalProjects = useMemo(() =>
+    myProjects.filter(p =>
+      parseInt(p.pending_approvals) > 0 &&
+      String(p.client_id) === String(user?.id)
+    ),
+    [myProjects, user?.id]
+  );
+  const contractSignProjects = useMemo(() =>
+    myProjects.filter(p => parseInt(p.pending_contracts_for_me) > 0),
+    [myProjects]
+  );
+  // Tasks waiting for THIS user's approval as the PM owner / client. Admin or expert poster
+  // created a task on a PM and the PM client (which can also be an expert who created their
+  // own PM as buyer of services) must approve. Includes both prestator-side (assigned expert
+  // confirms admin edits) and client-side (PM owner confirms admin-created task).
+  const adminEditProjects = useMemo(() =>
+    projects.filter(p => p.status === 'pending_client_approval' &&
+      (String(p.expert_id) === String(user?.id) ||
+       String(p.assigned_expert_id) === String(user?.id) ||
+       String(p.client_id) === String(user?.id))),
+    [projects, user?.id]
+  );
+
+  const { spark, thisMonth, lastMonth, deltaPct, monthlyLabels } = useMemo(
+    () => buildEarningsStats(earnings),
+    [earnings]
+  );
+
+  const wallet = {
+    total_earned: walletBalance?.total_earned ?? 0,
+    net_available: walletBalance?.available ?? 0,
+    in_processing: (walletBalance?.pending_transfer ?? 0) + (walletBalance?.pending_payout ?? 0),
+    failed: walletBalance?.failed_transfer ?? 0,
+    this_month: thisMonth,
+    last_month: lastMonth,
+    delta_pct: deltaPct,
   };
 
-  const handleVerificationSubmit = async (data) => {
-    // VerificationModal already posted the data, we just need to close modal and show success
+  const trustScore = trustProfile?.trust_score || trustProfile?.score || 0;
+  const trustLevel = trustProfile?.trust_level || 1;
+  const kycStatus = user?.kyc_status || 'pending';
+  const firstName = user?.firstName || user?.name?.split(' ')[0] || 'utilizator';
+
+  const stripeConnected = !!stripeStatus?.onboarding_complete;
+  const stripePending = stripeStatus?.account_id === 'pending_stripe_integration';
+  const hasVerificationCall = !!trustProfile?.has_verification_call;
+
+  const kycState = stripeConnected
+    ? 'done'
+    : (!hasVerificationCall ? 'awaiting_call'
+      : (stripePending ? 'in_progress' : 'ready'));
+
+  const handleStripeOnboarding = async () => {
+    setOnboardingLoading(true);
     try {
-      setSuccess('✓ Apel de verificare programat cu succes! Vei primi un apel de la echipa noastră.');
-      setShowVerificationModal(false);
-      setTimeout(() => setSuccess(''), 5000);
-    } catch (err) {
-      setError('Eroare la programarea apelului de verificare');
+      const res = await axios.post('/api/stripe/onboarding', {}, { headers });
+      if (res.data.onboarding_url && !res.data.mock) {
+        window.location.assign(res.data.onboarding_url);
+        return;
+      }
+      setStripeStatus(s => ({ ...s, account_id: 'pending_stripe_integration' }));
+    } catch (e) {
+      setError(e.response?.data?.error || 'A apărut o eroare. Încearcă din nou.');
+    } finally {
+      setOnboardingLoading(false);
     }
   };
 
-  const getStatusLabel = (status) => {
-    const labels = {
-      pending: 'Pending',
-      in_progress: 'In Progress',
-      delivered: 'Delivered',
-      approved: 'Approved',
-      disputed: 'Disputed',
-      completed: 'Completed'
-    };
-    return labels[status] || status;
+  const handleAcceptAdminEdit = async (p) => {
+    try {
+      await axios.post(`/api/projects/${p.id}/accept-admin-edit`, {}, { headers });
+      fetchData();
+    } catch {
+      setError('Eroare la confirmarea modificării.');
+    }
   };
-
-  const getProjectStatusLabel = (status) => {
-    const labels = {
-      pending_admin_approval: 'Pending Approval',
-      pending_approval: 'Pending Approval',
-      approved: 'Approved',
-      pending_assignment: 'Pending Assignment',
-      assigned: 'Assigned',
-      in_progress: 'In Progress',
-      delivered: 'Delivered',
-      completed: 'Completed',
-      disputed: 'Disputed',
-      open: 'Open'
-    };
-    return labels[status] || status;
-  };
-
-  const getProjectStatusColor = (status) => {
-    const colors = {
-      pending_admin_approval: '#ffc107',
-      pending_approval: '#ffc107',
-      approved: '#17a2b8',
-      pending_assignment: '#ffc107',
-      assigned: '#28a745',
-      in_progress: '#17a2b8',
-      delivered: '#20c997',
-      completed: '#20c997',
-      disputed: '#dc3545',
-      open: '#6c757d'
-    };
-    return colors[status] || '#6c757d';
-  };
-
-  const handleSelectProject = (project) => {
-    console.log('Navigating to project:', project.id, 'task_id:', project.task_id, 'is_pm_task:', project.is_pm_task);
-    // For PM tasks, navigate to TaskDashboard, otherwise go to project detail
-    if (project.is_pm_task && project.task_id) {
-      navigate(`/task/${project.task_id}`);
-    } else {
-      navigate(`/expert/project/${project.id}`);
+  const handleRejectAdminEdit = async (p) => {
+    try {
+      await axios.post(`/api/projects/${p.id}/reject-admin-edit`, {}, { headers });
+      fetchData();
+    } catch {
+      setError('Eroare la respingerea modificării.');
     }
   };
 
-  const handleMilestoneSelect = (milestone) => {
-    setSelectedMilestone(milestone);
-  };
+  const tabs = [
+    { id: 'overview', label: 'Acasă', icon: 'home' },
+    { id: 'lucrari', label: 'Proiecte & Taskuri', icon: 'folder', count: myProjects.length || undefined },
+    ...(pendingDeliveryProjects.length > 0
+      ? [{ id: 'deliveries', label: 'De livrat', icon: 'upload', count: pendingDeliveryProjects.length, urgent: true }]
+      : []),
+  ];
 
-  // Remove sidebar - always show full width
-  const showSidebar = false;
+  const urgentTitle = pendingDeliveryProjects.length > 0
+    ? <>{pendingDeliveryProjects.length} {pendingDeliveryProjects.length === 1 ? 'milestone așteaptă' : 'milestone-uri așteaptă'} <em>livrarea ta</em>.</>
+    : (reviewProjects.length > 0
+        ? <>{reviewProjects.length} {reviewProjects.length === 1 ? 'proiect e' : 'proiecte sunt'} <em>în review</em>.</>
+        : <>Bună, <em>{firstName}</em>.</>);
 
-  if (loading && projects.length === 0) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2>Loading projects...</h2>
-      </div>
-    );
-  }
-
-// Professional Enterprise Design System
-const createUnifiedStyles = () => ({
-  container: {
-    padding: '2rem',
-    maxWidth: '1400px',
-    margin: '0 auto',
-    backgroundColor: '#f8fafc',
-    minHeight: 'calc(100vh - 65px)'
-  },
-  header: {
-    marginBottom: '2rem',
-    backgroundColor: 'white',
-    padding: '1.5rem 2rem',
-    borderRadius: '16px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-  },
-  headerTitle: {
-    fontSize: '1.75rem',
-    fontWeight: '700',
-    color: '#111827',
-    margin: '0 0 0.5rem 0',
-    letterSpacing: '-0.025em'
-  },
-  headerSubtitle: {
-    fontSize: '1rem',
-    color: '#6b7280',
-    margin: 0
-  },
-  tabsContainer: {
-    display: 'flex',
-    gap: '0.5rem',
-    marginBottom: '2rem',
-    borderBottom: '2px solid #e5e7eb',
-    paddingBottom: '0'
-  },
-  tab: {
-    padding: '0.75rem 1.25rem',
-    backgroundColor: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: '0.9375rem',
-    fontWeight: '500',
-    color: '#6b7280',
-    borderBottom: '2px solid transparent',
-    marginBottom: '-2px',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem'
-  },
-  tabActive: {
-    color: '#2563eb',
-    borderBottomColor: '#2563eb'
-  },
-  tabsRow: {
-    display: 'flex',
-    gap: '0.5rem',
-    marginBottom: '2rem',
-    backgroundColor: 'white',
-    padding: '0.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-  },
-  projectsList: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-    gap: '1.5rem'
-  },
-  projectCard: {
-    backgroundColor: 'white',
-    padding: '0',
-    borderRadius: '16px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-    border: '1px solid #e5e7eb',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    overflow: 'hidden'
-  },
-  projectCardHeader: {
-    padding: '1.25rem 1.5rem',
-    borderBottom: '1px solid #f3f4f6',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start'
-  },
-  projectCardBody: {
-    padding: '1.25rem 1.5rem'
-  },
-  projectCardFooter: {
-    padding: '1rem 1.5rem',
-    backgroundColor: '#f9fafb',
-    borderTop: '1px solid #f3f4f6',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  projectTitle: {
-    fontSize: '1.1rem',
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: '0.5rem'
-  },
-  projectMeta: {
-    fontSize: '0.9rem',
-    color: '#6b7280',
-    marginBottom: '0.5rem'
-  },
-  header: {
-    marginBottom: '2.5rem'
-  },
-  headerTitle: {
-    fontSize: '2rem',
-    fontWeight: '700',
-    color: '#1a202c',
-    margin: '0 0 0.5rem 0',
-    letterSpacing: '-0.5px'
-  },
-  headerSubtitle: {
-    fontSize: '1rem',
-    color: '#718096',
-    margin: 0
-  },
-  messageBox: {
-    padding: '1rem',
-    borderRadius: '8px',
-    marginBottom: '1.5rem',
-    borderLeft: '4px solid',
-    fontSize: '0.95rem'
-  },
-  errorBox: {
-    backgroundColor: '#fee',
-    borderLeftColor: '#dc3545',
-    color: '#721c24'
-  },
-  successBox: {
-    backgroundColor: '#efe',
-    borderLeftColor: '#28a745',
-    color: '#155724'
-  },
-  infoBox: {
-    backgroundColor: '#fff3cd',
-    borderLeftColor: '#ffc107',
-    color: '#856404'
-  },
-  projectsList: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-    gap: '1.5rem'
-  },
-  projectCard: {
-    backgroundColor: 'white',
-    padding: '1.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-    border: '1px solid #e2e8f0',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease'
-  },
-  projectTitle: {
-    fontSize: '1.1rem',
-    fontWeight: '700',
-    color: '#1a202c',
-    marginBottom: '0.75rem'
-  },
-  projectMeta: {
-    fontSize: '0.9rem',
-    color: '#718096',
-    marginBottom: '0.5rem'
-  },
-  projectDetail: {
-    backgroundColor: '#f7fafc',
-    padding: '2rem',
-    borderRadius: '12px',
-    marginTop: '2rem',
-    border: '1px solid #e2e8f0'
-  },
-  detailGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '1.5rem',
-    marginTop: '1rem'
-  },
-  detailItem: {
-    padding: '1rem',
-    backgroundColor: 'white',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0'
-  },
-  detailLabel: {
-    fontSize: '0.85rem',
-    fontWeight: '700',
-    color: '#718096',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    marginBottom: '0.5rem'
-  },
-  detailValue: {
-    fontSize: '1.25rem',
-    fontWeight: '700',
-    color: '#1a202c'
-  },
-  button: {
-    padding: '0.75rem 1.5rem',
-    backgroundColor: '#2563eb',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '0.95rem',
-    fontWeight: '600',
-    transition: 'all 0.2s ease'
-  },
-  statusBadge: {
-    display: 'inline-block',
-    padding: '0.25rem 0.75rem',
-    borderRadius: '20px',
-    fontSize: '0.85rem',
-    fontWeight: '600'
-  },
-  card: {
-    backgroundColor: 'white',
-    padding: '1.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-    border: '1px solid #e2e8f0',
-    transition: 'all 0.3s ease'
-  },
-  formGroup: {
-    marginBottom: '1.25rem'
-  },
-  label: {
-    fontWeight: '600',
-    display: 'block',
-    marginBottom: '0.5rem',
-    color: '#1a202c',
-    fontSize: '0.95rem'
-  },
-  input: {
-    width: '100%',
-    padding: '0.75rem',
-    border: '1px solid #cbd5e0',
-    borderRadius: '6px',
-    fontSize: '1rem',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit'
-  },
-  textarea: {
-    width: '100%',
-    padding: '0.75rem',
-    border: '1px solid #cbd5e0',
-    borderRadius: '6px',
-    fontSize: '1rem',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box'
-  },
-  section: {
-    marginBottom: '2rem'
-  },
-  sectionTitle: {
-    fontSize: '1.3rem',
-    fontWeight: '700',
-    color: '#1a202c',
-    marginBottom: '1.5rem',
-    paddingBottom: '0.75rem',
-    borderBottom: '2px solid #e2e8f0'
-  },
-  twoColumn: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '1rem'
-  }
-  });
-
-  const profileStyles = {
-    input: {
-      width: '100%',
-      padding: '0.625rem 0.875rem',
-      border: '1px solid #d1d5db',
-      borderRadius: '8px',
-      fontSize: '0.9375rem',
-      outline: 'none',
-      transition: 'all 0.2s ease',
-      backgroundColor: 'white'
-    },
-    button: {
-      padding: '0.625rem 1rem',
-      borderRadius: '8px',
-      fontSize: '0.875rem',
-      fontWeight: '500',
-      cursor: 'pointer',
-      border: 'none',
-      transition: 'all 0.2s ease'
-    },
-    saveButton: {
-      padding: '0.875rem 1.5rem',
-      backgroundColor: '#2563eb',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      fontSize: '1rem',
-      fontWeight: '600',
-      cursor: 'pointer',
-      width: '100%',
-      marginTop: '0.5rem',
-      transition: 'all 0.2s ease'
-    }
-  };
-
-  const styles = createUnifiedStyles();
+  if (loading) return <div className="escro-page"><Spinner /></div>;
 
   return (
-    <>
-      <Header currentPage="dashboard" />
-      <div style={styles.container} ref={containerRef}>
-        {/* Pending Verification Banner */}
-        {userVerificationStatus !== 'verified' && (
-          <div style={{
-            backgroundColor: '#fff3cd',
-            border: '2px solid #ffc107',
-            borderRadius: '8px',
-            padding: '1.5rem',
-            marginBottom: '1.5rem',
-            textAlign: 'center',
-            fontSize: '1.1rem',
-            fontWeight: '600',
-            color: '#856404'
-          }}>
-            ⏳ Contul dumneavoastră este în curs de aprobare de către administrator. După aprobare, veți putea posta taskuri și proiecte.
+    <div className="escro-page fade-up">
+      <style>{`
+        @keyframes urgent-pulse {
+          0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, .65); }
+          70%  { box-shadow: 0 0 0 14px rgba(245, 158, 11, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        @media (max-width: 900px) {
+          .dash-2col { grid-template-columns: 1fr !important; }
+          .vault-content { grid-template-columns: 1fr !important; gap: 1.5rem !important; }
+        }
+        @media (max-width: 640px) {
+          .dash-projects { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+
+      {pendingDeliveryProjects.length > 0 && (
+        <UrgentBanner
+          items={pendingDeliveryProjects}
+          kind="deliveries"
+          onClick={() => setTab('deliveries')}
+        />
+      )}
+
+      <div className="page-head" style={{ marginBottom: '2rem' }}>
+        <div>
+          <div className="h-eyebrow">
+            <Icon name="user" size={11} /> Dashboard · Expert
           </div>
-        )}
-        
-        {error && (
-          <div style={{ ...styles.messageBox, ...styles.errorBox, marginBottom: '1.5rem' }}>
-            <strong>Error:</strong> {error}
-          </div>
-        )}
-
-            {selectedProject && (
-                <div style={{
-                  backgroundColor: 'white',
-                  borderRadius: '12px',
-                  padding: '2rem',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  maxHeight: 'calc(100vh - 200px)',
-                  overflowY: 'auto',
-                  position: 'sticky',
-                  top: '100px',
-                  border: '1px solid #e9ecef'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#1a202c', fontWeight: '700' }}>Project Details</h3>
-                    <button
-                      onClick={() => setSelectedProject(null)}
-                      style={{
-                        backgroundColor: '#f0f0f0',
-                        border: 'none',
-                        fontSize: '1.5rem',
-                        cursor: 'pointer',
-                        color: '#666',
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#e0e0e0';
-                        e.currentTarget.style.color = '#333';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f0f0f0';
-                        e.currentTarget.style.color = '#666';
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div style={{ marginBottom: '2rem' }}>
-                    <h4 style={{ margin: '0 0 0.75rem 0', color: '#666', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Title</h4>
-                    <p style={{ margin: 0, fontWeight: '600', color: '#1a202c', fontSize: '1.1rem', lineHeight: '1.4' }}>{selectedProject.title}</p>
-                  </div>
-
-                  <div style={{ marginBottom: '2rem' }}>
-                    <h4 style={{ margin: '0 0 0.75rem 0', color: '#666', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</h4>
-                    <p style={{ margin: 0, color: '#4a5568', fontSize: '0.95rem', lineHeight: '1.6' }}>
-                      {selectedProject.description}
-                    </p>
-                  </div>
-
-                  <div style={{ marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '2px solid #f0f4f8' }}>
-                    <h4 style={{ margin: '0 0 1.2rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      💰 Escrow & Milestones
-                    </h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-                      <div style={{ 
-                        backgroundColor: 'linear-gradient(135deg, #e7f5ff 0%, #f0f8ff 100%)',
-                        padding: '1.2rem',
-                        borderRadius: '8px',
-                        border: '1px solid #b3d9ff',
-                        transition: 'transform 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                        <div style={{ fontSize: '0.8rem', color: '#1971c2', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Total Budget</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0b7285' }}>
-                          {selectedProject.budget_ron} RON
-                        </div>
-                      </div>
-                      <div style={{ 
-                        backgroundColor: 'linear-gradient(135deg, #fff9e6 0%, #fffbf0 100%)',
-                        padding: '1.2rem',
-                        borderRadius: '8px',
-                        border: '1px solid #ffd666',
-                        transition: 'transform 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                        <div style={{ fontSize: '0.8rem', color: '#b8860b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Milestones</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#d48806' }}>
-                          {selectedProject.milestones?.length || 0}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: '0', paddingTop: '0' }}>
-                    <h4 style={{ margin: '0 0 1.2rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      📋 Timeline
-                    </h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-                      <div style={{ 
-                        backgroundColor: '#f8f9fa',
-                        padding: '1.2rem',
-                        borderRadius: '8px',
-                        border: '1px solid #dee2e6',
-                        transition: 'transform 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                        <div style={{ fontSize: '0.8rem', color: '#6c757d', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Duration</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#495057' }}>
-                          {selectedProject.timeline_days} days
-                        </div>
-                      </div>
-                      <div style={{ 
-                        backgroundColor: '#f8f9fa',
-                        padding: '1.2rem',
-                        borderRadius: '8px',
-                        border: '1px solid #dee2e6',
-                        transition: 'transform 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                        <div style={{ fontSize: '0.8rem', color: '#6c757d', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Status</div>
-                        <div style={{ 
-                          fontSize: '0.95rem', 
-                          fontWeight: '700', 
-                          color: getProjectStatusColor(selectedProject.status),
-                          textTransform: 'capitalize',
-                          padding: '0.4rem 0.8rem',
-                          backgroundColor: getProjectStatusColor(selectedProject.status) + '15',
-                          borderRadius: '4px',
-                          display: 'inline-block'
-                        }}>
-                          {getProjectStatusLabel(selectedProject.status)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={() => navigate(`/expert/project/${selectedProject.id}`)}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      marginTop: '1.5rem',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.95rem',
-                      fontWeight: '600',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.5rem'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#0056b3';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#007bff';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                    onClick={() => navigate(`/expert/project/${selectedProject.id}`)}
-                  >
-                    💬 View Full Details & Chat
-                  </button>
-                </div>
-              )}
-
-        {/* Available Projects Tab */}
-        {activeTab === 'projects' && (
-          <>
-            <div style={styles.section}>
-              <div style={styles.projectsList}>
-                {projects.length === 0 ? (
-                  <p style={{ color: '#718096' }}>No projects available at the moment.</p>
-                ) : (
-                  projects.map(project => (
-                    <div 
-                      key={project.id}
-                      style={{
-                        ...styles.projectCard,
-                        cursor: 'pointer',
-                        backgroundColor: selectedProject?.id === project.id ? '#f0f8ff' : 'white',
-                        borderLeft: selectedProject?.id === project.id ? '4px solid #007bff' : '4px solid transparent'
-                      }}
-                      onClick={() => handleSelectProject(project)}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-4px)';
-                        e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.12)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                        <h3 style={{ ...styles.projectTitle, marginBottom: 0 }}>
-                          {project.assignment_type === 'task_assignment' ? project.title : (project.task_id ? project.task_title : project.title)}
-                        </h3>
-                        <span style={{
-                          padding: '0.25rem 0.5rem',
-                          borderRadius: '4px',
-                          fontSize: '0.7rem',
-                          fontWeight: '600',
-                          backgroundColor: project.is_pm_task ? '#e7f5ff' : '#d4edda',
-                          color: project.is_pm_task ? '#1971c2' : '#155724',
-                          border: `1px solid ${project.is_pm_task ? '#90caf9' : '#c3e6cb'}`
-                        }}>
-                          {project.is_pm_task ? '📋 PM Task' : '🔗 Matching'}
-                        </span>
-                      </div>
-                      <p style={styles.projectMeta}>{project.description?.substring(0, 100)}...</p>
-                      <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#888' }}>
-                        📅 {project.created_at ? new Date(project.created_at).toLocaleDateString('ro-RO') : ''}
-                      </div>
-                      {project.is_pm_task && (
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
-{project.assigned_experts && project.assigned_experts.length > 0 ? (
-                            <>👨‍💼 Prestatori: <strong>{project.assigned_experts.map(e => getFirstName(e?.name || '?')).join(', ')}</strong></>
-                          ) : (
-                            <span style={{ color: '#999' }}>👨‍💼 Prestatori: Nu sunt prestatori asignați</span>
-                          )}
-                        </div>
-                      )}
-                      {!project.is_pm_task && project.expert_name && (
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
-                          👨‍💼 Prestator: <strong>{getFirstName(project.expert_name)}</strong>
-                        </div>
-                      )}
-                      {project.company_name && (
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
-                          🏢 Prestator: <strong>{getFirstName(project.company_name)}</strong>
-                        </div>
-                      )}
-                      {project.client_name && (
-                        <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#555' }}>
-                          👤 Beneficiar: <strong>{getFirstName(project.client_name)}</strong>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
-                        <span style={{ ...styles.projectBudget, color: '#007bff' }}>
-                          {project.budget_ron ? `${project.budget_ron} RON` : 'Budget negotiable'}
-                        </span>
-                        {project.timeline_days && (
-                          <span style={{ fontSize: '0.85rem', color: '#888' }}>
-                            ⏱️ {project.timeline_days} zile
-                          </span>
-                        )}
-                        <span style={{
-                          ...styles.statusBadge,
-                          backgroundColor: getProjectStatusColor(project.status) + '20',
-                          color: getProjectStatusColor(project.status)
-                        }}>
-                          {getProjectStatusLabel(project.status)}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* My Projects Tab */}
-        {activeTab === 'myprojects' && (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: showSidebar && selectedProject ? '1fr 450px' : '1fr', gap: '2rem', alignItems: 'flex-start' }}>
-              <div style={styles.section}>
-                <div style={styles.projectsList}>
-                  {myProjects.length === 0 ? (
-                    <p style={{ color: '#718096' }}>No projects created yet.</p>
-                  ) : (
-                    myProjects.map(project => (
-                      <div 
-                        key={project.id} 
-                        style={{
-                          ...styles.projectCard,
-                          cursor: 'pointer',
-                          backgroundColor: selectedProject?.id === project.id ? '#f0f8ff' : 'white',
-                          borderLeft: selectedProject?.id === project.id ? '4px solid #007bff' : '4px solid transparent'
-                        }}
-                        onClick={() => handleSelectProject(project)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-4px)';
-                          e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.12)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                          <h3 style={{ ...styles.projectTitle, marginBottom: 0 }}>
-                            {project.assignment_type === 'task_assignment' ? project.title : (project.task_id ? project.task_title : project.title)}
-                          </h3>
-                          <span style={{
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '4px',
-                            fontSize: '0.7rem',
-                            fontWeight: '600',
-                            backgroundColor: String(project.client_id) === String(user?.id) ? '#e8f5e9' : '#fff3e0',
-                            color: String(project.client_id) === String(user?.id) ? '#2e7d32' : '#e65100',
-                            border: `1px solid ${String(project.client_id) === String(user?.id) ? '#c8e6c9' : '#ffe0b2'}`
-                          }}>
-                            {String(project.client_id) === String(user?.id) ? '👤 Beneficiar' : '💼 Prestator'}
-                          </span>
-                        </div>
-                        <p style={styles.projectMeta}>
-                          {(project.assignment_type === 'task_assignment' ? project.description : (project.task_id ? project.task_description : project.description))?.substring(0, 80)}...</p>
-                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#888' }}>
-                          📅 {project.created_at ? new Date(project.created_at).toLocaleDateString('ro-RO') : ''}
-                        </div>
-                        {project.is_pm_task && project.assigned_experts && project.assigned_experts.length > 0 && (
-                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
-                            👨‍💼 Prestatori: <strong>{project.assigned_experts.map(e => getFirstName(e.name)).join(', ')}</strong>
-                          </div>
-                        )}
-                        {!project.is_pm_task && project.expert_name && (
-                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
-                            👨‍💼 Prestator: <strong>{getFirstName(project.expert_name)}</strong>
-                          </div>
-                        )}
-                        {project.company_name && (
-                          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555' }}>
-                            🏢 Prestator: <strong>{getFirstName(project.company_name)}</strong>
-                          </div>
-                        )}
-                        {project.client_name && (
-                          <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#555' }}>
-                            👤 Beneficiar: <strong>{getFirstName(project.client_name)}</strong>
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
-                          <span style={{ ...styles.projectBudget, color: '#007bff' }}>
-                            {project.task_id ? project.task_budget : project.budget_ron ? `${project.budget_ron} RON` : 'Budget negotiable'}
-                          </span>
-                          {(project.timeline_days || project.task_timeline) && (
-                            <span style={{ fontSize: '0.85rem', color: '#888' }}>
-                              ⏱️ {project.task_timeline || project.timeline_days} zile
-                            </span>
-                          )}
-                          <span style={{
-                            ...styles.statusBadge,
-                            backgroundColor: getProjectStatusColor(project.status) + '20',
-                            color: getProjectStatusColor(project.status)
-                          }}>
-                            {getProjectStatusLabel(project.status)}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {selectedProject && (
-                <div style={{
-                  backgroundColor: 'white',
-                  borderRadius: '12px',
-                  padding: '2rem',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  maxHeight: 'calc(100vh - 200px)',
-                  overflowY: 'auto',
-                  position: 'sticky',
-                  top: '100px',
-                  border: '1px solid #e9ecef'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#1a202c', fontWeight: '700' }}>Project Details</h3>
-                    <button
-                      onClick={() => setSelectedProject(null)}
-                      style={{
-                        backgroundColor: '#f0f0f0',
-                        border: 'none',
-                        fontSize: '1.5rem',
-                        cursor: 'pointer',
-                        color: '#666',
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#e0e0e0';
-                        e.currentTarget.style.color = '#333';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f0f0f0';
-                        e.currentTarget.style.color = '#666';
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div style={{ marginBottom: '2rem' }}>
-                    <h4 style={{ margin: '0 0 0.75rem 0', color: '#666', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Title</h4>
-                    <p style={{ margin: 0, fontWeight: '600', color: '#1a202c', fontSize: '1.1rem', lineHeight: '1.4' }}>{selectedProject.title}</p>
-                  </div>
-
-                  <div style={{ marginBottom: '2rem' }}>
-                    <h4 style={{ margin: '0 0 0.75rem 0', color: '#666', fontSize: '0.9rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</h4>
-                    <p style={{ margin: 0, color: '#4a5568', fontSize: '0.95rem', lineHeight: '1.6' }}>
-                      {selectedProject.description}
-                    </p>
-                  </div>
-
-                  <div style={{ marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '2px solid #f0f4f8' }}>
-                    <h4 style={{ margin: '0 0 1.2rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      💰 Escrow & Milestones
-                    </h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-                      <div style={{ 
-                        backgroundColor: 'linear-gradient(135deg, #e7f5ff 0%, #f0f8ff 100%)',
-                        padding: '1.2rem',
-                        borderRadius: '8px',
-                        border: '1px solid #b3d9ff',
-                        transition: 'transform 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                        <div style={{ fontSize: '0.8rem', color: '#1971c2', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Total Budget</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0b7285' }}>
-                          {selectedProject.budget_ron} RON
-                        </div>
-                      </div>
-                      <div style={{ 
-                        backgroundColor: 'linear-gradient(135deg, #fff9e6 0%, #fffbf0 100%)',
-                        padding: '1.2rem',
-                        borderRadius: '8px',
-                        border: '1px solid #ffd666',
-                        transition: 'transform 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                        <div style={{ fontSize: '0.8rem', color: '#b8860b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Milestones</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#d48806' }}>
-                          {selectedProject.milestones?.length || 0}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: '0', paddingTop: '0' }}>
-                    <h4 style={{ margin: '0 0 1.2rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      📋 Timeline
-                    </h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-                      <div style={{ 
-                        backgroundColor: '#f8f9fa',
-                        padding: '1.2rem',
-                        borderRadius: '8px',
-                        border: '1px solid #dee2e6',
-                        transition: 'transform 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                        <div style={{ fontSize: '0.8rem', color: '#6c757d', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Duration</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#495057' }}>
-                          {selectedProject.timeline_days} days
-                        </div>
-                      </div>
-                      <div style={{ 
-                        backgroundColor: '#f8f9fa',
-                        padding: '1.2rem',
-                        borderRadius: '8px',
-                        border: '1px solid #dee2e6',
-                        transition: 'transform 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                        <div style={{ fontSize: '0.8rem', color: '#6c757d', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Status</div>
-                        <div style={{ 
-                          fontSize: '0.95rem', 
-                          fontWeight: '700', 
-                          color: getProjectStatusColor(selectedProject.status),
-                          textTransform: 'capitalize',
-                          padding: '0.4rem 0.8rem',
-                          backgroundColor: getProjectStatusColor(selectedProject.status) + '15',
-                          borderRadius: '4px',
-                          display: 'inline-block'
-                        }}>
-                          {getProjectStatusLabel(selectedProject.status)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={() => navigate(`/expert/project/${selectedProject.id}`)}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      marginTop: '1.5rem',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.95rem',
-                      fontWeight: '600',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.5rem'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#0056b3';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#007bff';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                    onClick={() => navigate(`/expert/project/${selectedProject.id}`)}
-                  >
-                    💬 View Full Details & Chat
-                  </button>
-
-                  {selectedProject && (
-                    <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '2px solid #e9ecef' }}>
-                      <h4 style={{ margin: '0 0 1rem 0', color: '#1a202c', fontSize: '1rem', fontWeight: '700' }}>💬 Chat cu Compania</h4>
-                      <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                        <div style={{ padding: '0.5rem 0.75rem', backgroundColor: '#f7fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#48bb78' }}></span>
-                          <span style={{ fontSize: '0.75rem', color: '#718096' }}>Proiect: {selectedProject.title?.slice(0, 30)}...</span>
-                        </div>
-                        <div style={{ padding: '0.75rem', backgroundColor: '#f7fafc', borderBottom: '1px solid #e2e8f0', flex: 1, overflowY: 'auto', minHeight: '150px', maxHeight: '150px' }}>
-                          {messages.length === 0 ? (
-                            <p style={{ color: '#718096', fontSize: '0.8rem', textAlign: 'center', margin: '2rem 0' }}>Începe conversația...</p>
-                          ) : (
-                            messages.map((msg) => {
-                              const isMe = String(msg.sender_id) === String(user?.id);
-                              return (
-                                <div key={msg.id} style={{ marginBottom: '0.4rem', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                                    {!isMe && (
-                                      <div style={{
-                                        width: '24px',
-                                        height: '24px',
-                                        borderRadius: '50%',
-                                        backgroundColor: msg.sender_role === 'company' ? '#805ad5' : '#3182ce',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        color: 'white',
-                                        fontSize: '0.55rem',
-                                        fontWeight: 'bold',
-                                        flexShrink: 0
-                                      }}>
-                                        {getInitials(msg.sender_name)}
-                                      </div>
-                                    )}
-                                    <div style={{ 
-                                      padding: '0.4rem 0.6rem', 
-                                      borderRadius: isMe ? '12px 12px 4px 12px' : '12px 12px 12px 4px', 
-                                      backgroundColor: isMe ? '#3182ce' : '#fff', 
-                                      color: isMe ? 'white' : '#2d3748', 
-                                      fontSize: '0.75rem',
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                                      border: isMe ? 'none' : '1px solid #e2e8f0'
-                                    }}>
-                                      {msg.content}
-                                    </div>
-                                  </div>
-                                  <div style={{ fontSize: '0.65rem', color: '#a0aec0', marginTop: '0.15rem', paddingLeft: isMe ? 0 : '1.8rem', paddingRight: isMe ? '1.8rem' : 0 }}>
-                                    {new Date(msg.created_at).toLocaleString('ro-RO', { hour: '2-digit', minute: '2-digit' })}
-                                  </div>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                        <div style={{ padding: '0.5rem', backgroundColor: '#fff', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem' }}>
-                          <input 
-                            type="text" 
-                            value={newMessage} 
-                            onChange={(e) => setNewMessage(e.target.value)} 
-                            placeholder="Scrie un mesaj..."
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                let recipientId = selectedProject.company_id;
-                                if (!recipientId && selectedProject.client_id && selectedProject.client_id !== selectedProject.company_id) {
-                                  recipientId = selectedProject.client_id;
-                                }
-                                if (newMessage.trim() && recipientId) sendProjectMessage(selectedProject.id, recipientId, newMessage);
-                                else if (newMessage.trim()) alert('Nu există companie asignată la acest proiect');
-                              }
-                            }}
-                            style={{ 
-                              flex: 1, 
-                              padding: '0.5rem 0.75rem', 
-                              border: '1px solid #e2e8f0', 
-                              borderRadius: '20px', 
-                              fontSize: '0.8rem',
-                              outline: 'none'
-                            }} 
-                          />
-                          <button 
-                            onClick={() => { 
-                              // Expert sends to company, or to client if client is expert
-                              let recipientId = selectedProject.company_id;
-                              if (!recipientId && selectedProject.client_id && selectedProject.client_id !== selectedProject.company_id) {
-                                recipientId = selectedProject.client_id;
-                              }
-                              if (newMessage.trim() && recipientId) sendProjectMessage(selectedProject.id, recipientId, newMessage); 
-                              else if (newMessage.trim()) alert('Nu există companie asignată la acest proiect');
-                            }} 
-                            disabled={!newMessage.trim()}
-                            style={{ 
-                              padding: '0.5rem 1rem', 
-                              backgroundColor: newMessage.trim() ? '#3182ce' : '#cbd5e0', 
-                              color: 'white', 
-                              border: 'none', 
-                              borderRadius: '20px', 
-                              cursor: newMessage.trim() ? 'pointer' : 'not-allowed', 
-                              fontSize: '0.75rem',
-                              fontWeight: '600'
-                            }}
-                          >
-                            Trimite
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Post Task Tab */}
-        {activeTab === 'post-task' && (
-          <>
-            <div style={styles.section}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <button
-                  onClick={() => setShowPostTaskModal(true)}
-                  disabled={userVerificationStatus !== 'verified'}
-                  title={userVerificationStatus !== 'verified' ? 'Complete verification to post tasks' : 'Post a new task'}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    backgroundColor: userVerificationStatus === 'verified' ? '#007bff' : '#ccc',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: userVerificationStatus === 'verified' ? 'pointer' : 'not-allowed',
-                    fontSize: '0.95rem',
-                    fontWeight: '600',
-                    transition: 'all 0.2s',
-                    opacity: userVerificationStatus === 'verified' ? 1 : 0.6
-                  }}
-                  onMouseEnter={(e) => {
-                    if (userVerificationStatus === 'verified') {
-                      e.currentTarget.style.backgroundColor = '#0056b3';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (userVerificationStatus === 'verified') {
-                      e.currentTarget.style.backgroundColor = '#007bff';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }
-                  }}
-                >
-                  ➕ New Task
-                </button>
-              </div>
-
-              {(userVerificationStatus !== 'verified' || user?.kyc_status !== 'verified') && (
-                <div style={{ ...styles.messageBox, ...styles.infoBox, marginBottom: '1.5rem' }}>
-                  ⏳ <strong>Your account is pending verification.</strong> You can view your posted tasks but cannot post new ones until your verification call is completed.
-                </div>
-              )}
-
-              <h3 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '1rem', marginTop: '2rem' }}>📋 Your Posted Tasks</h3>
-              <div style={styles.projectsList}>
-                {myPostedTasks.length === 0 ? (
-                  <p style={{ color: '#718096' }}>No tasks posted yet. Click "New Task" to get started!</p>
-                ) : (
-                  myPostedTasks.map(task => (
-                    <div 
-                      key={task.id}
-                      style={{
-                        ...styles.projectCard,
-                        backgroundColor: task.client_posting_status === 'pending' ? '#fffbf0' : 'white'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                        <div>
-                          <h3 style={styles.projectTitle}>{task.title}</h3>
-                          <p style={styles.projectMeta}>{task.description?.substring(0, 100)}...</p>
-                        </div>
-                        <span style={{
-                          padding: '0.4rem 0.8rem',
-                          borderRadius: '4px',
-                          fontSize: '0.85rem',
-                          fontWeight: '600',
-                          backgroundColor: task.client_posting_status === 'pending' ? '#ffc10720' : 
-                                           task.client_posting_status === 'approved' ? '#28a74520' : '#dc354520',
-                          color: task.client_posting_status === 'pending' ? '#ffc107' : 
-                                 task.client_posting_status === 'approved' ? '#28a745' : '#dc3545'
-                        }}>
-                          {task.client_posting_status === 'pending' ? '⏳ Pending Approval' :
-                           task.client_posting_status === 'approved' ? '✅ Approved' : '❌ Rejected'}
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
-                        <div>
-                          <span style={styles.projectMeta}>💰 Budget:</span>
-                          <strong style={{ color: '#2563eb', display: 'block', fontSize: '1.1rem' }}>{task.budget_ron} RON</strong>
-                        </div>
-                        <div>
-                          <span style={styles.projectMeta}>⏱️ Timeline:</span>
-                          <strong style={{ color: '#2563eb', display: 'block', fontSize: '1.1rem' }}>{task.timeline_days} days</strong>
-                        </div>
-                        <div>
-                          <span style={styles.projectMeta}>🎯 Milestones:</span>
-                          <strong style={{ color: '#2563eb', display: 'block', fontSize: '1.1rem' }}>{task.milestone_count} milestones</strong>
-                        </div>
-                        <div>
-                          <span style={styles.projectMeta}>📅 Posted:</span>
-                          <strong style={{ color: '#2563eb', display: 'block', fontSize: '0.95rem' }}>
-                            {new Date(task.created_at).toLocaleDateString()}
-                          </strong>
-                        </div>
-                      </div>
-
-                      {task.client_posting_message && (
-                        <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f7fafc', borderRadius: '6px', borderLeft: '3px solid #007bff' }}>
-                          <p style={{ margin: 0, color: '#4a5568', fontSize: '0.9rem' }}><strong>Your message:</strong> {task.client_posting_message}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Profile Tab */}
-        {activeTab === 'profile' && (
-          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '20px',
-              padding: '2.5rem',
-              marginBottom: '1.5rem',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              border: '1px solid #e5e7eb',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '2rem'
-            }}>
-              <div style={{ position: 'relative' }}>
-                {profileData.profile_image_url || profileImagePreview ? (
-                  <img
-                    src={profileImagePreview || profileData.profile_image_url}
-                    alt="Profile"
-                    style={{
-                      width: '140px',
-                      height: '140px',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      border: '4px solid #2563eb',
-                      opacity: profileImagePreview ? 0.8 : 1
-                    }}
-                  />
-                ) : (
-                  <div style={{
-                    width: '140px',
-                    height: '140px',
-                    borderRadius: '50%',
-                    backgroundColor: '#e5e7eb',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '3rem',
-                    border: '4px solid #d1d5db'
-                  }}>
-                    👤
-                  </div>
-                )}
-                <label style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  right: 0,
-                  backgroundColor: '#3b82f6',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '36px',
-                  height: '36px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                }}>
-                  📷
-                  <input type="file" accept="image/*" onChange={handleProfileImageChange} style={{ display: 'none' }} />
-                </label>
-              </div>
-              
-              <div style={{ flex: 1 }}>
-                <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>
-                  {profileData.firstName} {profileData.lastName}
-                </h2>
-                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontSize: '1rem' }}>
-                  {profileData.company || 'Companie'}
-                </p>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{
-                    padding: '0.25rem 0.75rem',
-                    backgroundColor: '#dbeafe',
-                    color: '#1d4ed8',
-                    borderRadius: '9999px',
-                    fontSize: '0.8125rem',
-                    fontWeight: '500'
-                  }}>
-                    {user?.role === 'expert' ? '👨‍💼 Expert' : '🏢 Client'}
-                  </span>
-                  <span style={{
-                    padding: '0.25rem 0.75rem',
-                    backgroundColor: '#d1fae5',
-                    color: '#059669',
-                    borderRadius: '9999px',
-                    fontSize: '0.8125rem',
-                    fontWeight: '500'
-                  }}>
-                    ✓ Verificat
-                  </span>
-                </div>
-
-                {/* Points System */}
-                {trustProfile && (
-                  <div style={{
-                    marginTop: '1rem',
-                    padding: '1rem',
-                    backgroundColor: '#f9fafb',
-                    borderRadius: '12px',
-                    border: '1px solid #e5e7eb'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                      <span style={{ fontSize: '1rem' }}>🏆</span>
-                      <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#111827' }}>Sistem de Puncte</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
-                      <div style={{ textAlign: 'center', padding: '0.75rem', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                        <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#f59e0b' }}>⭐</div>
-                        <div style={{ fontSize: '1.125rem', fontWeight: '700', color: '#111827' }}>{Math.round(trustProfile.trust_score || 0)}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase' }}>Incredere</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '0.75rem', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                        <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#3b82f6' }}>🆔</div>
-                        <div style={{ fontSize: '1.125rem', fontWeight: '700', color: '#111827' }}>{trustProfile.type2_points || 0}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase' }}>Identitate</div>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '0.75rem', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                        <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#10b981' }}>🎁</div>
-                        <div style={{ fontSize: '1.125rem', fontWeight: '700', color: '#111827' }}>{trustProfile.type1_points || 0}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase' }}>Recompensa</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showPostTaskModal && (
-          <PostTaskModal
-            userType="client"
-            onClose={() => {
-              setShowPostTaskModal(false);
-              // Refresh posted tasks after modal closes
-              setTimeout(() => {
-                fetchMyPostedTasks();
-              }, 500);
-            }}
-            onSubmit={(response) => {
-              setSuccess('Task posted successfully! Admin will review it shortly.');
-              setTimeout(() => {
-                setSuccess('');
-              }, 3000);
-              fetchMyPostedTasks();
-            }}
-          />
-        )}
-
-        {showVerificationModal && (
-          <VerificationModal 
-            user={user} 
-            onClose={() => {
-              setShowVerificationModal(false);
-              // Check verification status when modal closes to catch any admin updates
-              setTimeout(() => {
-                const token = localStorage.getItem('token');
-                axios.get('/api/users/profile', {
-                  headers: { 'Authorization': `Bearer ${token}` }
-                }).then(response => {
-                  const kyc_status = response.data.user?.kyc_status;
-                  setUserVerificationStatus(kyc_status);
-                }).catch(err => console.error('Error checking status on close:', err));
-              }, 500);
-            }}
-            onSubmit={handleVerificationSubmit}
-          />
-        )}
+          <h1 className="h-title">{urgentTitle}</h1>
+          <p className="h-sub">
+            {activeCount} proiecte active · {completedCount} finalizate · Trust L{trustLevel}
+          </p>
+        </div>
+        <div className="page-actions">
+          <span className={`badge ${user?.verification_date ? 'badge-green' : 'badge-amber'} no-dot`}>
+            <Icon name={user?.verification_date ? 'check' : 'clock'} size={10} />
+            {user?.verification_date ? 'Cont verificat' : 'Cont neverificat'}
+          </span>
+          <span className={`badge ${kycStatus === 'verified' ? 'badge-green' : 'badge-amber'} no-dot`}>
+            <Icon name={kycStatus === 'verified' ? 'check' : 'alert-triangle'} size={10} />
+            KYC {kycStatus === 'verified' ? 'verificat' : 'neverificat'}
+          </span>
+          <button className="btn btn-secondary" onClick={() => navigate(`/profile/${user?.id}`)}>
+            <Icon name="user" size={14} /> Profil public
+          </button>
+          <button className="btn btn-primary" onClick={() => navigate('/directory')}>
+            <Icon name="search" size={14} /> Găsește proiecte
+          </button>
+        </div>
       </div>
-    </>
+
+      <div style={{ borderBottom: '1px solid var(--border-1)', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: 0 }}>
+          {tabs.map(t => (
+            <div
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                padding: '0.625rem 1rem', fontSize: 13, fontWeight: 500,
+                color: activeTab === t.id ? 'var(--fg-0)' : 'var(--fg-2)',
+                borderBottom: `2px solid ${activeTab === t.id ? 'var(--accent)' : 'transparent'}`,
+                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+                marginBottom: -1, transition: 'all .15s',
+              }}
+            >
+              <Icon name={t.icon} size={13} />
+              {t.label}
+              {t.count != null && (
+                <span style={{
+                  fontSize: 10.5, fontFamily: 'var(--f-mono)',
+                  color: t.urgent ? '#fff' : 'var(--fg-3)',
+                  background: t.urgent ? 'var(--warning)' : 'var(--border-1)',
+                  fontWeight: t.urgent ? 700 : 500,
+                  padding: '1px 6px', borderRadius: t.urgent ? 9 : 3,
+                  minWidth: t.urgent ? 16 : undefined, textAlign: 'center',
+                }}>{t.count}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {error && <div style={{ color: 'var(--danger)', padding: '1rem', textAlign: 'center' }}>{error}</div>}
+
+      {activeTab === 'overview' && (
+        <>
+          <KycBanner
+            state={kycState}
+            onboardingLoading={onboardingLoading}
+            onStart={handleStripeOnboarding}
+          />
+
+          {pendingReviews.length > 0 && (
+            <div className="card" style={{ borderColor: 'var(--accent)', borderWidth: 2, marginBottom: '1.25rem', background: 'var(--accent-bg)' }}>
+              <div className="card-body">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontSize: 22 }}>★</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--fg-0)' }}>
+                        {pendingReviews.length === 1 ? 'Ai o recenzie de lăsat' : `Ai ${pendingReviews.length} recenzii de lăsat`}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 2 }}>
+                        {pendingReviews.slice(0, 2).map(r => r.reviewable_user?.name).filter(Boolean).join(', ')}
+                        {pendingReviews.length > 2 ? ` și încă ${pendingReviews.length - 2}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => navigate(`/project/${pendingReviews[0].project_id}?tab=contracts`)}
+                  >
+                    Lasă recenzie →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <StackBanner
+            tone="warning"
+            icon="flag"
+            title={adminEditProjects.length === 1
+              ? 'Un task așteaptă aprobarea ta'
+              : `${adminEditProjects.length} task-uri așteaptă aprobarea ta`}
+            items={adminEditProjects}
+            onItemClick={(p) => navigate(`/project/${p.task_id || p.id}`)}
+          />
+
+          <StackBanner
+            tone="accent"
+            icon="upload"
+            title={pendingDeliveryProjects.length === 1
+              ? 'Ai un milestone de livrat'
+              : `Ai milestone-uri de livrat în ${pendingDeliveryProjects.length} proiecte`}
+            items={pendingDeliveryProjects}
+            onItemClick={(p) => navigate(`/project/${p.id}?tab=contracts`)}
+          />
+
+          <StackBanner
+            tone="accent"
+            icon="check"
+            title={pendingApprovalProjects.length === 1
+              ? 'Ai un livrabil de aprobat'
+              : `Ai livrabile de aprobat în ${pendingApprovalProjects.length} proiecte`}
+            items={pendingApprovalProjects}
+            onItemClick={(p) => navigate(`/project/${p.id}?tab=contracts`)}
+          />
+
+          <StackBanner
+            tone="warning"
+            icon="alert-triangle"
+            title={contractSignProjects.length === 1
+              ? 'Ai un contract de semnat'
+              : `Ai ${contractSignProjects.length} contracte de semnat`}
+            items={contractSignProjects}
+            onItemClick={(p) => navigate(`/project/${p.id}?tab=contracts`)}
+          />
+
+          <VaultHero
+            wallet={wallet}
+            spark={spark}
+            completedCount={completedCount}
+            trustLevel={trustLevel}
+            trustScore={trustScore}
+            monthlyLabels={monthlyLabels}
+            onPayout={() => navigate('/wallet')}
+            onWallet={() => navigate('/wallet')}
+          />
+
+          <div className="grid-4" style={{ marginBottom: '2rem' }}>
+            <StatCard label="Proiecte active" value={activeCount} icon="folder" sublabel="workspace" />
+            <StatCard
+              label="În review"
+              value={reviewProjects.length}
+              icon="flag"
+              sublabel={reviewProjects.length > 0 ? 'livrabile' : 'nicio livrare'}
+              delta={reviewProjects.length > 0 ? 'Livrabile' : null}
+            />
+            <StatCard label="Trust Level" value={`L${trustLevel}`} icon="shield" sublabel={`${trustScore} pts`} isText />
+            <StatCard
+              label="Câștig luna"
+              value={fmtRON(thisMonth)}
+              icon="trending-up"
+              sublabel={lastMonth > 0 ? `${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(1)}% vs luna trecută` : 'din escrow'}
+              isText
+            />
+          </div>
+
+          <div className="dash-2col" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: '1.5rem', alignItems: 'start' }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="section-h">
+                <h2 className="s-title">Proiecte <em>active</em></h2>
+                <span className="section-meta">{activeProjects.length} asignate</span>
+              </div>
+
+              {activeProjects.length === 0 ? (
+                <EmptyState
+                  icon="briefcase"
+                  title="Niciun proiect activ"
+                  description="Postează propriul tău proiect sau aplică la cele din Marketplace publicate de alte companii/persoane. Toate plățile sunt protejate prin escrow."
+                  action={
+                    <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => navigate('/create-project')}>
+                        <Icon name="plus" size={13} /> Postează proiect
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => navigate('/marketplace')}>
+                        <Icon name="search" size={13} /> Aplică în Marketplace
+                      </button>
+                    </div>
+                  }
+                />
+              ) : (
+                <>
+                  <div className="dash-projects" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem' }}>
+                    {activeProjects.slice(0, 4).map(p => (
+                      <ProjectCard key={p.id} p={p} userId={user?.id} onClick={() => navigate(`/project/${p.id}`)} />
+                    ))}
+                  </div>
+                  {activeProjects.length > 4 && (
+                    <div style={{ marginTop: '.75rem', textAlign: 'center' }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setTab('lucrari')}>
+                        Vezi toate {activeProjects.length} proiecte <Icon name="arrow-right" size={12} />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={{ minWidth: 0 }}>
+              <div className="section-h">
+                <h2 className="s-title">Activitate <em>live</em></h2>
+                <span className="section-meta">
+                  <span className="pulse ok" style={{ verticalAlign: '-1px', marginRight: 6 }} /> sincronizat
+                </span>
+              </div>
+              <ActivityPanel activity={activity} navigate={navigate} />
+
+              {pendingDeliveryProjects.length > 0 && (
+                <div className="card" style={{ marginTop: '1rem', padding: '1.25rem', background: 'linear-gradient(180deg, var(--bg-2), var(--bg-1))' }}>
+                  <div className="h-eyebrow"><Icon name="zap" size={11} /> Acțiune necesară</div>
+                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, lineHeight: 1.3, color: 'var(--fg-0)', marginBottom: '0.5rem', letterSpacing: '-0.01em' }}>
+                    Ai <em style={{ color: 'var(--warning)', fontStyle: 'italic' }}>{pendingDeliveryProjects.length}</em> milestone{pendingDeliveryProjects.length > 1 ? '-uri' : ''} de livrat.
+                  </div>
+                  <p style={{ fontSize: 12.5, color: 'var(--fg-2)', marginBottom: '0.875rem' }}>
+                    Livrarea la timp îți crește Trust Level-ul și te face vizibil pentru proiecte cu buget mai mare.
+                  </p>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setTab('deliveries')}>
+                    Vezi ce ai de livrat <Icon name="arrow-right" size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'lucrari' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {adminEditProjects.map(p => (
+            <div key={`confirm-${p.id}`} style={{
+              background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
+              borderRadius: 10, padding: '1rem 1.25rem',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: '1rem', flexWrap: 'wrap',
+            }}>
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--fg-0)', marginBottom: 2 }}>{p.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--warning)' }}>
+                  Adminul a modificat acest task. Verifică detaliile și confirmă sau respinge modificarea.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '.5rem', flexShrink: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--warning)', color: '#000', padding: '2px 8px', borderRadius: 99, marginRight: 4 }}>
+                  Necesită confirmare
+                </span>
+                <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/project/${p.id}`)}>
+                  <Icon name="eye" size={12} /> Detalii
+                </button>
+                <button className="btn btn-success btn-sm" onClick={() => handleAcceptAdminEdit(p)}>Acceptă</button>
+                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => handleRejectAdminEdit(p)}>Respinge</button>
+              </div>
+            </div>
+          ))}
+
+          <div className="card">
+            <div className="card-head">
+              <div className="card-title">Proiecte & Task-uri ({myProjects.length})</div>
+              <button className="btn btn-primary btn-sm" onClick={() => navigate('/create-project')}>
+                <Icon name="plus" size={12} /> Proiect nou
+              </button>
+            </div>
+            <div style={{ padding: '1rem' }}>
+              {myProjects.length === 0 ? (
+                <EmptyState
+                  icon="folder"
+                  title="Niciun proiect"
+                  description="Nu ești asignat la niciun proiect sau task momentan."
+                  action={
+                    <button className="btn btn-primary btn-sm" onClick={() => navigate('/marketplace')}>
+                      <Icon name="search" size={13} /> Vezi Marketplace
+                    </button>
+                  }
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {groupedLucrari.pmGroups.map(pm => (
+                    <PmGroupCard
+                      key={pm.id}
+                      pm={pm}
+                      subTasks={pm.sub_tasks}
+                      onClick={() => navigate(`/project/${pm.id}`)}
+                      onSubClick={(st) => navigate(`/project/${pm.id}/assignment/${st.id}`)}
+                    />
+                  ))}
+                  {groupedLucrari.standalone.length > 0 && (
+                    <div className="dash-projects" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem' }}>
+                      {groupedLucrari.standalone.map(p => (
+                        <ProjectCard key={p.id} p={p} userId={user?.id} onClick={() => navigate(`/project/${p.id}`)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'deliveries' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="card-head" style={{ marginBottom: '.5rem' }}>
+            <div className="card-title">Milestone-uri de livrat ({pendingDeliveryProjects.length})</div>
+          </div>
+          {pendingDeliveryProjects.length === 0 ? (
+            <EmptyState icon="check" title="Totul livrat" description="Nu ai nicio livrare în așteptare." />
+          ) : (
+            <div className="dash-projects" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem' }}>
+              {pendingDeliveryProjects.map(p => (
+                <ProjectCard key={p.id} p={p} userId={user?.id} onClick={() => navigate(`/project/${p.id}?tab=contracts`)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

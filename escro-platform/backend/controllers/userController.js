@@ -5,41 +5,43 @@ import trustProfileService from '../services/trustProfileService.js';
 export const getProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log('Getting profile for user:', userId);
 
     const query = `
-      SELECT 
-        id,
-        name,
-        email,
-        role,
-        expertise,
-        bio,
-        phone,
-        company,
-        profile_image_url,
-        portfolio_description,
-        industry,
-        experience,
-        kyc_status,
-        created_at,
-        updated_at
+      SELECT
+        id, name, email, role, expertise, bio, phone, company,
+        profile_image_url, portfolio_description, industry, experience,
+        kyc_status, verification_date, created_at, updated_at,
+        accepted_terms_version,
+        verification_call_acknowledged_at,
+        COALESCE(email_notifications, TRUE) AS email_notifications,
+        COALESCE(in_app_notifications, TRUE) AS in_app_notifications
       FROM users
       WHERE id = $1
     `;
 
     const result = await pool.query(query, [userId]);
-    console.log('Profile query result rows:', result.rows.length);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
+    const user = result.rows[0];
+
+    // T&C acceptance check
+    let requiresTermsAcceptance = false;
+    try {
+      const termsRes = await pool.query(`SELECT version FROM terms_versions WHERE is_current = TRUE LIMIT 1`);
+      const currentVersion = termsRes.rows[0]?.version;
+      if (currentVersion && user.accepted_terms_version !== currentVersion) {
+        requiresTermsAcceptance = true;
+      }
+    } catch { /* silent */ }
+
     const trustProfile = await trustProfileService.getTrustProfileById(userId);
 
     res.json({
       success: true,
-      user: result.rows[0],
+      user: { ...user, requires_terms_acceptance: requiresTermsAcceptance },
       trustProfile: trustProfile || null
     });
 
@@ -51,38 +53,42 @@ export const getProfile = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
+    const isAdmin = req.user?.role === 'admin';
+    // Non-admins see only public fields (no email/phone)
+    const sensitiveCols = isAdmin ? 'u.email, u.phone,' : '';
+
     const query = `
-      SELECT 
-        u.id, 
-        u.name, 
-        u.email, 
-        u.role, 
+      SELECT
+        u.id,
+        u.name,
+        u.role,
         u.company,
         u.expertise,
         u.industry,
         u.experience,
         u.bio,
-        u.phone,
+        ${sensitiveCols}
         u.profile_image_url,
         u.portfolio_description,
         u.created_at,
         u.kyc_status,
         COALESCE(
-          (SELECT COUNT(*) FROM projects p 
-           WHERE (p.client_id = u.id OR p.expert_id = u.id OR p.company_id = u.id) 
+          (SELECT COUNT(*) FROM projects p
+           WHERE (p.client_id = u.id OR p.expert_id = u.id OR p.company_id = u.id)
            AND p.status = 'completed'), 0
         ) as completed_projects,
         COALESCE(
-          (SELECT AVG(r.rating) FROM reviews r 
+          (SELECT AVG(r.rating) FROM reviews r
            WHERE r.reviewed_id = u.id), 0
         ) as rating,
         COALESCE(
-          (SELECT COUNT(*) FROM reviews r 
+          (SELECT COUNT(*) FROM reviews r
            WHERE r.reviewed_id = u.id), 0
         ) as reviews_count
       FROM users u
-      WHERE u.role IN ('client', 'expert', 'company')
+      WHERE u.role IN ('expert', 'company')
       AND u.kyc_status = 'verified'
+      AND u.deleted_at IS NULL
       ORDER BY u.created_at DESC
     `;
 

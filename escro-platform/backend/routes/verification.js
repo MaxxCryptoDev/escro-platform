@@ -1,13 +1,17 @@
 import express from 'express';
-import { 
-  createVerificationCall, 
-  getVerificationCall, 
+import {
+  createVerificationCall,
+  getVerificationCall,
   getAllVerificationCalls,
-  updateVerificationCallStatus
+  updateVerificationCallStatus,
+  acknowledgeVerification,
 } from '../controllers/verificationController.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// User acknowledges they'll be called on the phone they registered (first-login gate)
+router.post('/acknowledge', protect, acknowledgeVerification);
 
 // Create a verification call (protected, for users)
 router.post('/', protect, createVerificationCall);

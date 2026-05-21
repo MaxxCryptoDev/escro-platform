@@ -1,13 +1,15 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import pool from '../config/database.js';
 import { generateUserContractPDF, generateContractNumber } from '../utils/contractGenerator.js';
 import trustProfileService from '../services/trustProfileService.js';
 import referralService from '../services/referralService.js';
+import { sendEmail } from '../services/emailService.js';
 
 const generateToken = (id, email, role) => {
   return jwt.sign({ id, email, role }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
+    expiresIn: process.env.JWT_EXPIRE || '7d'
   });
 };
 
@@ -17,6 +19,29 @@ export const register = async (req, res, next) => {
 
     if (!email || !password || !name || !role) {
       return res.status(400).json({ message: 'Please provide all required fields' });
+    }
+
+    if (!['expert', 'company', 'individual'].includes(role)) {
+      return res.status(400).json({ message: 'Rol invalid. Sunt acceptate doar: expert, company, individual.' });
+    }
+
+    // Business roles (expert PFA/SRL, company SRL) MUST supply CUI + company name.
+    // 'individual' (persoană fizică) skips these — KYC will be done via Stripe individual flow.
+    if (['expert', 'company'].includes(role)) {
+      if (!cui || !String(cui).trim()) {
+        return res.status(400).json({ message: 'CUI obligatoriu pentru ' + (role === 'expert' ? 'expert (PFA/SRL)' : 'companie (SRL).') });
+      }
+      if (!company || !String(company).trim()) {
+        return res.status(400).json({ message: 'Denumirea firmei este obligatorie pentru acest tip de cont.' });
+      }
+    }
+
+    // Password policy: min 8 chars + must contain letter + digit
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ message: 'Parola trebuie să aibă minim 8 caractere.' });
+    }
+    if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+      return res.status(400).json({ message: 'Parola trebuie să conțină atât litere cât și cifre.' });
     }
 
     const userCheck = await pool.query(
@@ -30,25 +55,35 @@ export const register = async (req, res, next) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Get current T&C version — registration implies acceptance of current
+    const termsRes = await pool.query(`SELECT version FROM terms_versions WHERE is_current = TRUE LIMIT 1`);
+    const currentTermsVersion = termsRes.rows[0]?.version || null;
+
     const result = await pool.query(
-      `INSERT INTO users 
-       (email, password_hash, name, role, company, phone, expertise, bio, industry, experience, portfolio_description, cui, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) 
-       RETURNING id, email, name, role, company, phone, expertise, bio, industry, experience, portfolio_description, cui`,
-      [email, hashedPassword, name, role, company || null, phone || null, expertise || null, bio || null, industry || null, experience || null, portfolio_description || null, cui || null]
+      `INSERT INTO users
+       (email, password_hash, name, role, company, phone, expertise, bio, industry, experience, portfolio_description, cui,
+        accepted_terms_version, accepted_terms_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+       RETURNING id, email, name, role, company, phone, expertise, bio, industry, experience, portfolio_description, cui, kyc_status, verification_date, verification_call_acknowledged_at`,
+      [email, hashedPassword, name, role, company || null, phone || null, expertise || null, bio || null, industry || null, experience || null, portfolio_description || null, cui || null, currentTermsVersion]
     );
 
     const user = result.rows[0];
 
-    if (user.role === 'expert' || user.role === 'company') {
+    if (user.role !== 'admin') {
       try {
         await trustProfileService.getOrCreateTrustProfile(user.id);
-        console.log('[DEBUG] Trust profile created for user:', user.id);
-        
-        // Create referral code for the user
+
+        // Auto-award email validation points (10 type2 pts) on registration
+        try {
+          await trustProfileService.awardType2Points(user.id, 'email_validated');
+        } catch (emailErr) {
+          console.error('[ERROR] Failed to award email points:', emailErr.message);
+        }
+
+        // Create referral code for the user (so anyone — including individuals — can refer others).
         try {
           await referralService.getOrCreateReferralCode(user.id);
-          console.log('[DEBUG] Referral code created for user:', user.id);
         } catch (refError) {
           console.error('[ERROR] Failed to create referral code:', refError.message);
         }
@@ -57,61 +92,55 @@ export const register = async (req, res, next) => {
       }
     }
 
-    if (referral_code && (user.role === 'expert' || user.role === 'company')) {
+    if (referral_code && user.role !== 'admin') {
       try {
-        // First ensure trust profile exists
-        await trustProfileService.getOrCreateTrustProfile(user.id);
-        
-        // Check for VIP code with trust_level_bonus in referral_codes table
         const codeResult = await pool.query(
-          'SELECT user_id, trust_level_bonus FROM referral_codes WHERE code = $1',
+          `SELECT rc.id, rc.user_id, rc.trust_level_bonus, rc.usage_count, rc.max_uses, u.role AS referrer_role
+           FROM referral_codes rc
+           JOIN users u ON rc.user_id = u.id
+           WHERE rc.code = $1 AND rc.is_active = TRUE AND rc.usage_count < rc.max_uses`,
           [referral_code.toUpperCase()]
         );
-        
-        let trustLevelBonus = null;
-        let referrerId = null;
-        
-        if (codeResult.rows.length > 0 && codeResult.rows[0].trust_level_bonus) {
-          // VIP code - use the specified level
-          trustLevelBonus = parseInt(codeResult.rows[0].trust_level_bonus);
-          referrerId = codeResult.rows[0].user_id;
-          console.log('[DEBUG] VIP code detected, level:', trustLevelBonus);
-          
-          // Save referral info
-          await pool.query(
-            `UPDATE trust_profiles SET referred_by = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2`,
-            [referrerId, user.id]
-          );
-        } else {
-          // Normal referral code - get referrer's trust level and apply -1
-          const referrerCodeResult = await pool.query(
-            'SELECT user_id FROM referral_codes WHERE code = $1',
-            [referral_code.toUpperCase()]
-          );
-          
-          if (referrerCodeResult.rows.length > 0) {
-            referrerId = referrerCodeResult.rows[0].user_id;
-            
-            // Get referrer's trust level
-            const referrerProfile = await pool.query(
-              'SELECT trust_level FROM trust_profiles WHERE user_id = $1',
-              [referrerId]
-            );
-            
-            const referrerLevel = referrerProfile.rows[0]?.trust_level || 1;
-            // New user gets level = referrer level - 1 (minimum 1)
-            trustLevelBonus = Math.max(1, referrerLevel - 1);
-            console.log('[DEBUG] Normal referral, referrer level:', referrerLevel, '-> new user level:', trustLevelBonus);
-            
-            // Save referral info
-            await pool.query(
-              `UPDATE trust_profiles SET referred_by = $1, trust_level = $2, trust_score = $2 * 20, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3`,
-              [referrerId, trustLevelBonus, user.id]
-            );
-          }
-        }
 
-        console.log('[DEBUG] Referral processed, trust level will be finalized after approval');
+        if (codeResult.rows.length > 0) {
+          const referrerId = codeResult.rows[0].user_id;
+          const trustLevelBonus = codeResult.rows[0].trust_level_bonus;
+          const codeId = codeResult.rows[0].id;
+          const newUsageCount = codeResult.rows[0].usage_count + 1;
+          const maxUses = codeResult.rows[0].max_uses;
+
+          if (trustLevelBonus) {
+            // VIP/level code — set fixed trust level on new user's profile
+            const level = parseInt(trustLevelBonus);
+            await pool.query(
+              `UPDATE trust_profiles SET referred_by = $1, trust_level = $2, trust_score = $3, type2_points = type2_points + 20, updated_at = CURRENT_TIMESTAMP WHERE user_id = $4`,
+              [referrerId, level, level * 20, user.id]
+            );
+            console.log('[REFERRAL] Level code applied, level:', level);
+          } else {
+            // Normal referral — set level based on referrer's level
+            await trustProfileService.applyReferralOnSignup(user.id, referrerId);
+          }
+
+          // Increment usage_count; deactivate only if max_uses reached
+          const shouldDeactivate = newUsageCount >= maxUses;
+          await pool.query(
+            `UPDATE referral_codes SET usage_count = $1, is_active = $2 WHERE id = $3`,
+            [newUsageCount, !shouldDeactivate, codeId]
+          );
+
+          // Record referral in referrals table
+          await pool.query(
+            `INSERT INTO referrals (referrer_id, referred_id, referral_code_id, status)
+             VALUES ($1, $2, $3, 'registered')
+             ON CONFLICT (referrer_id, referred_id) DO NOTHING`,
+            [referrerId, user.id, codeId]
+          );
+
+          console.log('[REFERRAL] Code used:', referral_code.toUpperCase(), `(${newUsageCount}/${maxUses})`, shouldDeactivate ? '[DEACTIVATED]' : '');
+        } else {
+          console.log('[REFERRAL] Code not found or exhausted:', referral_code.toUpperCase());
+        }
       } catch (refError) {
         console.error('[ERROR] Failed to process referral:', refError.message);
       }
@@ -144,7 +173,7 @@ export const register = async (req, res, next) => {
     }
 
     let referralCode = null;
-    if (user.role === 'expert' || user.role === 'company') {
+    if (user.role !== 'admin') {
       try {
         const referral = await pool.query(
           'SELECT code FROM referral_codes WHERE user_id = $1',
@@ -168,7 +197,17 @@ export const register = async (req, res, next) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        phone: user.phone,
+        company: user.company,
+        cui: user.cui,
+        expertise: user.expertise,
+        industry: user.industry,
+        experience: user.experience,
+        bio: user.bio,
+        portfolio_description: user.portfolio_description,
         kyc_status: user.kyc_status,
+        verification_date: user.verification_date || null,
+        verification_call_acknowledged_at: user.verification_call_acknowledged_at || null,
         referral_code: referralCode
       }
     });
@@ -190,11 +229,6 @@ export const login = async (req, res, next) => {
       [email]
     );
 
-    console.log('[DEBUG LOGIN] email:', email, 'found rows:', result.rows.length);
-    if (result.rows.length > 0) {
-      console.log('[DEBUG LOGIN] user found:', result.rows[0].email, 'role:', result.rows[0].role);
-    }
-
     if (result.rows.length === 0) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -206,12 +240,20 @@ export const login = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Block soft-deleted or suspended users from logging in
+    if (user.deleted_at) {
+      return res.status(403).json({ message: 'Contul a fost dezactivat.' });
+    }
+    if (user.kyc_status === 'suspended' || user.kyc_status === 'rejected') {
+      return res.status(403).json({ message: 'Contul este suspendat. Contactează administratorul.' });
+    }
+
     const token = generateToken(user.id, user.email, user.role);
 
     let trustLevel = null;
     let referralCode = null;
     
-    if (user.role === 'expert' || user.role === 'company') {
+    if (user.role !== 'admin') {
       try {
         const profile = await pool.query(
           'SELECT trust_level, trust_score FROM trust_profiles WHERE user_id = $1',
@@ -229,9 +271,19 @@ export const login = async (req, res, next) => {
           referralCode = referral.rows[0].code;
         }
       } catch (e) {
-        console.log('[DEBUG] Error fetching trust/referral:', e.message);
+        console.warn('[bg] Error fetching trust/referral:', e.message);
       }
     }
+
+    // Check if user needs to accept new T&C
+    let requiresTermsAcceptance = false;
+    try {
+      const termsRes = await pool.query(`SELECT version FROM terms_versions WHERE is_current = TRUE LIMIT 1`);
+      const currentVersion = termsRes.rows[0]?.version;
+      if (currentVersion && user.accepted_terms_version !== currentVersion) {
+        requiresTermsAcceptance = true;
+      }
+    } catch { /* silent — non-critical */ }
 
     res.json({
       success: true,
@@ -242,9 +294,19 @@ export const login = async (req, res, next) => {
         name: user.name,
         role: user.role,
         company: user.company,
+        phone: user.phone,
+        cui: user.cui,
+        expertise: user.expertise,
+        industry: user.industry,
+        experience: user.experience,
+        bio: user.bio,
+        portfolio_description: user.portfolio_description,
         kyc_status: user.kyc_status,
+        verification_date: user.verification_date,
+        verification_call_acknowledged_at: user.verification_call_acknowledged_at,
         trust_level: trustLevel,
-        referral_code: referralCode
+        referral_code: referralCode,
+        requires_terms_acceptance: requiresTermsAcceptance,
       }
     });
   } catch (error) {
@@ -255,7 +317,7 @@ export const login = async (req, res, next) => {
 export const getCurrentUser = async (req, res, next) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, name, role, company, kyc_status FROM users WHERE id = $1',
+      'SELECT id, email, name, role, company, phone, cui, expertise, industry, experience, bio, portfolio_description, kyc_status, verification_date, verification_call_acknowledged_at, accepted_terms_version FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -263,9 +325,21 @@ export const getCurrentUser = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    const user = result.rows[0];
+
+    // Check current T&C version
+    let requiresTermsAcceptance = false;
+    try {
+      const termsRes = await pool.query(`SELECT version FROM terms_versions WHERE is_current = TRUE LIMIT 1`);
+      const currentVersion = termsRes.rows[0]?.version;
+      if (currentVersion && user.accepted_terms_version !== currentVersion) {
+        requiresTermsAcceptance = true;
+      }
+    } catch { /* silent */ }
+
     res.json({
       success: true,
-      user: result.rows[0]
+      user: { ...user, requires_terms_acceptance: requiresTermsAcceptance }
     });
   } catch (error) {
     next(error);
@@ -287,6 +361,99 @@ export const getUserContract = async (req, res, next) => {
       success: true,
       contract: result.rows[0]
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email required' });
+
+    const r = await pool.query('SELECT id, name, email FROM users WHERE email = $1', [email]);
+    // Always return success to avoid user enumeration
+    if (!r.rows.length) return res.json({ success: true });
+
+    const user = r.rows[0];
+    const token = crypto.randomBytes(48).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Invalidate any previous unused tokens for this user before issuing a new one
+    await pool.query(
+      `UPDATE password_reset_tokens SET used = TRUE WHERE user_id = $1 AND used = FALSE`,
+      [user.id]
+    );
+
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
+      [user.id, token, expiresAt]
+    );
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    await sendEmail({
+      to: user.email,
+      toName: user.name,
+      template: 'passwordReset',
+      data: { name: user.name, resetUrl },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetPassword = async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ message: 'Token and new password required' });
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ message: 'Parola trebuie să aibă minim 8 caractere.' });
+    }
+    if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+      return res.status(400).json({ message: 'Parola trebuie să conțină atât litere cât și cifre.' });
+    }
+
+    const r = await pool.query(
+      `SELECT * FROM password_reset_tokens WHERE token = $1 AND used = FALSE AND expires_at > NOW()`,
+      [token]
+    );
+    if (!r.rows.length) return res.status(400).json({ message: 'Token invalid sau expirat' });
+
+    const { id: tokenId, user_id } = r.rows[0];
+    const hash = await bcrypt.hash(password, 10);
+
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, user_id]);
+    await pool.query('UPDATE password_reset_tokens SET used = TRUE WHERE id = $1', [tokenId]);
+
+    res.json({ success: true, message: 'Parola a fost resetată cu succes' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ message: 'Parola curentă și cea nouă sunt obligatorii' });
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ message: 'Parola nouă trebuie să aibă minim 8 caractere.' });
+    }
+    if (!/[a-zA-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      return res.status(400).json({ message: 'Parola nouă trebuie să conțină atât litere cât și cifre.' });
+    }
+
+    const r = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    if (!r.rows.length) return res.status(404).json({ message: 'User not found' });
+
+    const valid = await bcrypt.compare(currentPassword, r.rows[0].password_hash);
+    if (!valid) return res.status(400).json({ message: 'Parola curentă este incorectă' });
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id]);
+
+    res.json({ success: true, message: 'Parola a fost schimbată cu succes' });
   } catch (error) {
     next(error);
   }

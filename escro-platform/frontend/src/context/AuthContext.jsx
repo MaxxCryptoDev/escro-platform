@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { prefetchDownloadToken } from '../utils/format';
 
 const AuthContext = createContext();
 
@@ -25,10 +26,14 @@ export const AuthProvider = ({ children }) => {
             headers: { 'Authorization': `Bearer ${storedToken}` }
           });
           setUser(response.data.user);
+          // AWAIT prefetch so first PDF link doesn't 401 — small extra wait on app load,
+          // but prevents race where withAuthToken() returns bare URL before token cached.
+          await prefetchDownloadToken();
         } catch (err) {
           console.error('Failed to restore user:', err);
           localStorage.removeItem('token');
           localStorage.removeItem('userRole');
+          setToken(null);
         }
       }
       setLoading(false);
@@ -36,6 +41,16 @@ export const AuthProvider = ({ children }) => {
 
     restoreUser();
   }, []);
+
+  // Background refresh of download token every 4 minutes (token TTL is 5 min) — prevents
+  // long-session 401s on <a href={withAuthToken(...)}> links.
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => {
+      prefetchDownloadToken();
+    }, 4 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [token]);
 
   useEffect(() => {
     if (token) {
@@ -53,12 +68,27 @@ export const AuthProvider = ({ children }) => {
     }
     setUser(userData);
     setToken(authToken);
+    // Prefetch download token so subsequent PDF links work
+    prefetchDownloadToken();
   };
 
   const logout = () => {
     setUser(null);
     setToken(null);
+    localStorage.removeItem('token');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('referralCode');
+    sessionStorage.removeItem('escro_download_token');
+    sessionStorage.removeItem('escro_download_token_exp');
+  };
+
+  const updateUser = (patch) => {
+    setUser(prev => prev ? { ...prev, ...patch } : prev);
+  };
+
+  // Called by TermsAcceptanceModal after successful acceptance
+  const clearTermsRequirement = () => {
+    setUser(prev => prev ? { ...prev, requires_terms_acceptance: false } : prev);
   };
 
   const value = {
@@ -67,6 +97,8 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     logout,
+    updateUser,
+    clearTermsRequirement,
     isAuthenticated: !!token
   };
 

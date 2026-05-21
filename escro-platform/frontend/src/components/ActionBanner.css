@@ -1,0 +1,79 @@
+.ad-action-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--r-lg);
+  border: 1px solid;
+  margin-bottom: 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+.ad-action-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(600px 200px at 0% 0%, currentColor 0%, transparent 60%);
+  opacity: 0.04;
+  pointer-events: none;
+}
+.ad-action-banner--warning { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
+.ad-action-banner--accent  { background: var(--accent-bg);  border-color: var(--accent-border);  color: var(--accent-hi); }
+.ad-action-banner--success { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
+.ad-ab-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: grid; place-items: center;
+  background: currentColor;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px currentColor;
+}
+.ad-ab-icon > svg { color: var(--bg-0); }
+.ad-action-banner--success .ad-ab-icon > svg,
+.ad-action-banner--accent  .ad-ab-icon > svg { color: #fff; }
+.ad-ab-body { flex: 1; min-width: 0; color: var(--fg-0); }
+.ad-ab-eyebrow {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: currentColor;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ad-action-banner--warning .ad-ab-eyebrow { color: var(--warning); }
+.ad-action-banner--accent  .ad-ab-eyebrow { color: var(--accent-hi); }
+.ad-action-banner--success .ad-ab-eyebrow { color: var(--success); }
+.ad-ab-title {
+  font-family: var(--f-display);
+  font-size: 20px;
+  letter-spacing: -0.015em;
+  color: var(--fg-0);
+  margin-bottom: 4px;
+  line-height: 1.2;
+  font-weight: 400;
+}
+.ad-ab-text {
+  font-size: 13px;
+  color: var(--fg-2);
+  line-height: 1.55;
+  max-width: 56ch;
+}
+.ad-ab-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
+  align-self: center;
+}
+.ad-ab-primary { font-weight: 600; min-height: 40px; }
+
+@media (max-width: 720px) {
+  .ad-action-banner { flex-direction: column; padding: 1rem 1.125rem; }
+  .ad-ab-actions { width: 100%; }
+  .ad-ab-actions .btn { flex: 1; }
+  .ad-ab-title { font-size: 17px; }
+}

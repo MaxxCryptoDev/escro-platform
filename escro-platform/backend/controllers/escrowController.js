@@ -46,7 +46,9 @@ export const createEscrowAccount = async (req, res, next) => {
       });
     }
 
-    const commission_percent = proj.commission_percent || 10;
+    // Default expert-side commission (deducted at release): 5%. Admin can override per
+    // project (matching) or it stays at 5% for direct (where expert + client each pay 5%).
+    const commission_percent = proj.commission_percent || 5;
 
     // Note: Stripe Connect accounts belong to USERS (prestators), not to escrow records.
     // Onboarding is handled separately in stripeOnboardingController. We don't create
@@ -122,6 +124,19 @@ export const createPaymentIntent = async (req, res, next) => {
 export const confirmPayment = async (req, res, next) => {
   try {
     const { escrow_id, payment_intent_id } = req.body;
+    const userId = req.user?.id;
+    const isAdmin = req.user?.role === 'admin';
+
+    // KYC gate: only verified users (or admin) can mark escrow as held.
+    // Prevents stub-mode abuse where an unverified user could fund escrow without going through Stripe Checkout.
+    if (!isAdmin && userId) {
+      const userKyc = await pool.query('SELECT kyc_status FROM users WHERE id = $1', [userId]);
+      if (userKyc.rows[0]?.kyc_status !== 'verified') {
+        return res.status(403).json({
+          message: 'Contul tău nu este verificat KYC. Finalizează verificarea înainte de a depune fonduri.',
+        });
+      }
+    }
 
     if (!STRIPE_STUB_MODE && payment_intent_id && !payment_intent_id.startsWith('stub_')) {
       const { default: stripe } = await import('../config/stripe.js');
@@ -138,14 +153,16 @@ export const confirmPayment = async (req, res, next) => {
       if (escrowCheck.rows.length === 0) {
         return res.status(404).json({ message: 'Escrow account not found' });
       }
-      const expectedCents = Math.round(escrowCheck.rows[0].total_amount_ron * 100);
+      // Client pays milestone amount + 5% commission. Stripe charge should be milestone × 1.05.
+      const milestoneCents = Math.round(escrowCheck.rows[0].total_amount_ron * 100);
+      const expectedCents = Math.round(milestoneCents * 1.05);
       if (paymentIntent.amount !== expectedCents) {
-        return res.status(400).json({ message: `Payment amount mismatch. Expected ${expectedCents} cents, got ${paymentIntent.amount}` });
+        return res.status(400).json({ message: `Payment amount mismatch. Expected ${expectedCents} cents (milestone + 5%), got ${paymentIntent.amount}` });
       }
     }
 
     const existingCheck = await pool.query(
-      'SELECT status, project_id FROM escrow_accounts WHERE id = $1',
+      'SELECT status, project_id, total_amount_ron FROM escrow_accounts WHERE id = $1',
       [escrow_id]
     );
     if (existingCheck.rows.length === 0) {
@@ -155,8 +172,12 @@ export const confirmPayment = async (req, res, next) => {
       return res.json({ success: true, message: 'Payment already confirmed', stub_mode: STRIPE_STUB_MODE });
     }
 
+    // Balance math (held_balance_ron, claudiu_earned_total_ron) is done by the Stripe
+    // webhook handler (`payment_intent.succeeded`). Here we only mark the escrow row as
+    // `held` so the UI can react immediately; the webhook is the source of truth for
+    // amounts. This avoids double-counting if both endpoints fire for the same payment.
     await pool.query(
-      `UPDATE escrow_accounts SET status = 'held', held_balance_ron = total_amount_ron WHERE id = $1`,
+      `UPDATE escrow_accounts SET status = 'held' WHERE id = $1 AND status != 'held'`,
       [escrow_id]
     );
 
@@ -201,7 +222,7 @@ export const confirmPayment = async (req, res, next) => {
 // Frontend uses this to render <PaymentElement>; the actual fund-held flip happens via webhook.
 export const startCheckoutSession = async (req, res, next) => {
   try {
-    const { project_id, amount_ron } = req.body;
+    const { project_id, amount_ron, milestone_id } = req.body;
     const userId = req.user.id;
     const amount = parseFloat(amount_ron);
     if (!project_id || !(amount > 0)) {
@@ -248,15 +269,22 @@ export const startCheckoutSession = async (req, res, next) => {
     // Find or create escrow row (idempotent)
     let escrowRow = (await pool.query('SELECT * FROM escrow_accounts WHERE project_id = $1', [project_id])).rows[0];
     if (!escrowRow) {
-      const commission = proj.commission_percent || 10;
+      const commission = proj.commission_percent || 5;
       const ins = await pool.query(
         `INSERT INTO escrow_accounts (project_id, total_amount_ron, claudiu_commission_percent, status, held_balance_ron, released_to_expert_total_ron, claudiu_earned_total_ron, created_at)
-         VALUES ($1, $2, $3, 'pending', 0, 0, 0, NOW())
+         VALUES ($1, $2, $3, 'open', 0, 0, 0, NOW())
          RETURNING *`,
         [project_id, amount, commission]
       );
       escrowRow = ins.rows[0];
     }
+
+    // Client-side commission: 5% on top of milestone amount (kept by platform on deposit).
+    // What goes to the expert (held in escrow) = `amount`. What the client actually pays
+    // through Stripe = `amount + 5%`. The +5% is the platform's cut from the client.
+    const CLIENT_COMMISSION_RATE = 0.05;
+    const clientCommission = Math.round(amount * CLIENT_COMMISSION_RATE * 100) / 100;
+    const totalChargeRon = amount + clientCommission;
 
     const isLiveStripe = !!process.env.STRIPE_SECRET_KEY
       && !process.env.STRIPE_SECRET_KEY.startsWith('sk_test_4eC39');
@@ -268,26 +296,41 @@ export const startCheckoutSession = async (req, res, next) => {
           error: 'Plățile sunt indisponibile momentan. Echipa platformei a fost notificată.',
         });
       }
-      // Dev mode without real Stripe key: pretend payment succeeded, set escrow held immediately.
+      // Dev mode without real Stripe key: pretend payment succeeded.
+      // held_balance_ron = milestone amount (for expert); platform pockets clientCommission immediately.
       await pool.query(
-        `UPDATE escrow_accounts SET status = 'held', held_balance_ron = total_amount_ron WHERE id = $1 AND status != 'held'`,
-        [escrowRow.id]
+        `UPDATE escrow_accounts
+         SET status = 'held',
+             held_balance_ron = total_amount_ron,
+             claudiu_earned_total_ron = COALESCE(claudiu_earned_total_ron, 0) + $2
+         WHERE id = $1 AND status != 'held'`,
+        [escrowRow.id, clientCommission]
       );
       return res.json({
         success: true,
         mock: true,
         escrow_id: escrowRow.id,
+        amount,
+        client_commission: clientCommission,
+        total_charge: totalChargeRon,
         message: 'STRIPE_SECRET_KEY lipsește — escrow marcat ca held în dev mode.'
       });
     }
 
     const { default: stripe } = await import('../config/stripe.js');
-    const amountCents = Math.round(amount * 100);
+    const amountCents = Math.round(totalChargeRon * 100);
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: 'ron',
       automatic_payment_methods: { enabled: true },
-      metadata: { escrow_id: escrowRow.id, project_id, user_id: userId },
+      metadata: {
+        escrow_id: escrowRow.id,
+        project_id,
+        user_id: userId,
+        milestone_amount: String(amount),
+        client_commission: String(clientCommission),
+        ...(milestone_id ? { milestone_id } : {}),
+      },
       description: `ESCRO deposit · ${proj.title}`,
     });
 
@@ -302,6 +345,8 @@ export const startCheckoutSession = async (req, res, next) => {
       client_secret: paymentIntent.client_secret,
       publishable_key: process.env.STRIPE_PUBLISHABLE_KEY,
       amount,
+      client_commission: clientCommission,
+      total_charge: totalChargeRon,
       project_title: proj.title,
     });
   } catch (error) {
@@ -442,7 +487,28 @@ export const refundEscrow = async (req, res, next) => {
       return res.status(404).json({ error: 'No escrow account for this project' });
     }
     const escrow = escrowRes.rows[0];
-    const refundAmount = parseFloat(escrow.held_balance_ron) || 0;
+    // Sanity check: held_balance_ron is already net of any released milestones (decremented on
+    // milestone approve). So refunding held_balance refunds ONLY what hasn't been paid to prestator.
+    // Cross-validate against released_to_expert_total + claudiu_earned to detect inconsistency.
+    const sanityRes = await client.query(
+      `SELECT total_amount_ron,
+              COALESCE(released_to_expert_total_ron, 0) AS released,
+              COALESCE(claudiu_earned_total_ron, 0) AS commission
+       FROM escrow_accounts WHERE id = $1`,
+      [escrow.id]
+    );
+    const s = sanityRes.rows[0] || {};
+    const total = parseFloat(s.total_amount_ron) || 0;
+    const released = parseFloat(s.released) || 0;
+    const commission = parseFloat(s.commission) || 0;
+    const heldVerify = parseFloat(escrow.held_balance_ron) || 0;
+    const expected = Math.round((total - released - commission) * 100) / 100;
+    if (Math.abs(heldVerify - expected) > 0.5) {
+      console.error('[refundEscrow] balance inconsistency detected', {
+        escrow_id: escrow.id, held: heldVerify, expected, total, released, commission,
+      });
+    }
+    const refundAmount = heldVerify;
     if (refundAmount <= 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'No held balance to refund' });

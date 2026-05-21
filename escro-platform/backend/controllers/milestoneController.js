@@ -83,16 +83,15 @@ export const startMilestone = async (req, res, next) => {
       return res.status(400).json({ error: 'Can only start pending milestones' });
     }
 
-    const escrowCheck = await pool.query(
-      `SELECT held_balance_ron FROM escrow_accounts WHERE project_id = $1 AND held_balance_ron > 0 LIMIT 1`,
-      [project_id]
-    );
-    if (escrowCheck.rows.length === 0) {
-      return res.status(412).json({
-        message: 'Nu poți începe lucrul: clientul nu a depus încă fondurile în escrow.'
-      });
-    }
+    // A milestone in 'pending' status was not funded yet (the Stripe webhook flips it
+    // to 'in_progress' on payment). So if we reach here with status='pending', it means
+    // the deposit hasn't been processed — block the explicit start.
+    return res.status(412).json({
+      message: 'Nu poți începe lucrul: clientul nu a depus încă fondurile pentru acest milestone.',
+      code: 'MILESTONE_NOT_FUNDED',
+    });
 
+    // eslint-disable-next-line no-unreachable
     const updatedMilestone = await pool.query(
       `UPDATE milestones SET status = 'in_progress' WHERE id = $1 RETURNING *`,
       [milestone_id]
@@ -150,14 +149,20 @@ export const uploadDeliverable = async (req, res, next) => {
       });
     }
 
-    // Require escrow to be funded before deliverables can be uploaded
-    const escrowCheck = await pool.query(
-      `SELECT held_balance_ron FROM escrow_accounts WHERE project_id = $1 AND held_balance_ron > 0 LIMIT 1`,
-      [project_id]
+    // Require this specific milestone to be funded. Stripe webhook moves the milestone
+    // from 'pending' → 'in_progress' on payment success, so milestone.status !== 'pending'
+    // means the deposit was processed for this milestone.
+    const msStatusRes = await pool.query(
+      `SELECT status FROM milestones WHERE id = $1 AND project_id = $2`,
+      [milestone_id, project_id]
     );
-    if (escrowCheck.rows.length === 0) {
+    if (msStatusRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Milestone not found' });
+    }
+    if (msStatusRes.rows[0].status === 'pending') {
       return res.status(412).json({
-        message: 'Nu poți livra: clientul nu a depus încă fondurile în escrow.'
+        message: 'Nu poți livra: clientul nu a depus încă fondurile pentru acest milestone.',
+        code: 'MILESTONE_NOT_FUNDED',
       });
     }
 
@@ -274,6 +279,10 @@ export const approveMilestone = async (req, res, next) => {
 
     await client.query('BEGIN');
 
+    // Serialize the entire approve flow per project to prevent: (a) race on escrow_accounts creation
+    // when no row exists yet, (b) two milestones approved simultaneously deducting against stale balance.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1::text))', [project_id]);
+
     // Lock the milestone row + re-check status inside transaction to prevent concurrent double-approve
     const lockRes = await client.query(
       `SELECT status FROM milestones WHERE id = $1 FOR UPDATE`,
@@ -366,46 +375,18 @@ export const approveMilestone = async (req, res, next) => {
         [release_amount, expert_amount, commission_amount, escrow.id]
       );
 
-      // Record in wallet_transactions for the expert/company
+      // Record in wallet_transactions for the expert/company.
+      // Funds land in the internal wallet (release stays 'pending') — the prestator must
+      // explicitly request a payout from /wallet for actual Stripe transfer to happen.
       const prestatorCheck = await client.query('SELECT expert_id, company_id FROM projects WHERE id = $1', [project_id]);
       const prestatorId = prestatorCheck.rows[0]?.expert_id || prestatorCheck.rows[0]?.company_id;
       if (prestatorId && expert_amount > 0) {
+        // wallet_transactions is part of the financial audit trail — must succeed or rollback.
         await client.query(
           `INSERT INTO wallet_transactions (user_id, amount, type, description, project_id, milestone_release_id)
            VALUES ($1, $2, 'milestone_payment', $3, $4, $5)`,
           [prestatorId, expert_amount, `Milestone aprobat: "${m.title}"`, project_id, releaseId]
-        ).catch(e => console.warn('[bg]', e.message));
-
-        // Live Stripe transfer to prestator's Connect account (best-effort: ledger is already correct)
-        const isLiveStripe = !!process.env.STRIPE_SECRET_KEY
-          && !process.env.STRIPE_SECRET_KEY.startsWith('sk_test_4eC39');
-        if (isLiveStripe) {
-          try {
-            const prestRes = await client.query(
-              `SELECT stripe_account_id, stripe_transfers_enabled FROM users WHERE id = $1`,
-              [prestatorId]
-            );
-            const prest = prestRes.rows[0];
-            if (prest?.stripe_account_id?.startsWith('acct_') && prest.stripe_transfers_enabled) {
-              const { default: stripe } = await import('../config/stripe.js');
-              const transfer = await stripe.transfers.create({
-                amount: Math.round(expert_amount * 100),
-                currency: 'ron',
-                destination: prest.stripe_account_id,
-                description: `ESCRO milestone payout · ${m.title}`,
-                metadata: { milestone_id, project_id, release_id: releaseId },
-              });
-              await client.query(
-                `UPDATE milestone_releases SET stripe_transfer_id = $1 WHERE id = $2`,
-                [transfer.id, releaseId]
-              ).catch(() => {});
-            } else {
-              console.log('[stripe] prestator nu are Connect activ, banii rămân în wallet');
-            }
-          } catch (transferErr) {
-            console.warn('[stripe transfer milestone]', transferErr.message);
-          }
-        }
+        );
       }
     }
 

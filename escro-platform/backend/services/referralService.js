@@ -41,8 +41,8 @@ class ReferralService {
     if (result.rows.length === 0) {
       const code = await generateReferralCode(userId);
       result = await pool.query(
-        `INSERT INTO referral_codes (user_id, code)
-         VALUES ($1, $2)
+        `INSERT INTO referral_codes (user_id, code, max_uses)
+         VALUES ($1, $2, 1)
          RETURNING *`,
         [userId, code]
       );

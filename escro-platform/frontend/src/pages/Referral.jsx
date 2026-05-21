@@ -1,300 +1,211 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import Header from '../components/Header';
 import axios from 'axios';
+import { Icon, Spinner } from '../components/ui';
 
 export default function Referral() {
   const { user } = useAuth();
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState('');
   const [trustLevel, setTrustLevel] = useState(1);
   const [trustScore, setTrustScore] = useState(0);
   const [verificationScore, setVerificationScore] = useState(0);
   const [rewardsScore, setRewardsScore] = useState(0);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const storedCode = localStorage.getItem('referralCode');
-      if (storedCode) {
-        setReferralCode(storedCode);
-      }
-      
+    const load = async () => {
       const token = localStorage.getItem('token');
-      
-      // Fetch referral code
+      const headers = { Authorization: `Bearer ${token}` };
       try {
-        const response = await axios.get('/api/referrals/my-referral-info', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (response.data.code) {
-          setReferralCode(response.data.code);
-          localStorage.setItem('referralCode', response.data.code);
+        const refRes = await axios.get('/api/referrals/my-referral-info', { headers });
+        if (refRes.data.code) {
+          setReferralCode(refRes.data.code);
+          localStorage.setItem('referralCode', refRes.data.code);
         }
-      } catch (err) {
-        console.error('Error fetching referral code:', err);
-      }
-      
-      // Fetch trust profile
+      } catch { /* silent */ }
+
       try {
-        let trustResponse;
-        try {
-          trustResponse = await axios.get('/api/trust-profiles/my-trust-profile', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-        } catch (e) {
-          // Try recalculating first
-          console.log('[DEBUG] Trying recalculation...', e.message);
-          trustResponse = await axios.get('/api/trust-profiles/recalculate', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-        }
-        
-        console.log('[DEBUG] Trust profile full response:', trustResponse.data);
-        
-        const data = trustResponse.data;
-        
-        // Log all keys to debug
-        console.log('[DEBUG] All data keys:', Object.keys(data));
-        
-        // Handle both direct fields and nested structure
-        console.log('[DEBUG] Full data object:', JSON.stringify(data));
-        
-        // Try various possible field names
-        const level = data.trust_level ?? data.trustLevel ?? 1;
-        const trust = data.trust_score ?? data.trustScore ?? 0;
-        
-        // Check for identity/verification points - try multiple possible names
-        let identity = 0;
-        if (data.type2_points !== undefined && data.type2_points !== null) identity = data.type2_points;
-        else if (data.verification_score !== undefined && data.verification_score !== null) identity = data.verification_score;
-        else if (data.verificationScore !== undefined && data.verificationScore !== null) identity = data.verificationScore;
-        
-        // Check for rewards points - try multiple possible names  
-        let rewards = 0;
-        if (data.type1_points !== undefined && data.type1_points !== null) rewards = data.type1_points;
-        else if (data.reward_points !== undefined && data.reward_points !== null) rewards = data.reward_points;
-        else if (data.rewards_points !== undefined && data.rewards_points !== null) rewards = data.rewards_points;
-        
-        console.log('[DEBUG] Final parsed - level:', level, 'trust:', trust, 'identity:', identity, 'rewards:', rewards);
-        
-        setTrustLevel(level);
-        setTrustScore(Math.round(trust));
-        setVerificationScore(Math.round(identity));
-        setRewardsScore(Math.round(rewards));
-      } catch (err) {
-        console.error('Error fetching trust profile:', err);
-      }
-      
+        const res = await axios.get('/api/trust-profiles/my-trust-profile', { headers });
+        const d = res.data;
+        setTrustLevel(d.trust_level ?? 1);
+        setTrustScore(Math.round(d.trust_score ?? 0));
+        setVerificationScore(Math.round(d.type2_points ?? d.verification_score ?? 0));
+        setRewardsScore(Math.round(d.type1_points ?? d.reward_points ?? 0));
+      } catch { /* silent */ }
       setLoading(false);
     };
-
-    fetchData();
+    load();
   }, [user]);
 
-  const referralLink = referralCode ? `http://localhost:3000/register?ref=${referralCode}` : 'http://localhost:3000/register';
+  const publicOrigin = import.meta.env.VITE_PUBLIC_URL || window.location.origin;
+  const referralLink = referralCode
+    ? `${publicOrigin}/register?ref=${referralCode}`
+    : `${publicOrigin}/register`;
 
-  const getFriendLevel = (myLevel) => {
-    if (myLevel >= 4) return myLevel - 1;
-    return Math.max(1, myLevel);
+  const invitationMessage = referralCode
+    ? `Aceasta este prima platformă românească de intermediere de servicii diverse. Alătură-te comunității oamenilor de încredere prin recomandarea mea. Aplicația este în mediu de test, iar linkul funcțional pentru înregistrare este:\n\n${referralLink}`
+    : '';
+
+  const copy = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(''), 2000);
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(referralCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const friendLevel = trustLevel >= 4 ? trustLevel - 1 : Math.max(1, trustLevel);
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(referralLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const LEVELS = [
+    { level: 1, label: 'Starter',  desc: '20 pts',  color: 'var(--fg-3)' },
+    { level: 2, label: 'Emerging', desc: '40 pts',  color: 'var(--warning)' },
+    { level: 3, label: 'Trusted',  desc: '60 pts',  color: 'var(--accent)' },
+    { level: 4, label: 'Verified', desc: '80 pts',  color: 'var(--success)' },
+    { level: 5, label: 'Elite',    desc: '100+ pts', color: 'var(--violet)' },
+  ];
 
-  const styles = {
-    pageContainer: {
-      minHeight: '100vh',
-      backgroundColor: '#f5f7fa',
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    },
-    container: {
-      padding: '2rem',
-      maxWidth: '800px',
-      margin: '0 auto'
-    },
-    card: {
-      backgroundColor: 'white',
-      borderRadius: '16px',
-      padding: '2.5rem',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-      textAlign: 'center',
-    },
-    title: {
-      fontSize: '2rem',
-      fontWeight: '700',
-      color: '#1e293b',
-      marginBottom: '0.5rem',
-    },
-    subtitle: {
-      fontSize: '1.1rem',
-      color: '#64748b',
-      marginBottom: '2rem',
-    },
-    giftBox: {
-      fontSize: '4rem',
-      marginBottom: '1rem',
-    },
-    section: {
-      marginBottom: '2rem',
-    },
-    label: {
-      fontSize: '0.9rem',
-      fontWeight: '600',
-      color: '#374151',
-      marginBottom: '0.5rem',
-      display: 'block',
-    },
-    codeBox: {
-      backgroundColor: '#f3f4f6',
-      border: '2px dashed #3b82f6',
-      borderRadius: '12px',
-      padding: '1rem',
-      fontSize: '2rem',
-      fontWeight: '700',
-      color: '#3b82f6',
-      letterSpacing: '2px',
-      marginBottom: '1rem',
-    },
-    linkBox: {
-      backgroundColor: '#f9fafb',
-      border: '1px solid #e5e7eb',
-      borderRadius: '8px',
-      padding: '0.75rem',
-      fontSize: '0.9rem',
-      color: '#6b7280',
-      wordBreak: 'break-all',
-      marginBottom: '1rem',
-    },
-    button: {
-      padding: '0.75rem 1.5rem',
-      backgroundColor: '#3b82f6',
-      color: 'white',
-      border: 'none',
-      borderRadius: '8px',
-      fontSize: '1rem',
-      fontWeight: '600',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-    },
-    buttonSecondary: {
-      padding: '0.75rem 1.5rem',
-      backgroundColor: '#10b981',
-      color: 'white',
-      border: 'none',
-      borderRadius: '8px',
-      fontSize: '1rem',
-      fontWeight: '600',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-    },
-    infoBox: {
-      backgroundColor: '#eff6ff',
-      border: '1px solid #bfdbfe',
-      borderRadius: '12px',
-      padding: '1.5rem',
-      textAlign: 'left',
-      marginTop: '2rem',
-    },
-    infoTitle: {
-      fontSize: '1.1rem',
-      fontWeight: '600',
-      color: '#1e40af',
-      marginBottom: '0.75rem',
-    },
-    infoText: {
-      fontSize: '0.95rem',
-      color: '#1e3a8a',
-      lineHeight: '1.6',
-      marginBottom: '0.5rem',
-    },
-    successMessage: {
-      backgroundColor: '#dcfce7',
-      color: '#166534',
-      padding: '0.75rem',
-      borderRadius: '8px',
-      marginBottom: '1rem',
-      fontWeight: '500',
-    },
-  };
+  if (loading) return <div className="escro-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner /></div>;
 
   return (
-    <div style={styles.pageContainer}>
-      <Header currentPage="referral" />
-      
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <div style={styles.giftBox}>🎁</div>
-          <h1 style={styles.title}>Invită Prieteni și Câștigă!</h1>
-          <p style={styles.subtitle}>
-            Recomandă platforma ESCRO prietenilor tăi și primești <b>+10 puncte Recompensă</b> pentru fiecare prieten!
-          </p>
+    <div className="escro-page fade-up" style={{ maxWidth: 680, margin: '0 auto' }}>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-            <div style={{ backgroundColor: '#eff6ff', padding: '1rem', borderRadius: '12px', minWidth: '80px' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2563eb' }}>Nivel {trustLevel}</div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Nivel</div>
-            </div>
-            <div style={{ backgroundColor: '#ecfdf5', padding: '1rem', borderRadius: '12px', minWidth: '80px' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#059669' }}>{Math.round(trustScore)}</div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Încredere</div>
-            </div>
-            <div style={{ backgroundColor: '#fef3c7', padding: '1rem', borderRadius: '12px', minWidth: '80px' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#d97706' }}>{Math.round(verificationScore)}</div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Identitate</div>
-            </div>
-            <div style={{ backgroundColor: '#fce7f3', padding: '1rem', borderRadius: '12px', minWidth: '80px' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#db2777' }}>{Math.round(rewardsScore)}</div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Recompensă</div>
-            </div>
-          </div>
+      {/* Page header */}
+      <div className="page-head" style={{ marginBottom: '2rem' }}>
+        <div>
+          <div className="h-eyebrow">Program Referral · Trust L{trustLevel}</div>
+          <h1 className="h-title">Invită & <em>câștigă</em>.</h1>
+          <p className="h-sub">Recomandă platforma și ajuți-ți rețeaua să acceadă la un Trust Level mai ridicat.</p>
+        </div>
+      </div>
 
-          {loading ? (
-            <p style={styles.subtitle}>Se încarcă...</p>
+      {/* Trust score vault */}
+      <div className="vault" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ fontSize: 11, fontFamily: 'var(--f-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.45)', marginBottom: '.5rem' }}>Trust Score</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '.5rem', marginBottom: '.875rem' }}>
+          <span className="vault-num"><em>{trustScore}</em></span>
+          <span className="vault-cur">pts</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[1,2,3,4,5].map(n => (
+            <div key={n} style={{
+              flex: 1, height: 4, borderRadius: 2,
+              background: n <= trustLevel ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.12)',
+              transition: 'background .3s',
+            }} />
+          ))}
+        </div>
+        <div style={{ marginTop: '1rem', display: 'flex', gap: '2rem', fontSize: 11.5, fontFamily: 'var(--f-mono)', color: 'rgba(255,255,255,0.45)' }}>
+          <span>Identitate: {verificationScore} pts</span>
+          <span>Recompense: {rewardsScore} pts</span>
+        </div>
+      </div>
+
+      {/* Referral code card */}
+      <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-lg)', overflow: 'hidden', marginBottom: '1.5rem' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-1)' }}>
+          <div style={{ fontSize: 11, fontFamily: 'var(--f-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-3)' }}>Codul tău de referral</div>
+        </div>
+        <div style={{ padding: '1.5rem' }}>
+          {referralCode ? (
+            <div style={{ textAlign: 'center', padding: '1.5rem', background: 'var(--bg-2)', border: '1px dashed var(--accent-border)', borderRadius: 'var(--r-md)', marginBottom: '1rem' }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--accent-hi)' }}>{referralCode}</div>
+            </div>
           ) : (
-            <>
-              {copied && (
-                <div style={styles.successMessage}>
-                  ✓ Copiat în clipboard!
-                </div>
-              )}
-
-              <div style={styles.section}>
-                <label style={styles.label}>Link de înregistrare</label>
-                <div style={styles.linkBox}>{referralLink}</div>
-                <button 
-                  onClick={handleCopyLink}
-                  style={styles.buttonSecondary}
-                >
-                  📎 Copiază Link-ul
-                </button>
-              </div>
-
-              <div style={styles.infoBox}>
-                <div style={styles.infoTitle}>🎁 Ce primește prietenul tău?</div>
-                <div style={styles.infoText}>
-                  ✓ Prietenul va primi <b>Nivel {getFriendLevel(trustLevel)}</b> garantat la înregistrare!
-                </div>
-                <div style={styles.infoText}>
-                  ✓ Primește <b>+10 puncte Identitate</b> (din totalul de 100)
-                </div>
-                
-                <div style={{ ...styles.infoTitle, marginTop: '1rem' }}>🎁 Ce primești tu?</div>
-                <div style={styles.infoText}>
-                  ✓ Când prietenul se înregistrează cu codul tău: <b>+10 puncte Recompensă</b>
-                </div>
-              </div>
-            </>
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--fg-3)', fontSize: 13, marginBottom: '1rem' }}>
+              Codul tău de referral se generează automat.
+            </div>
           )}
+
+          {referralCode && (
+            <div>
+              <label className="label">Mesaj de invitație</label>
+              <div style={{
+                padding: '1rem 1.125rem',
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border-1)',
+                borderRadius: 'var(--r-sm)',
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: 'var(--fg-1)',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                marginBottom: '.75rem',
+              }}>
+                {invitationMessage}
+              </div>
+              <button className="btn btn-primary" onClick={() => copy(invitationMessage, 'message')} style={{ width: '100%' }}>
+                <Icon name={copied === 'message' ? 'check' : 'share'} size={13} />
+                {copied === 'message' ? 'Mesaj copiat — gata de trimis' : 'Copiază mesajul de invitație'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* How it works */}
+      <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-lg)', overflow: 'hidden', marginBottom: '1.5rem' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-1)' }}>
+          <div style={{ fontSize: 11, fontFamily: 'var(--f-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-3)' }}>Cum funcționează</div>
+        </div>
+        <div style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+          {[
+            `Împărtășește codul tău unic cu contactele tale`,
+            `Aceștia se înregistrează cu codul tău pe platformă`,
+            `Ei primesc Trust Level ${friendLevel} ca punct de start`,
+            `Tu câștigi puncte de recompensă pentru fiecare recomandare`,
+          ].map((text, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '.875rem' }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0, marginTop: 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10.5, fontWeight: 700, color: '#fff', fontFamily: 'var(--f-mono)',
+              }}>
+                {i + 1}
+              </div>
+              <span style={{ fontSize: 13.5, color: 'var(--fg-1)', lineHeight: 1.6 }}>{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Trust levels */}
+      <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-1)' }}>
+          <div style={{ fontSize: 11, fontFamily: 'var(--f-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-3)' }}>Niveluri Trust</div>
+        </div>
+        <div style={{ padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+          {LEVELS.map(l => {
+            const isCurrent = l.level === trustLevel;
+            const isPassed = l.level < trustLevel;
+            return (
+              <div key={l.level} style={{
+                display: 'flex', alignItems: 'center', gap: '.875rem', padding: '.75rem 1rem',
+                borderRadius: 'var(--r-sm)',
+                background: isCurrent ? 'var(--accent-bg)' : 'transparent',
+                border: `1px solid ${isCurrent ? 'var(--accent-border)' : 'transparent'}`,
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                  background: (isCurrent || isPassed) ? l.color : 'var(--border-1)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {isPassed
+                    ? <Icon name="check" size={12} style={{ color: '#fff' }} />
+                    : <span style={{ fontSize: 11, fontWeight: 700, color: isCurrent ? '#fff' : 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>{l.level}</span>
+                  }
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: isCurrent ? 'var(--fg-0)' : 'var(--fg-2)' }}>{l.label}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--fg-3)', fontFamily: 'var(--f-mono)' }}>{l.desc}</div>
+                </div>
+                <div className="trust-d">
+                  {[1,2,3,4,5].map(n => (
+                    <span key={n} className={`trust-pip ${n <= l.level ? 'on' : ''}`} />
+                  ))}
+                </div>
+                {isCurrent && <span className="badge badge-green" style={{ fontSize: 10 }}>Nivelul tău</span>}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

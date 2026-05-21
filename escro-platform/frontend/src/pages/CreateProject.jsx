@@ -1,233 +1,924 @@
-import React, { useState } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Header from '../components/Header';
+import { Icon } from '../components/ui';
 import axios from 'axios';
+import '../styles/CreateProject.css';
+
+const SERVICE_TYPES = [
+  { value: 'matching',           label: 'Matching',           icon: 'sparkle',
+    description: 'Platforma alege experții potriviți și îi conectează cu tine.',
+    tag: 'Recomandare automată' },
+  { value: 'direct',             label: 'Direct',             icon: 'user',
+    description: 'Contract direct cu un expert pe care îl cunoști deja.',
+    tag: 'Cel mai rapid' },
+  { value: 'project_management', label: 'Project Management', icon: 'briefcase',
+    description: 'Proiect mare, sub-tasks supervizate de un admin Escro.',
+    tag: 'Recomandat 50k+' },
+];
+
+const ALL_STEPS = [
+  { id: 1, label: 'Brief' },
+  { id: 2, label: 'Buget & timp' },
+  { id: 3, label: 'Etape' },
+  { id: 4, label: 'Revizuire' },
+];
+
+const BUDGET_PRESETS  = [5000, 10000, 25000, 50000];
+const TIMELINE_PRESETS = [14, 30, 60, 90];
+
+const DRAFT_KEY = 'escro:create-project:draft';
+const FRESH_FORM = {
+  title: '',
+  description: '',
+  budget_ron: '',
+  timeline_days: '',
+  service_type: '',
+  direct_partner_email: '',
+  milestones: [
+    { id: 1, title: '', deliverable_description: '', percentage_of_budget: 40 },
+    { id: 2, title: '', deliverable_description: '', percentage_of_budget: 60 },
+  ],
+};
+
+const fmtRON = (n) => new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 }).format(Math.round(Number(n) || 0));
+
+function validateStep(step, form, isPM) {
+  const errors = {};
+  if (step === 1) {
+    if (!form.service_type) errors.service_type = 'Alege un tip de serviciu pentru a continua.';
+    if (!form.title.trim()) errors.title = 'Adaugă un titlu — minim 4 caractere.';
+    else if (form.title.trim().length < 4) errors.title = 'Titlul e prea scurt — minim 4 caractere.';
+    if (!form.description.trim()) errors.description = 'Adaugă o descriere — minim 20 caractere.';
+    else if (form.description.trim().length < 20) errors.description = `Mai trebuie ${20 - form.description.trim().length} caractere.`;
+  }
+  if (step === 2) {
+    const b = parseInt(form.budget_ron, 10);
+    if (!form.budget_ron || isNaN(b) || b < 1) errors.budget_ron = 'Introdu un buget — minim 1 RON.';
+    else if (b > 10000000) errors.budget_ron = 'Bugetul e prea mare. Contactează-ne pentru proiecte peste 10M RON.';
+    const t = parseInt(form.timeline_days, 10);
+    if (!form.timeline_days || isNaN(t) || t < 1) errors.timeline_days = 'Termenul în zile e obligatoriu.';
+    else if (t > 365) errors.timeline_days = 'Termenul maxim este 365 zile.';
+    if (form.service_type === 'direct') {
+      if (!form.direct_partner_email) errors.direct_partner_email = 'Emailul expertului e obligatoriu.';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.direct_partner_email))
+        errors.direct_partner_email = 'Email invalid.';
+    }
+  }
+  if (step === 3 && !isPM) {
+    const totalPct = form.milestones.reduce((s, m) => s + (Number(m.percentage_of_budget) || 0), 0);
+    if (Math.round(totalPct) !== 100) errors._pct = `Procentele trebuie să totalizeze 100% (acum ${Math.round(totalPct)}%).`;
+    form.milestones.forEach((m, i) => {
+      if (!m.title.trim()) errors[`ms-title-${i}`] = 'Titlu obligatoriu';
+      if (!m.deliverable_description.trim()) errors[`ms-deliv-${i}`] = 'Descriere livrabil obligatorie';
+    });
+  }
+  return errors;
+}
+
+function StepIndicator({ steps, current, onJump }) {
+  return (
+    <div className="steps-v2" role="list">
+      {steps.map((s, i) => {
+        const isActive = s.id === current;
+        const isDone   = current > s.id;
+        const clickable = isDone;
+        const cls = `step-v2 ${isActive ? 'active' : isDone ? 'done' : ''} ${clickable ? 'clickable' : ''}`;
+        return (
+          <Fragment key={s.id}>
+            <div
+              role="listitem"
+              className={cls}
+              onClick={() => clickable && onJump(s.id)}
+              title={clickable ? `Înapoi la „${s.label}”` : s.label}
+            >
+              <div className="step-v2-circle">
+                {isDone ? <Icon name="check" size={13} /> : i + 1}
+              </div>
+              <div className="step-v2-label">{s.label}</div>
+            </div>
+            {i < steps.length - 1 && (
+              <div className={`step-v2-line ${isDone ? 'done' : isActive ? 'half' : ''}`}>
+                <div className="fill" />
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function Step1Brief({ form, set, errors, attempted }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div className="fld">
+        <div className="fld-label">
+          <span>Tip serviciu</span>
+          <span className="opt">Alege unul</span>
+        </div>
+        <div className="svc-grid">
+          {SERVICE_TYPES.map(st => {
+            const on = form.service_type === st.value;
+            return (
+              <div
+                key={st.value}
+                className={`svc-card ${on ? 'on' : ''}`}
+                onClick={() => set('service_type', st.value)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('service_type', st.value); } }}
+              >
+                <div className="svc-check"><Icon name="check" size={12} /></div>
+                <div className="svc-icon"><Icon name={st.icon} size={18} /></div>
+                <div className="svc-name">{st.label}</div>
+                <div className="svc-desc">{st.description}</div>
+                <div className="svc-meta">
+                  <span className="pulse" style={{ width: 6, height: 6 }} />
+                  {st.tag}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {attempted && errors.service_type && (
+          <div className="fld-help err"><Icon name="x" size={12} />{errors.service_type}</div>
+        )}
+      </div>
+
+      <div className="fld">
+        <div className="fld-label">
+          <span>Titlu proiect</span>
+          <span className={`count ${form.title.length > 80 ? 'warn' : ''}`}>{form.title.length}/100</span>
+        </div>
+        <input
+          className={`input ${attempted && errors.title ? 'has-err' : (form.title.length >= 4 ? 'has-ok' : '')}`}
+          type="text"
+          maxLength={100}
+          placeholder="ex. Audit financiar Q4 2025"
+          value={form.title}
+          onChange={e => set('title', e.target.value)}
+        />
+        {attempted && errors.title
+          ? <div className="fld-help err"><Icon name="x" size={12} />{errors.title}</div>
+          : <div className="fld-help">Apare în marketplace și în propunerile către experți.</div>
+        }
+      </div>
+
+      <div className="fld">
+        <div className="fld-label">
+          <span>Descriere</span>
+          <span className="count">{form.description.length} caractere</span>
+        </div>
+        <textarea
+          className={`input ${attempted && errors.description ? 'has-err' : (form.description.length >= 20 ? 'has-ok' : '')}`}
+          rows={5}
+          placeholder="Descrie obiectivele, contextul și cerințele principale. Cu cât e mai clară descrierea, cu atât experții fac propuneri mai bune."
+          value={form.description}
+          onChange={e => set('description', e.target.value)}
+          style={{ resize: 'vertical', minHeight: 120 }}
+        />
+        {attempted && errors.description
+          ? <div className="fld-help err"><Icon name="x" size={12} />{errors.description}</div>
+          : <div className="fld-help">Minim 20 de caractere. Inclusiv format de livrare, deadline-uri intermediare, riscuri.</div>
+        }
+      </div>
+    </div>
+  );
+}
+
+function Step2Budget({ form, set, errors, attempted, isPM }) {
+  const budget    = parseInt(form.budget_ron, 10) || 0;
+  const commission = Math.round(budget * 0.05);
+  const escrow     = budget + commission;
+  const formatted  = budget.toLocaleString('ro-RO').replace(/,/g, ' ');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div className="fld">
+        <div className="fld-label"><span>Buget total</span><span className="opt">RON, întreg</span></div>
+        <div className="input-row">
+          <input
+            className={`input lg ${attempted && errors.budget_ron ? 'has-err' : (budget >= 1 ? 'has-ok' : '')}`}
+            type="text"
+            inputMode="numeric"
+            placeholder="0"
+            value={form.budget_ron ? formatted : ''}
+            onChange={e => {
+              const digits = e.target.value.replace(/\D/g, '');
+              set('budget_ron', digits ? String(parseInt(digits, 10)) : '');
+            }}
+          />
+          <span className="suffix">RON</span>
+        </div>
+
+        <div className="chip-row" style={{ marginTop: 4 }}>
+          {BUDGET_PRESETS.map(v => (
+            <button
+              key={v}
+              type="button"
+              className={`chip-btn ${budget === v ? 'on' : ''}`}
+              onClick={() => set('budget_ron', String(v))}
+            >
+              {fmtRON(v)} RON
+            </button>
+          ))}
+        </div>
+
+        {attempted && errors.budget_ron
+          ? <div className="fld-help err"><Icon name="x" size={12} />{errors.budget_ron}</div>
+          : <div className="fld-help"><Icon name="lock" size={12} /> Suma totală va fi blocată în escrow la demararea proiectului.</div>
+        }
+
+        {budget > 0 && !isPM && (
+          <div className="live-preview">
+            <span>Total escrow</span>
+            <span className="b"><em>{fmtRON(escrow)}</em></span>
+            <span className="c">RON</span>
+            <span className="sep">·</span>
+            <span className="c">buget {fmtRON(budget)} + comision 5% {fmtRON(commission)}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="fld">
+        <div className="fld-label"><span>Termen estimat</span><span className="opt">Zile calendaristice</span></div>
+        <div className="input-row" style={{ maxWidth: 220 }}>
+          <input
+            className={`input ${attempted && errors.timeline_days ? 'has-err' : (form.timeline_days ? 'has-ok' : '')}`}
+            type="number"
+            min="1"
+            max="365"
+            placeholder="30"
+            value={form.timeline_days}
+            onChange={e => set('timeline_days', e.target.value.replace(/\D/g, ''))}
+          />
+          <span className="suffix">ZILE</span>
+        </div>
+        <div className="chip-row" style={{ marginTop: 4 }}>
+          {TIMELINE_PRESETS.map(v => (
+            <button key={v} type="button" className={`chip-btn ${parseInt(form.timeline_days, 10) === v ? 'on' : ''}`} onClick={() => set('timeline_days', String(v))}>
+              {v === 14 ? '2 săpt' : v === 30 ? '1 lună' : v === 60 ? '2 luni' : '3 luni'}
+            </button>
+          ))}
+        </div>
+        {attempted && errors.timeline_days && (
+          <div className="fld-help err"><Icon name="x" size={12} />{errors.timeline_days}</div>
+        )}
+      </div>
+
+      {form.service_type === 'direct' && (
+        <div className="fld">
+          <div className="fld-label"><span>Email expert</span><span className="opt">Persoana ce primește invitația</span></div>
+          <div className="input-row">
+            <span className="prefix-icon"><Icon name="mail" size={14} /></span>
+            <input
+              className={`input with-icon ${attempted && errors.direct_partner_email ? 'has-err' : (form.direct_partner_email && !errors.direct_partner_email ? 'has-ok' : '')}`}
+              type="email"
+              placeholder="expert@exemplu.ro"
+              value={form.direct_partner_email}
+              onChange={e => set('direct_partner_email', e.target.value)}
+            />
+          </div>
+          {attempted && errors.direct_partner_email && (
+            <div className="fld-help err"><Icon name="x" size={12} />{errors.direct_partner_email}</div>
+          )}
+        </div>
+      )}
+
+      <div style={{
+        padding: '.875rem 1rem',
+        background: 'var(--bg-1)',
+        border: '1px solid var(--border-1)',
+        borderRadius: 'var(--r-md)',
+        fontSize: 12.5, color: 'var(--fg-2)',
+        display: 'flex', gap: '.75rem', alignItems: 'flex-start',
+      }}>
+        <Icon name="shield-check" size={15} style={{ color: 'var(--accent-hi)', flexShrink: 0, marginTop: 1 }} />
+        <div>
+          <b style={{ color: 'var(--fg-0)', fontWeight: 600 }}>Cum funcționează escrow:</b>{' '}
+          {isPM
+            ? 'La PM, comisionul de 5% se aplică doar atunci când depui fonduri pentru fiecare milestone — nu și la creare.'
+            : 'Banii sunt blocați la acceptarea proiectului și eliberați automat după aprobarea fiecărui milestone.'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Step3Milestones({ form, setForm, errors, attempted }) {
+  const budget = parseInt(form.budget_ron, 10) || 0;
+  const totalPct = form.milestones.reduce((s, m) => s + (Number(m.percentage_of_budget) || 0), 0);
+  const rounded = Math.round(totalPct * 100) / 100;
+  const tone = rounded === 100 ? 'ok' : rounded > 100 ? 'over' : 'under';
+  const fillTone = rounded > 100 ? 'over' : rounded === 100 ? 'ok' : '';
+  const fillPct  = Math.min(100, rounded);
+
+  const [dragIdx, setDragIdx] = useState(null);
+  const [overIdx, setOverIdx] = useState(null);
+
+  const setMs = (i, key, val) =>
+    setForm(p => ({ ...p, milestones: p.milestones.map((m, idx) => idx === i ? { ...m, [key]: val } : m) }));
+
+  const addMs = () => setForm(p => ({
+    ...p,
+    milestones: [...p.milestones, { id: Date.now(), title: '', deliverable_description: '', percentage_of_budget: 0 }],
+  }));
+
+  const removeMs = (i) => setForm(p => ({
+    ...p,
+    milestones: p.milestones.length > 1 ? p.milestones.filter((_, idx) => idx !== i) : p.milestones,
+  }));
+
+  const reorder = (from, to) => setForm(p => {
+    if (from === to) return p;
+    const arr = [...p.milestones];
+    const [m] = arr.splice(from, 1);
+    arr.splice(to, 0, m);
+    return { ...p, milestones: arr };
+  });
+
+  const distributeEvenly = () => setForm(p => {
+    const n = p.milestones.length;
+    const base = Math.floor(100 / n);
+    const rem = 100 - base * n;
+    return { ...p, milestones: p.milestones.map((m, i) => ({ ...m, percentage_of_budget: base + (i < rem ? 1 : 0) })) };
+  });
+
+  const autobalance = () => setForm(p => {
+    const arr = p.milestones.map(m => ({ ...m, percentage_of_budget: Number(m.percentage_of_budget) || 0 }));
+    if (arr.length === 0) return p;
+    const sumExceptLast = arr.slice(0, -1).reduce((s, m) => s + m.percentage_of_budget, 0);
+    const delta = 100 - sumExceptLast;
+    if (delta >= 0 && delta <= 100) {
+      arr[arr.length - 1].percentage_of_budget = delta;
+    } else {
+      const n = arr.length;
+      const base = Math.floor(100 / n);
+      const rem = 100 - base * n;
+      arr.forEach((m, i) => m.percentage_of_budget = base + (i < rem ? 1 : 0));
+    }
+    return { ...p, milestones: arr };
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div className="pct-meter">
+        <div className="row">
+          <div>
+            <div className="lbl">Alocare buget</div>
+            <div className={`val ${tone}`}>
+              <em>{rounded}%</em>
+              <span style={{ fontSize: 13, color: 'var(--fg-3)', marginLeft: 6 }}>/ 100%</span>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div className="lbl">Buget rămas</div>
+            <div className={`delta ${tone === 'ok' ? 'ok' : tone === 'over' ? 'err' : 'warn'}`}>
+              {fmtRON(budget * (100 - rounded) / 100)} RON
+            </div>
+          </div>
+        </div>
+        <div className="track">
+          <div className={`fill ${fillTone}`} style={{ width: `${fillPct}%` }} />
+          {rounded > 100 && <div className="marker" />}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', alignItems: 'center' }}>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+            Împarte bugetul de <b style={{ color: 'var(--fg-0)' }}>{fmtRON(budget)} RON</b> pe etape.
+          </div>
+          <div style={{ display: 'flex', gap: '.375rem' }}>
+            <button type="button" className="chip-btn" onClick={distributeEvenly}>
+              <Icon name="trend" size={11} style={{ marginRight: 4, verticalAlign: -2 }} />
+              Egal
+            </button>
+            <button type="button" className="chip-btn" onClick={autobalance}>
+              <Icon name="target" size={11} style={{ marginRight: 4, verticalAlign: -2 }} />
+              Auto-100%
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+        {form.milestones.map((ms, i) => {
+          const amt = budget ? Math.round((Number(ms.percentage_of_budget) || 0) / 100 * budget) : 0;
+          const pct = Math.max(0, Math.min(100, Number(ms.percentage_of_budget) || 0));
+          const tErr = attempted && errors[`ms-title-${i}`];
+          const dErr = attempted && errors[`ms-deliv-${i}`];
+          return (
+            <div
+              key={ms.id}
+              className={`ms-card ${dragIdx === i ? 'dragging' : ''} ${overIdx === i && dragIdx !== null && dragIdx !== i ? 'drag-over' : ''}`}
+              draggable
+              onDragStart={(e) => { setDragIdx(i); e.dataTransfer.effectAllowed = 'move'; }}
+              onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
+              onDragLeave={() => setOverIdx(o => (o === i ? null : o))}
+              onDrop={(e) => { e.preventDefault(); if (dragIdx !== null) reorder(dragIdx, i); setDragIdx(null); setOverIdx(null); }}
+              onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+            >
+              <div className="ms-handle" title="Trage pentru a reordona">
+                <Icon name="menu" size={14} />
+                <span className="grip-num">{String(i + 1).padStart(2, '0')}</span>
+              </div>
+              <div className="ms-body">
+                <div className="ms-top">
+                  <input
+                    className="ms-input"
+                    placeholder={`Etapa ${i + 1} — ex. Cercetare & analiză inițială`}
+                    value={ms.title}
+                    onChange={e => setMs(i, 'title', e.target.value)}
+                    style={tErr ? { borderBottomColor: 'var(--danger)' } : {}}
+                  />
+                  {form.milestones.length > 1 && (
+                    <button type="button" className="ms-del" onClick={() => removeMs(i)} title="Șterge etapa">
+                      <Icon name="trash" size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <textarea
+                  className="ms-deliv"
+                  rows={2}
+                  placeholder="Descrie livrabilele acestei etape — documente, build-uri, întâlniri…"
+                  value={ms.deliverable_description}
+                  onChange={e => setMs(i, 'deliverable_description', e.target.value)}
+                  style={dErr ? { borderColor: 'var(--danger)' } : {}}
+                />
+
+                <div className="ms-pct-row">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    className="slider"
+                    value={pct}
+                    onChange={e => setMs(i, 'percentage_of_budget', Number(e.target.value))}
+                    style={{ '--pct': `${pct}%` }}
+                  />
+                  <div className="ms-pct-num">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={pct}
+                      onFocus={e => e.target.select()}
+                      onChange={e => {
+                        const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
+                        const n = digits === '' ? 0 : parseInt(digits, 10);
+                        setMs(i, 'percentage_of_budget', Math.max(0, Math.min(100, n)));
+                      }}
+                    />
+                    <span className="pct-sym">%</span>
+                  </div>
+                  <div className="ms-amt">
+                    <em>{fmtRON(amt)}</em> <span style={{ color: 'var(--fg-3)' }}>RON</span>
+                  </div>
+                </div>
+
+                {(tErr || dErr) && (
+                  <div className="fld-help err">
+                    <Icon name="x" size={12} />
+                    {tErr || dErr}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button type="button" className="btn btn-secondary btn-sm" onClick={addMs} style={{ alignSelf: 'flex-start' }}>
+        <Icon name="plus" size={13} /> Adaugă etapă
+      </button>
+
+      {attempted && errors._pct && (
+        <div className="fld-help err"><Icon name="x" size={12} />{errors._pct}</div>
+      )}
+    </div>
+  );
+}
+
+function Step4Review({ form, isPM, onJump }) {
+  const budget = parseInt(form.budget_ron, 10) || 0;
+  const commission = isPM ? 0 : Math.round(budget * 0.05);
+  const escrow = budget + commission;
+  const svc = SERVICE_TYPES.find(s => s.value === form.service_type);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div className="review-card">
+        <div className="review-head">
+          <div className="review-eyebrow">
+            <Icon name={svc?.icon || 'folder'} size={11} />
+            {svc?.label}
+          </div>
+          <div className="review-title">{form.title || <em>Proiect fără titlu</em>}</div>
+          {form.description && <div className="review-desc">{form.description}</div>}
+          <div style={{ marginTop: '.875rem' }}>
+            <button type="button" className="chip-btn" onClick={() => onJump(1)}>
+              <Icon name="edit" size={10} style={{ marginRight: 4, verticalAlign: -1 }} /> Editează brief
+            </button>
+          </div>
+        </div>
+
+        <div className="review-grid">
+          <div className="review-cell">
+            <div className="ico"><Icon name="wallet" size={13} /></div>
+            <div className="lbl">Buget</div>
+            <div className="val"><em>{fmtRON(budget)}</em> <span style={{ fontSize: 11, fontFamily: 'var(--f-mono)', color: 'var(--fg-3)' }}>RON</span></div>
+          </div>
+          <div className="review-cell">
+            <div className="ico"><Icon name="clock" size={13} /></div>
+            <div className="lbl">Termen</div>
+            <div className="val">{form.timeline_days || '—'} <span style={{ fontSize: 11, fontFamily: 'var(--f-mono)', color: 'var(--fg-3)' }}>ZILE</span></div>
+          </div>
+          <div className="review-cell">
+            <div className="ico"><Icon name={svc?.icon || 'folder'} size={13} /></div>
+            <div className="lbl">Tip</div>
+            <div className="val" style={{ fontSize: 15 }}>{svc?.label || '—'}</div>
+          </div>
+        </div>
+
+        {form.service_type === 'direct' && form.direct_partner_email && (
+          <div style={{ padding: '.875rem 1.75rem', borderBottom: '1px solid var(--border-1)', display: 'flex', alignItems: 'center', gap: '.625rem' }}>
+            <div style={{ width: 24, height: 24, borderRadius: 'var(--r-xs)', background: 'var(--bg-2)', border: '1px solid var(--border-2)', display: 'grid', placeItems: 'center', color: 'var(--fg-3)' }}>
+              <Icon name="mail" size={12} />
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>Invitație expert</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-0)', fontFamily: 'var(--f-mono)' }}>{form.direct_partner_email}</div>
+          </div>
+        )}
+
+        {!isPM && form.milestones.length > 0 && (
+          <div className="review-ms">
+            <div className="review-ms-h">
+              <div className="l">{form.milestones.length} etape · livrare în {form.milestones.length} tranșe</div>
+              <button type="button" className="chip-btn" onClick={() => onJump(3)}>
+                <Icon name="edit" size={10} style={{ marginRight: 4, verticalAlign: -1 }} /> Editează etape
+              </button>
+            </div>
+            {form.milestones.map((ms, i) => (
+              <div className="review-ms-row" key={ms.id || i}>
+                <div className="num">{String(i + 1).padStart(2, '0')}</div>
+                <div className="tt">
+                  {ms.title || `Etapa ${i + 1}`}
+                  {ms.deliverable_description && <span className="sub">{ms.deliverable_description}</span>}
+                </div>
+                <div className="pp">{Number(ms.percentage_of_budget) || 0}%</div>
+                <div className="am">{fmtRON(budget * (Number(ms.percentage_of_budget) || 0) / 100)} RON</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="escrow-total">
+        <div className="h">
+          <div className="l">
+            <span className="pulse" />
+            Buget total proiect
+          </div>
+          <span className="badge badge-blue no-dot" style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}>
+            <Icon name="lock" size={10} style={{ marginRight: 4 }} /> Depunere per milestone
+          </span>
+        </div>
+        <div className="amt">
+          <em>{fmtRON(budget)}</em>
+          <span className="cur">RON</span>
+        </div>
+        <div className="breakdown">
+          <div>
+            <span>Buget proiect</span>
+            <span>{fmtRON(budget)} RON</span>
+          </div>
+          <div>
+            <span>Comision tu (beneficiar)</span>
+            <span>+5% per milestone</span>
+          </div>
+          <div>
+            <span>Comision prestator (la release)</span>
+            <span>5% deducat din suma milestone</span>
+          </div>
+        </div>
+        <div style={{
+          marginTop: '0.75rem', padding: '0.625rem 0.875rem',
+          background: 'var(--accent-bg)', border: '1px solid var(--accent-border)',
+          borderRadius: 'var(--r-sm)', fontSize: 12, color: 'var(--fg-1)', lineHeight: 1.5,
+        }}>
+          <Icon name="info" size={12} style={{ marginRight: 4, verticalAlign: -2 }} />
+          Banii se depun în escrow după ce contractul e semnat de ambele părți, doar pentru milestone-ul curent. Tu plătești <strong>suma milestone + 5%</strong>; suma milestone se eliberează prestatorului (minus 5% comision) la aprobare.
+        </div>
+      </div>
+
+      <div className="disclaimer">
+        <Icon name="shield" size={15} />
+        <div>
+          <b>Atenție:</b> Vei putea anula proiectul <b style={{ color: 'var(--fg-0)' }}>doar înainte de semnarea contractului</b>.
+          După semnare, fondurile sunt eliberate doar prin aprobarea milestone-urilor sau prin procedura de dispută.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SuccessState({ form, projectId, isPM, dashboardPath, onReset, onView }) {
+  const svc = SERVICE_TYPES.find(s => s.value === form.service_type);
+
+  const nextSteps = isPM
+    ? [
+        { t: <>Un <b>admin Escro</b> va analiza proiectul în următoarele <b>24h lucrătoare</b>.</> },
+        { t: <>După aprobare, vom împărți proiectul în <b>sub-task-uri</b> și vom asigna experții potriviți.</> },
+        { t: <>Vei primi <b>notificare email</b> cu fiecare schimbare de status.</> },
+      ]
+    : form.service_type === 'direct'
+    ? [
+        { t: <>Am trimis o invitație la <b style={{ fontFamily: 'var(--f-mono)' }}>{form.direct_partner_email}</b>.</> },
+        { t: <>După ce expertul acceptă, vei <b>semna contractul</b> și fondurile vor fi blocate în escrow.</> },
+        { t: <>Poți discuta direct cu expertul prin <b>chatul de proiect</b>.</> },
+      ]
+    : [
+        { t: <>Proiectul este vizibil în <b>marketplace</b> pentru experți verificați.</> },
+        { t: <>Vei primi <b>aplicații</b> în 24–72h, cu propuneri și prețuri.</> },
+        { t: <>Compari, alegi, semnezi — și fondurile se blochează în escrow.</> },
+      ];
+
+  return (
+    <div className="success-stage">
+      <div className="success-mark">
+        <Icon name="check" size={36} />
+      </div>
+      <div className="success-eyebrow">{svc?.label}{projectId ? ` · ${projectId}` : ''}</div>
+      <h2 className="success-title">Proiect <em>creat</em>.</h2>
+      <p className="success-sub">
+        „{form.title}” a fost înregistrat cu succes. Iată ce urmează:
+      </p>
+
+      <div className="success-next">
+        <div className="hd">Pașii următori</div>
+        {nextSteps.map((s, i) => (
+          <div className="success-next-row" key={i}>
+            <div className="n">{i + 1}</div>
+            <div className="t">{s.t}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="success-cta">
+        <button className="btn btn-primary" onClick={onView}>
+          <Icon name="arrow-right" size={13} /> Vezi {isPM ? 'taskul' : 'proiectul'}
+        </button>
+        <button className="btn btn-secondary" onClick={onReset}>
+          <Icon name="plus" size={13} /> Creează încă unul
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function CreateProject() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+
   const [step, setStep] = useState(1);
-  
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    budget_ron: '',
-    timeline_days: '',
-    service_type: '',
-    direct_partner_email: '',
-    milestones: [
-      { title: '', deliverable_description: '', percentage_of_budget: 50 },
-      { title: '', deliverable_description: '', percentage_of_budget: 50 }
-    ]
-  });
+  const [form, setForm] = useState(FRESH_FORM);
+  const [attempted, setAttempted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [showDraft, setShowDraft] = useState(false);
+  const [draftDate, setDraftDate] = useState('');
+  const [createdProject, setCreatedProject] = useState(null);
+  const [submitError, setSubmitError] = useState('');
 
-  const serviceTypes = [
-    { value: 'matching', label: '🔗 Matching', description: 'Platforma te ajută să găsești expertul potrivit pentru proiectul tău.', icon: '🔗' },
-    { value: 'direct', label: '🎯 Direct', description: 'Contract direct cu expertul ales de tine.', icon: '🎯' },
-    { value: 'project_management', label: '📊 Project Management', description: 'Supervizăm proiectul de la început până la finalizare.', icon: '📊' }
-  ];
+  const isPM = form.service_type === 'project_management';
+  const dashboardPath = user?.role === 'expert' ? '/expert/dashboard'
+    : user?.role === 'individual' ? '/individual/dashboard'
+    : '/company/dashboard';
 
-  const handleServiceTypeSelect = (type) => {
-    setFormData(prev => ({ ...prev, service_type: type }));
-    setStep(2);
-  };
+  const stepsToShow = useMemo(() => isPM ? ALL_STEPS.filter(s => s.id !== 3) : ALL_STEPS, [isPM]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'budget_ron' || name === 'timeline_days' ? parseFloat(value) : value
-    }));
-  };
-
-  const handleMilestoneChange = (index, field, value) => {
-    const newMilestones = [...formData.milestones];
-    newMilestones[index] = { ...newMilestones[index], [field]: field === 'percentage_of_budget' ? parseFloat(value) : value };
-    setFormData(prev => ({ ...prev, milestones: newMilestones }));
-  };
-
-  const addMilestone = () => {
-    setFormData(prev => ({ ...prev, milestones: [...prev.milestones, { title: '', deliverable_description: '', percentage_of_budget: 0 }] }));
-  };
-
-  const removeMilestone = (index) => {
-    if (formData.milestones.length > 1) {
-      setFormData(prev => ({ ...prev, milestones: prev.milestones.filter((_, i) => i !== index) }));
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.title || !formData.description || !formData.budget_ron || !formData.timeline_days) {
-      setError('Completează toate câmpurile obligatorii');
-      return;
-    }
-    if (formData.service_type === 'direct' && !formData.direct_partner_email) {
-      setError('Introdu email-ul expertului sau companiei pentru contract direct');
-      return;
-    }
-    if (formData.service_type !== 'project_management') {
-      if (formData.milestones.length === 0) { setError('Adaugă cel puțin o etapă'); return; }
-      const totalPct = formData.milestones.reduce((sum, m) => sum + (parseFloat(m.percentage_of_budget) || 0), 0);
-      if (totalPct !== 100) { setError(`Milestone percentages must add up to 100% (currently ${totalPct}%)`); return; }
-      if (formData.milestones.some(m => !m.title || !m.deliverable_description)) { setError('All milestones must have title and description'); return; }
-    }
+  useEffect(() => {
     try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await axios.post('/api/projects', formData, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (response.data.is_project_management && response.data.task_id) {
-        setSuccess('✓ Project Management task creat și trimis la aprobare!');
-        setTimeout(() => { navigate(user?.role === 'company' ? `/company/dashboard?tab=pm-${response.data.task_id}` : `/expert/dashboard?tab=pm-${response.data.task_id}`); }, 2000);
-      } else {
-        setSuccess('✓ Project created successfully!');
-        setTimeout(() => { navigate(user?.role === 'expert' ? '/expert/dashboard?tab=myprojects' : '/company/dashboard?tab=myprojects'); }, 1500);
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft.form && (draft.form.title || draft.form.description || draft.form.budget_ron)) {
+          setShowDraft(true);
+          setDraftDate(draft.savedAt || '');
+        }
       }
-    } catch (err) { setError(err.response?.data?.error || err.message || 'Failed to create project'); } 
-    finally { setLoading(false); }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (done) return;
+    const empty = !form.title && !form.description && !form.budget_ron && !form.service_type;
+    if (empty) return;
+    const payload = JSON.stringify({ form, step, savedAt: new Date().toISOString() });
+    try { localStorage.setItem(DRAFT_KEY, payload); } catch { /* ignore */ }
+  }, [form, step, done]);
+
+  const resumeDraft = () => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft.form) {
+          setForm(draft.form);
+          if (draft.step) setStep(draft.step);
+        }
+      }
+    } catch { /* ignore */ }
+    setShowDraft(false);
   };
 
-  const styles = {
-    container: { padding: '2rem', maxWidth: '900px', margin: '0 auto', backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - 65px)' },
-    card: { backgroundColor: 'white', borderRadius: '20px', padding: '2.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' },
-    title: { fontSize: '2rem', fontWeight: '700', color: '#1e293b', margin: '0 0 2rem 0', textAlign: 'center' },
-    label: { fontWeight: '600', display: 'block', marginBottom: '0.5rem', color: '#374151', fontSize: '0.95rem' },
-    input: { width: '100%', padding: '0.875rem 1rem', border: '2px solid #e2e8f0', borderRadius: '10px', fontSize: '1rem', boxSizing: 'border-box', outline: 'none' },
-    textarea: { width: '100%', padding: '0.875rem 1rem', border: '2px solid #e2e8f0', borderRadius: '10px', fontSize: '1rem', minHeight: '120px', boxSizing: 'border-box', outline: 'none', resize: 'vertical' },
-    button: { padding: '0.875rem 1.75rem', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '1rem', fontWeight: '600' },
-    buttonGreen: { backgroundColor: '#10b981' },
-    buttonRed: { backgroundColor: '#ef4444' },
-    buttonSecondary: { backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0' },
-    messageBox: { padding: '1rem 1.25rem', borderRadius: '12px', marginBottom: '1.5rem', borderLeft: '4px solid' },
-    errorBox: { backgroundColor: '#fee2e2', borderLeftColor: '#ef4444', color: '#dc2626' },
-    successBox: { backgroundColor: '#dcfce7', borderLeftColor: '#10b981', color: '#059669' },
-    stepBadge: { padding: '0.75rem 1.5rem', borderRadius: '99px', fontWeight: '600', fontSize: '0.9rem' },
-    serviceCard: { padding: '1.75rem', borderRadius: '16px', border: '2px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.3s', backgroundColor: 'white' },
-    milestoneContainer: { backgroundColor: '#f8fafc', padding: '1.5rem', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '1.25rem' },
+  const discardDraft = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    setShowDraft(false);
   };
+
+  const set = (key, val) => setForm(p => ({ ...p, [key]: val }));
+
+  const errors = useMemo(() => validateStep(step, form, isPM), [step, form, isPM]);
+  const stepValid = Object.keys(errors).length === 0;
+
+  const handleNext = () => {
+    if (!stepValid) { setAttempted(true); return; }
+    setAttempted(false);
+    if (isPM && step === 2) setStep(4);
+    else setStep(s => Math.min(4, s + 1));
+  };
+
+  const handleBack = () => {
+    setAttempted(false);
+    if (isPM && step === 4) setStep(2);
+    else setStep(s => Math.max(1, s - 1));
+  };
+
+  const jumpTo = (target) => {
+    if (target < step) {
+      setAttempted(false);
+      setStep(target);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!stepValid) { setAttempted(true); return; }
+    setSubmitError('');
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const payload = {
+        ...form,
+        budget_ron: parseInt(form.budget_ron, 10) || 0,
+        timeline_days: parseInt(form.timeline_days, 10) || 0,
+        milestones: isPM ? [] : form.milestones.map(m => ({
+          title: m.title,
+          deliverable_description: m.deliverable_description,
+          percentage_of_budget: Number(m.percentage_of_budget) || 0,
+        })),
+      };
+      const res = await axios.post('/api/projects', payload, { headers: { Authorization: `Bearer ${token}` } });
+      setCreatedProject({
+        // PM tasks return only task_id; direct/matching projects return project_id.
+        // For PM sub-projects task_id is preferred (parent task page); otherwise use project_id.
+        id: res.data.task_id || res.data.project_id || res.data.project?.id || res.data.id,
+        is_pm: !!res.data.is_project_management,
+      });
+      setDone(true);
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    } catch (err) {
+      setSubmitError(err.response?.data?.error || 'Eroare la crearea proiectului.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reset = () => {
+    setForm(FRESH_FORM);
+    setStep(1);
+    setAttempted(false);
+    setDone(false);
+    setCreatedProject(null);
+    setSubmitError('');
+  };
+
+  const viewCreated = () => {
+    if (createdProject?.id) navigate(`/project/${createdProject.id}`);
+    else navigate(dashboardPath);
+  };
+
+  const indicatorSteps = stepsToShow.map((s, i) => ({ ...s, id: i + 1 }));
+  const indicatorCurrent = isPM
+    ? (step === 1 ? 1 : step === 2 ? 2 : step === 4 ? 3 : 1)
+    : step;
+
+  if (done) {
+    return (
+      <div className="escro-page fade-up" style={{ maxWidth: 680, margin: '0 auto' }}>
+        <SuccessState
+          form={form}
+          projectId={createdProject?.id ? `PRJ-${String(createdProject.id).slice(0, 8).toUpperCase()}` : null}
+          isPM={createdProject?.is_pm || isPM}
+          dashboardPath={dashboardPath}
+          onReset={reset}
+          onView={viewCreated}
+        />
+      </div>
+    );
+  }
 
   return (
-    <>
-      <Header />
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <h1 style={styles.title}>➕ Creare Proiect Nou</h1>
-          
-          {error && <div style={{ ...styles.messageBox, ...styles.errorBox }}><strong>⚠️ Eroare:</strong> {error}</div>}
-          {success && <div style={{ ...styles.messageBox, ...styles.successBox }}><strong>✅ Succes!</strong> {success}</div>}
+    <div className="escro-page fade-up" style={{ maxWidth: 680, margin: '0 auto' }}>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
-            <span style={{ ...styles.stepBadge, background: step >= 1 ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : '#e2e8f0', color: step >= 1 ? 'white' : '#6b7280' }}>1. Tip Serviciu</span>
-            <div style={{ width: '40px', height: '3px', backgroundColor: step >= 2 ? '#6366f1' : '#e2e8f0', borderRadius: '2px', alignSelf: 'center' }} />
-            <span style={{ ...styles.stepBadge, background: step >= 2 ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : '#e2e8f0', color: step >= 2 ? 'white' : '#6b7280' }}>2. Detalii</span>
+      {showDraft && (
+        <div className="draft-banner">
+          <Icon name="file" size={16} />
+          <div className="grow">
+            Ai un <b>draft salvat</b>{draftDate ? ` din ${new Date(draftDate).toLocaleString('ro-RO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}. Continuă de unde ai rămas?
           </div>
+          <button onClick={resumeDraft}>Continuă</button>
+          <button className="ghost" onClick={discardDraft}>Renunță</button>
+        </div>
+      )}
 
-          {step === 1 && (
-            <div>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '0.75rem', color: '#1e293b', textAlign: 'center' }}>Ce tip de serviciu ai nevoie?</h2>
-              <p style={{ textAlign: 'center', color: '#64748b', marginBottom: '2rem' }}>Alege tipul de serviciu care ți se potrivește</p>
-              <div style={{ display: 'grid', gap: '1.25rem' }}>
-                {serviceTypes.map(service => (
-                  <div key={service.value} style={formData.service_type === service.value ? { ...styles.serviceCard, borderColor: '#6366f1', backgroundColor: '#f5f3ff', boxShadow: '0 4px 20px rgba(99, 102, 241, 0.2)' } : styles.serviceCard} onClick={() => handleServiceTypeSelect(service.value)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '1rem' }}>
-                      <div style={{ width: '56px', height: '56px', borderRadius: '14px', backgroundColor: formData.service_type === service.value ? '#6366f1' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem' }}>{service.icon}</div>
-                      <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b', fontWeight: '700' }}>{service.label}</h3>
-                    </div>
-                    <p style={{ margin: 0, color: '#64748b', lineHeight: '1.6' }}>{service.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+      <div style={{ marginBottom: '1.75rem' }}>
+        <div className="h-eyebrow">
+          <Icon name="sparkle" size={11} />
+          Proiect nou
+          <span style={{ color: 'var(--fg-4)' }}>·</span>
+          <span style={{ color: 'var(--fg-2)' }}>{SERVICE_TYPES.find(s => s.value === form.service_type)?.label || 'alege tipul'}</span>
+        </div>
+        <h1 className="h-title">
+          {step === 1 && <>Brief & <em>tip serviciu</em>.</>}
+          {step === 2 && <>Buget & <em>termene</em>.</>}
+          {step === 3 && !isPM && <>Împarte <em>pe etape</em>.</>}
+          {(step === 4 || (step === 3 && isPM)) && <>Verifică & <em>lansează</em>.</>}
+        </h1>
+      </div>
+
+      <StepIndicator steps={indicatorSteps} current={indicatorCurrent} onJump={(id) => {
+        const realStep = isPM
+          ? (id === 1 ? 1 : id === 2 ? 2 : 4)
+          : id;
+        jumpTo(realStep);
+      }} />
+
+      <div className="wiz-body" key={`step-${step}`}>
+        {step === 1 && <Step1Brief form={form} set={set} errors={errors} attempted={attempted} />}
+        {step === 2 && <Step2Budget form={form} set={set} errors={errors} attempted={attempted} isPM={isPM} />}
+        {step === 3 && !isPM && <Step3Milestones form={form} setForm={setForm} errors={errors} attempted={attempted} />}
+        {(step === 4 || (step === 3 && isPM)) && <Step4Review form={form} isPM={isPM} onJump={jumpTo} />}
+
+        {submitError && (
+          <div className="fld-help err" style={{ marginTop: '1rem' }}>
+            <Icon name="x" size={12} />{submitError}
+          </div>
+        )}
+
+        <div className={`wiz-nav ${step === 1 ? 'end' : ''}`}>
+          {step > 1 ? (
+            <button className="btn btn-secondary" type="button" onClick={handleBack} disabled={loading}>
+              <Icon name="arrow-left" size={13} /> Înapoi
+            </button>
+          ) : (
+            <button className="btn btn-ghost" type="button" onClick={() => navigate(-1)}>Anulează</button>
           )}
 
-          {step === 2 && (
-            <form onSubmit={handleSubmit}>
-              <button type="button" onClick={() => setStep(1)} style={{ ...styles.button, ...styles.buttonSecondary, marginBottom: '1.5rem', padding: '0.6rem 1rem' }}>← Înapoi</button>
-              
-              <div style={{ marginBottom: '2.5rem', paddingBottom: '2rem', borderBottom: '2px solid #f1f5f9' }}>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: '700', marginBottom: '1.5rem', color: '#1e293b' }}>📋 Detalii Proiect</h2>
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={styles.label}>Titlu Proiect *</label>
-                  <input type="text" name="title" value={formData.title} onChange={handleInputChange} placeholder="Ex: Design Website" style={{...styles.input, backgroundColor: '#f8fafc'}} required />
-                </div>
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={styles.label}>Descriere *</label>
-                  <textarea name="description" value={formData.description} onChange={handleInputChange} placeholder="Descrie proiectul..." style={{...styles.textarea, backgroundColor: '#f8fafc'}} required />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <label style={styles.label}>💰 Buget (RON) *</label>
-                    <input type="number" name="budget_ron" value={formData.budget_ron} onChange={handleInputChange} placeholder="5000" style={{...styles.input, backgroundColor: '#f8fafc'}} required />
-                  </div>
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <label style={styles.label}>⏱️ Durată (zile) *</label>
-                    <input type="number" name="timeline_days" value={formData.timeline_days} onChange={handleInputChange} placeholder="30" style={{...styles.input, backgroundColor: '#f8fafc'}} required />
-                  </div>
-                </div>
-                {formData.service_type === 'direct' && (
-                  <div style={{ marginTop: '1.5rem', padding: '1.5rem', backgroundColor: '#fef3c7', borderRadius: '14px', border: '1px solid #fcd34d' }}>
-                    <h3 style={{ margin: '0 0 0.75rem 0', color: '#92400e', fontWeight: '700' }}>👤 Contract Direct</h3>
-                    <p style={{ margin: '0 0 1rem 0', color: '#92400e', fontSize: '0.9rem' }}>Introdu email-ul expertului</p>
-                    <input type="email" name="direct_partner_email" value={formData.direct_partner_email} onChange={handleInputChange} placeholder="expert@exemplu.ro" style={{...styles.input, backgroundColor: 'white'}} required />
-                  </div>
-                )}
-              </div>
-
-              {formData.service_type !== 'project_management' && (
-                <div>
-                  <h2 style={{ fontSize: '1.35rem', fontWeight: '700', marginBottom: '1.5rem', color: '#1e293b' }}>🎯 Etape (Milestones)</h2>
-                  {formData.milestones.map((milestone, index) => (
-                    <div key={index} style={styles.milestoneContainer}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                        <span style={{ backgroundColor: '#6366f1', color: 'white', padding: '0.3rem 0.75rem', borderRadius: '6px', fontWeight: '600', fontSize: '0.85rem' }}>Etapa {index + 1}</span>
-                        {formData.milestones.length > 1 && <button type="button" onClick={() => removeMilestone(index)} style={{ ...styles.button, ...styles.buttonRed, padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>🗑️</button>}
-                      </div>
-                      <div style={{ marginBottom: '1rem' }}>
-                        <input type="text" value={milestone.title} onChange={(e) => handleMilestoneChange(index, 'title', e.target.value)} placeholder="Titlu etapă" style={styles.input} required />
-                      </div>
-                      <div style={{ marginBottom: '1rem' }}>
-                        <textarea value={milestone.deliverable_description} onChange={(e) => handleMilestoneChange(index, 'deliverable_description', e.target.value)} placeholder="Descriere livrabil" style={{...styles.textarea, minHeight: '80px'}} required />
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input type="number" value={milestone.percentage_of_budget} onChange={(e) => handleMilestoneChange(index, 'percentage_of_budget', e.target.value)} min="0" max="100" style={{...styles.input, width: '100px'}} />
-                        <span style={{ color: '#64748b' }}>% = {Math.round((parseFloat(milestone.percentage_of_budget) || 0) * formData.budget_ron / 100)} RON</span>
-                      </div>
-                    </div>
-                  ))}
-                  <button type="button" onClick={addMilestone} style={{ ...styles.button, backgroundColor: '#0ea5e9', marginBottom: '2rem' }}>➕ Adaugă Etapă</button>
-                  
-                  <div style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', padding: '1.75rem', borderRadius: '16px', color: 'white' }}>
-                    <h3 style={{ margin: '0 0 1rem 0', fontWeight: '700' }}>📊 Rezumat</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                      <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '12px' }}>
-                        <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.8 }}>Buget</p>
-                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1.5rem', fontWeight: '700' }}>{formData.budget_ron || 0} RON</p>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '12px' }}>
-                        <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.8 }}>Durată</p>
-                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1.5rem', fontWeight: '700' }}>{formData.timeline_days || 0} zile</p>
-                      </div>
-                      <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '12px' }}>
-                        <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.8 }}>Etape</p>
-                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1.5rem', fontWeight: '700' }}>{formData.milestones.length}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '2rem' }}>
-                <button type="button" onClick={() => navigate(-1)} style={{ ...styles.button, backgroundColor: '#6b7280' }}>❌ Anulează</button>
-                <button type="submit" disabled={loading} style={{ ...styles.button, ...styles.buttonGreen, opacity: loading ? 0.6 : 1 }}>{loading ? '⏳ Se creează...' : '✓ Creează Proiect'}</button>
-              </div>
-            </form>
+          {(step < 4 && !(isPM && step === 2)) ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={handleNext}
+              disabled={!stepValid && attempted}
+              title={!stepValid ? 'Completează câmpurile obligatorii' : ''}
+            >
+              {step === 1 ? 'Continuă cu bugetul' : 'Adaugă etape'}
+              <Icon name="arrow-right" size={13} />
+            </button>
+          ) : (isPM && step === 2) ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={handleNext}
+              disabled={!stepValid && attempted}
+            >
+              Revizuire <Icon name="arrow-right" size={13} />
+            </button>
+          ) : (
+            <button className="btn btn-primary" type="button" onClick={handleSubmit} disabled={loading || (!stepValid && attempted)}>
+              {loading
+                ? <><span style={{
+                    width: 13, height: 13, border: '2px solid rgba(255,255,255,.35)', borderTopColor: '#fff',
+                    borderRadius: '50%', display: 'inline-block', animation: 'cp-spin .7s linear infinite',
+                  }} /> Se creează…</>
+                : <>Lansează proiectul <Icon name="sparkle" size={13} /></>
+              }
+            </button>
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

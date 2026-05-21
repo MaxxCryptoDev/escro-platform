@@ -4,6 +4,7 @@ import referralService from '../services/referralService.js';
 import { generateContractPDF, generateMilestoneContractPDF, generateFinalContractPDF } from '../services/contractPDF.js';
 import { v4 as uuidv4 } from 'uuid';
 import { sendEmailIfEnabled } from '../services/emailService.js';
+import { notify } from '../utils/notify.js';
 import { validateSignature } from '../utils/validateSignature.js';
 
 const generateContractNumber = () => {
@@ -186,6 +187,73 @@ ANEXA 1 – MILESTONES
 ${milestonesTable}
 `;
 };
+
+// Internal helper: create project contract without requiring HTTP context.
+// Returns { contract, pdfUrl } on success, { skipped: true, reason } if already exists or
+// preconditions not met. Throws only on hard DB errors.
+export async function createProjectContractInternal(projectId) {
+  const projectResult = await pool.query('SELECT * FROM projects WHERE id = $1', [projectId]);
+  if (projectResult.rows.length === 0) return { skipped: true, reason: 'project_not_found' };
+  const project = projectResult.rows[0];
+
+  const party1Id = project.expert_id || project.company_id;
+  const party2Id = project.client_id;
+  if (!party1Id || !party2Id || party1Id === party2Id) {
+    return { skipped: true, reason: 'parties_incomplete' };
+  }
+
+  const existing = await pool.query(
+    "SELECT id FROM contracts WHERE project_id = $1 AND contract_type = 'project'",
+    [projectId]
+  );
+  if (existing.rows.length > 0) return { skipped: true, reason: 'already_exists' };
+
+  const party1Res = await pool.query('SELECT * FROM users WHERE id = $1', [party1Id]);
+  const party2Res = await pool.query('SELECT * FROM users WHERE id = $1', [party2Id]);
+  const milestonesRes = await pool.query(
+    'SELECT * FROM milestones WHERE project_id = $1 ORDER BY order_number',
+    [projectId]
+  );
+  if (milestonesRes.rows.length === 0) return { skipped: true, reason: 'no_milestones' };
+
+  const contractText = generateContractText(project, party1Res.rows[0], party2Res.rows[0], milestonesRes.rows);
+  const contractNumber = generateContractNumber();
+  let pdfUrl = null;
+  try {
+    pdfUrl = await generateContractPDF(
+      { id: uuidv4(), contract_number: contractNumber, contract_date: new Date() },
+      project,
+      party1Res.rows[0],
+      party2Res.rows[0],
+      milestonesRes.rows
+    );
+  } catch (e) {
+    console.warn('[createProjectContractInternal] PDF generation failed:', e.message);
+  }
+
+  const result = await pool.query(
+    `INSERT INTO contracts (project_id, contract_type, party1_id, party2_id, terms, status, contract_number, contract_date, pdf_url)
+     VALUES ($1, 'project', $2, $3, $4, 'pending', $5, NOW(), $6)
+     RETURNING *`,
+    [projectId, party1Id, party2Id, contractText, contractNumber, pdfUrl]
+  );
+
+  // Notify both parties
+  for (const uid of [party1Id, party2Id]) {
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, message, link, created_at)
+       VALUES ($1, 'contract_ready', $2, $3, $4, NOW())`,
+      [uid, 'Contract de proiect creat', `Contractul pentru proiectul "${project.title}" este gata. Verifică și semnează.`, `/project/${projectId}`]
+    ).catch(() => {});
+    sendEmailIfEnabled(pool, uid, 'contractPendingSignature', {
+      projectTitle: project.title,
+      contractType: 'Contract de proiect',
+      projectUrl: `${process.env.FRONTEND_URL}/project/${projectId}`,
+    }).catch(() => {});
+  }
+
+  return { contract: result.rows[0], pdfUrl };
+}
 
 export const createProjectContract = async (req, res, next) => {
   try {
@@ -436,12 +504,18 @@ export const createAllMilestoneContracts = async (req, res, next) => {
       const otherPartyId = userId === party1Id ? party2Id : party1Id;
       const notifMsg = `Contractele pentru milestone-urile proiectului "${project.title}" sunt gata de semnat.`;
       const notifLink = `/project/${project_id}?tab=contracts`;
-      await pool.query(
-        `INSERT INTO notifications (user_id, type, title, message, link, created_at)
-         VALUES ($1, 'contract_ready', 'Contracte milestone de semnat', $2, $3, NOW()),
-                ($4, 'contract_ready', 'Contracte milestone de semnat', $2, $3, NOW())`,
-        [otherPartyId, notifMsg, notifLink, userId]
-      );
+      const emailData = {
+        projectTitle: project.title,
+        contractType: 'Contract de milestone',
+        projectUrl: `${process.env.FRONTEND_URL}/project/${project_id}?tab=contracts`,
+      };
+      for (const uid of [otherPartyId, userId]) {
+        await notify(pool, uid, 'contract_ready', 'Contracte milestone de semnat', notifMsg, {
+          link: notifLink,
+          emailTemplate: 'contractPendingSignature',
+          emailData,
+        }).catch(e => console.warn('[bg]', e.message));
+      }
     }
 
     res.status(201).json({
@@ -553,12 +627,23 @@ export const acceptContract = async (req, res, next) => {
         [contract.party1_id, bothMsg, contractLink, contract.party2_id]
       );
     } else {
-      // Only one party signed — notify the other to sign
-      await pool.query(
-        `INSERT INTO notifications (user_id, type, title, message, link, created_at)
-         VALUES ($1, 'contract_awaiting_signature', 'Semnătură necesară', $2, $3, NOW())`,
-        [otherPartyId, `O parte a semnat contractul pentru "${projectTitle}". Este rândul tău să semnezi.`, contractLink]
-      );
+      // Only one party signed — notify the other to sign (action required → email)
+      await notify(
+        pool,
+        otherPartyId,
+        'contract_awaiting_signature',
+        'Semnătură necesară',
+        `O parte a semnat contractul pentru "${projectTitle}". Este rândul tău să semnezi.`,
+        {
+          link: contractLink,
+          emailTemplate: 'contractPendingSignature',
+          emailData: {
+            projectTitle,
+            contractType: contract.contract_type === 'final' ? 'Contract final' : (contract.contract_type === 'milestone' ? 'Contract de milestone' : 'Contract'),
+            projectUrl: `${process.env.FRONTEND_URL}${contractLink}`,
+          },
+        }
+      ).catch(e => console.warn('[bg]', e.message));
     }
 
     // If milestone contract is now accepted by both, start the milestone work
@@ -1071,13 +1156,24 @@ Prestator: _______________  Data: ___________
       [project_id, party1Id, party2Id, contractText, contractNumber, pdfUrl]
     );
 
-    // Notify other party that final contract is ready to sign
+    // Notify other party that final contract is ready to sign (action required → email)
     const otherPartyId = userId === party1Id ? party2Id : party1Id;
-    await pool.query(
-      `INSERT INTO notifications (user_id, type, title, message, link, created_at)
-       VALUES ($1, 'contract_ready', 'Contract final de semnat', $2, $3, NOW())`,
-      [otherPartyId, `Toate milestone-urile din "${project.title}" au fost finalizate. Semnează contractul final pentru a închide proiectul.`, `/project/${project_id}`]
-    );
+    await notify(
+      pool,
+      otherPartyId,
+      'contract_ready',
+      'Contract final de semnat',
+      `Toate milestone-urile din "${project.title}" au fost finalizate. Semnează contractul final pentru a închide proiectul.`,
+      {
+        link: `/project/${project_id}`,
+        emailTemplate: 'contractPendingSignature',
+        emailData: {
+          projectTitle: project.title,
+          contractType: 'Contract final',
+          projectUrl: `${process.env.FRONTEND_URL}/project/${project_id}`,
+        },
+      }
+    ).catch(e => console.warn('[bg]', e.message));
 
     res.status(201).json({ success: true, contract: result.rows[0], pdf_url: pdfUrl, ...(pdfError ? { pdf_warning: 'PDF-ul nu a putut fi generat. Contractul a fost salvat fără document atașat.' } : {}) });
   } catch (error) {
@@ -1363,16 +1459,27 @@ export const signMilestoneStart = async (req, res, next) => {
       }
     }
 
-    // Notify the other party if only one has signed
+    // Notify the other party if only one has signed (action required → email)
     if (!bothSigned) {
       const otherPartyId = isUserParty1 ? party2Id : party1Id;
       const projTitleRes = await pool.query('SELECT title FROM projects WHERE id = $1', [project_id]);
       const projectTitle = projTitleRes.rows[0]?.title || 'proiect';
-      await pool.query(
-        `INSERT INTO notifications (user_id, type, title, message, link, created_at)
-         VALUES ($1, 'contract_awaiting_signature', 'Semnătură necesară', $2, $3, NOW())`,
-        [otherPartyId, `O parte a semnat pentru milestone-ul din "${projectTitle}". Este rândul tău să semnezi.`, `/project/${project_id}?tab=contracts`]
-      );
+      await notify(
+        pool,
+        otherPartyId,
+        'contract_awaiting_signature',
+        'Semnătură necesară',
+        `O parte a semnat pentru milestone-ul din "${projectTitle}". Este rândul tău să semnezi.`,
+        {
+          link: `/project/${project_id}?tab=contracts`,
+          emailTemplate: 'contractPendingSignature',
+          emailData: {
+            projectTitle,
+            contractType: 'Contract de milestone',
+            projectUrl: `${process.env.FRONTEND_URL}/project/${project_id}?tab=contracts`,
+          },
+        }
+      ).catch(e => console.warn('[bg]', e.message));
     }
 
     res.json({ success: true, message: bothSigned ? 'Milestone început!' : 'Ai semnat, așteaptă semnătura celeilalte părți' });
@@ -1414,12 +1521,23 @@ export const deliverMilestone = async (req, res, next) => {
       [deliverable_url, milestone_id]
     );
 
-    // Notify client that milestone was delivered
-    await pool.query(
-      `INSERT INTO notifications (user_id, type, title, message, link, created_at)
-       VALUES ($1, 'milestone_delivered', 'Milestone livrat', $2, $3, NOW())`,
-      [party2Id, `Prestatorul a livrat milestone-ul "${milestone.title}". Verifică livrabilele și aprobă.`, `/project/${project_id}`]
-    );
+    // Notify client that milestone was delivered (action required → email)
+    await notify(
+      pool,
+      party2Id,
+      'milestone_delivered',
+      'Milestone livrat',
+      `Prestatorul a livrat milestone-ul "${milestone.title}". Verifică livrabilele și aprobă.`,
+      {
+        link: `/project/${project_id}`,
+        emailTemplate: 'milestoneDelivered',
+        emailData: {
+          projectTitle: project.title,
+          milestoneTitle: milestone.title,
+          projectUrl: `${process.env.FRONTEND_URL}/project/${project_id}`,
+        },
+      }
+    ).catch(e => console.warn('[bg]', e.message));
 
     res.json({ success: true, message: 'Materiale încărcate! Așteaptă aprobarea beneficiarului.' });
   } catch (error) {

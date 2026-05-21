@@ -45,15 +45,14 @@ export const createExpertPostedTask = async (req, res) => {
       milestones_count: milestones.length
     });
 
-    // Start transaction
-    await pool.query('BEGIN');
-
+    const client = await pool.connect();
     try {
-      // Create project with posted_by_expert flag
-      // client_id will be NULL for expert-posted tasks initially
-      // It gets set when a company accepts the task
-      const projectResult = await pool.query(
+      await client.query('BEGIN');
+
+      const projectResult = await client.query(
         `INSERT INTO projects (
+          client_id,
+          expert_id,
           posted_by_expert,
           title,
           description,
@@ -65,26 +64,21 @@ export const createExpertPostedTask = async (req, res) => {
           created_at,
           deadline
         )
-        VALUES ($1, $2, $3, $4, $5, 'pending_admin_approval', 'pending', $6, NOW(), NOW() + make_interval(days => $7::int))
+        VALUES ($1, $1, $1, $2, $3, $4, $5, 'pending_admin_approval', 'pending', $6, NOW(), NOW() + make_interval(days => $7::int))
         RETURNING id`,
         [expertId, title, description, budget_ron, timeline_days, message || null, timeline_days]
       );
 
       const project_id = projectResult.rows[0].id;
-      console.log('[DEBUG] Expert-posted project created with ID:', project_id);
 
-      // Create milestones
       for (let index = 0; index < milestones.length; index++) {
         const milestone = milestones[index];
-        
-        // Validate milestone
+
         if (!milestone.title || milestone.percentage_of_budget === undefined) {
           throw new Error(`Milestone ${index + 1} missing required fields: title, percentage_of_budget`);
         }
 
-        console.log(`[DEBUG] Creating milestone ${index + 1}:`, milestone.title);
-
-        await pool.query(
+        await client.query(
           `INSERT INTO milestones (
             project_id,
             order_number,
@@ -101,7 +95,7 @@ export const createExpertPostedTask = async (req, res) => {
             project_id,
             index + 1,
             milestone.title,
-            milestone.title, // description defaults to title
+            milestone.title,
             milestone.deliverable_description || '',
             milestone.percentage_of_budget,
             Math.round((budget_ron * milestone.percentage_of_budget) / 100 * 100) / 100
@@ -109,8 +103,7 @@ export const createExpertPostedTask = async (req, res) => {
         );
       }
 
-      // Commit transaction
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
 
       res.status(201).json({
         success: true,
@@ -119,10 +112,11 @@ export const createExpertPostedTask = async (req, res) => {
         expert_posting_status: 'pending',
         status: 'pending_admin_approval'
       });
-
     } catch (error) {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(e => console.warn('[rollback]', e.message));
       throw error;
+    } finally {
+      client.release();
     }
 
   } catch (error) {

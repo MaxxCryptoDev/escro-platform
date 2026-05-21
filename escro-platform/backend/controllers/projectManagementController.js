@@ -1,5 +1,6 @@
 import pool from '../config/database.js';
 import { logProjectHistory } from '../utils/projectHistory.js';
+import { sendEmailIfEnabled } from '../services/emailService.js';
 
 export const createTask = async (req, res, next) => {
   try {
@@ -297,21 +298,30 @@ export const createAssignment = async (req, res, next) => {
       }
     }
 
+    const directInviteProjectTitle = projectResult.rows[0].title;
+    const directInviteLink = `/project/${taskId}/assignment/${project_id}`;
     if (assignedPartyId) {
-      const projectTitle = projectResult.rows[0].title;
       await client.query(
         `INSERT INTO notifications (user_id, type, title, message, link, created_at)
          VALUES ($1, 'task_acceptance_required', $2, $3, $4, NOW())`,
         [
           assignedPartyId,
           'Task nou de acceptat',
-          `Clientul te-a invitat direct pe taskul "${projectTitle}". Verifică detaliile și acceptă pentru a demara colaborarea.`,
-          `/project/${taskId}/assignment/${project_id}`
+          `Clientul te-a invitat direct pe taskul "${directInviteProjectTitle}". Verifică detaliile și acceptă pentru a demara colaborarea.`,
+          directInviteLink
         ]
       );
     }
 
     await client.query('COMMIT');
+
+    if (assignedPartyId) {
+      sendEmailIfEnabled(pool, assignedPartyId, 'taskAcceptanceRequired', {
+        projectTitle: directInviteProjectTitle,
+        projectUrl: `${process.env.FRONTEND_URL}${directInviteLink}`,
+        invitationMessage: `Clientul te-a invitat direct pe taskul <strong>"${directInviteProjectTitle}"</strong>.`,
+      }).catch(e => console.warn('[bg]', e.message));
+    }
 
     const assignmentWithDetails = await client.query(
       `SELECT p.*,
@@ -355,10 +365,10 @@ export const assignUserToAssignment = async (req, res, next) => {
       return res.status(404).json({ message: 'Assignment not found' });
     }
 
-    // Only the task creator (client) or admin can assign users to this assignment
-    const taskOwnerId = projectResult.rows[0].task_client_id || projectResult.rows[0].client_id;
-    if (!isAdmin && String(taskOwnerId) !== String(userId)) {
-      return res.status(403).json({ message: 'Only the task creator can assign users' });
+    // Only admin can assign prestators to sub-tasks. Task creators (PM owners) can NOT
+    // self-assign or assign others — to keep the platform's quality control with the admin.
+    if (!isAdmin) {
+      return res.status(403).json({ message: 'Only admin can assign a prestator to a sub-task.' });
     }
 
     // Only allow assignment on assignments still in initial states — don't reset completed/disputed
@@ -465,8 +475,9 @@ export const clientApproveAssignment = async (req, res, next) => {
       [newStatus, assignmentId]
     );
 
-    // Notify the assigned expert/company that they need to accept the task
+    // Notify the assigned expert/company that they need to accept the task (action required → email)
     if (assignedPartyId) {
+      const acceptanceLink = `/project/${project.task_id}/assignment/${assignmentId}`;
       await pool.query(
         `INSERT INTO notifications (user_id, type, title, message, link, created_at)
          VALUES ($1, 'task_acceptance_required', $2, $3, $4, NOW())`,
@@ -474,9 +485,14 @@ export const clientApproveAssignment = async (req, res, next) => {
           assignedPartyId,
           'Task nou de acceptat',
           `Clientul a aprobat taskul "${project.title}". Verifică detaliile și acceptă pentru a demara colaborarea.`,
-          `/project/${project.task_id}/assignment/${assignmentId}`
+          acceptanceLink
         ]
       );
+      sendEmailIfEnabled(pool, assignedPartyId, 'taskAcceptanceRequired', {
+        projectTitle: project.title,
+        projectUrl: `${process.env.FRONTEND_URL}${acceptanceLink}`,
+        invitationMessage: `Clientul a aprobat taskul <strong>"${project.title}"</strong>.`,
+      }).catch(e => console.warn('[bg]', e.message));
     }
 
     res.json({ success: true, assignment: result.rows[0] });
@@ -558,7 +574,7 @@ export const expertAcceptAssignment = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      `UPDATE projects SET status = 'in_progress', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
+      `UPDATE projects SET status = 'assigned', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
       [assignmentId]
     );
 
@@ -574,6 +590,14 @@ export const expertAcceptAssignment = async (req, res, next) => {
           `/project/${taskId}/assignment/${assignmentId}`
         ]
       );
+
+      // Email to client: prestator a fost gasit pentru acest task
+      const prestatorInfo = await pool.query(`SELECT name FROM users WHERE id = $1`, [userId]);
+      sendEmailIfEnabled(pool, clientId, 'prestatorAccepted', {
+        projectTitle: project.title,
+        prestatorName: prestatorInfo.rows[0]?.name || null,
+        projectUrl: `${process.env.FRONTEND_URL}/project/${taskId}/assignment/${assignmentId}`,
+      }).catch(e => console.warn('[bg email]', e.message));
     }
 
     // Confirm to the expert/company that their acceptance was recorded
@@ -721,12 +745,14 @@ export const getAssignmentDetail = async (req, res, next) => {
     const isCompany = userId && String(project.company_id) === String(userId);
     const isAdmin = req.user?.role === 'admin';
 
-    // Also allow the task creator (parent task's client_id) to view assignments
-    const taskOwnerRes = await pool.query('SELECT client_id FROM tasks WHERE id = $1', [taskId]);
-    const isTaskCreator = userId && String(taskOwnerRes.rows[0]?.client_id) === String(userId);
-
-    if (!isClient && !isExpert && !isCompany && !isAdmin && !isTaskCreator) {
-      return res.status(403).json({ message: 'Access denied' });
+    // Global ecosystem view: any authenticated user can read any non-cancelled sub-task,
+    // exact behaviour as `getProjectDetail` in projectController. Mutations (deliver, approve,
+    // assign) still check party flags inside their respective controllers.
+    if (!userId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+    if (project.status === 'cancelled' && !isAdmin) {
+      return res.status(404).json({ message: 'Assignment not found' });
     }
 
     const milestonesResult = await pool.query(
